@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { API_BASE, apiFetch } from '../utils/apiBase';
 import { ref, onMounted, computed, markRaw } from 'vue';
+import type { Component } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Aim, Connection, CaretTop, Star, Clock } from '@element-plus/icons-vue';
 import NavIcons from '../components/NavIcons.vue';
@@ -9,6 +10,12 @@ import StateBlock from '../components/StateBlock.vue';
 import type { StatsData, RunSummary } from '../types';
 import { useCompileStore } from '../stores/compile';
 import { dirBarWidth } from '../utils/dirBar';
+// T02941：统计卡实名/配色/跳转类型的单一来源（帮助文档 dashboard 章同挂接）
+import {
+  DASHBOARD_STAT_CARDS,
+  dashboardStatValue,
+  type DashboardStatKey,
+} from '../utils/dashboardPresentation';
 
 // 使用函数类型写法替代类型字面量（S6598）
 const emit = defineEmits<(e: 'navigate', view: 'ingest' | 'browse' | 'query' | 'health' | 'progress' | 'graph' | 'help') => void>();
@@ -59,6 +66,21 @@ function gotoBrowseType(type: 'entity' | 'concept') {
   }
   globalThis.dispatchEvent(new CustomEvent('karpathy:navigate', { detail: 'browse' }));
 }
+
+// T02941：卡名/配色/跳转类型来自 dashboardPresentation，图标与取数在此处绑定
+const STAT_ICONS: Record<DashboardStatKey, Component> = {
+  totalPages: Aim,
+  totalLinks: Connection,
+  entities: CaretTop,
+  concepts: Star,
+};
+const statCards = computed(() =>
+  DASHBOARD_STAT_CARDS.map((card) => ({
+    ...card,
+    icon: markRaw(STAT_ICONS[card.key]),
+    num: dashboardStatValue(card.key, stats.value),
+  })),
+);
 
 async function loadStats() {
   loading.value = true;
@@ -142,13 +164,8 @@ onMounted(() => {
     <!-- 统计卡片：不对称网格 + 3D 悬停 -->
     <div class="stats-row">
       <div
-        v-for="(card, idx) in [
-          { icon: markRaw(Aim), num: stats?.totalPages ?? 0, label: '总页面数', grad: 'grad-fire' },
-          { icon: markRaw(Connection), num: stats?.totalLinks ?? 0, label: '双向链接', grad: 'grad-cool' },
-          { icon: markRaw(CaretTop), num: stats?.dirCounts?.entities ?? 0, label: '实体页', grad: 'grad-neon', type: 'entity' },
-          { icon: markRaw(Star), num: stats?.dirCounts?.concepts ?? 0, label: '概念页', grad: 'grad-aurora', type: 'concept' },
-        ]"
-        :key="idx"
+        v-for="(card, idx) in statCards"
+        :key="card.key"
         class="glass-card stat-card hover-3d fade-up"
         :class="{ 'stat-card--clickable': card.type }"
         :style="{ animationDelay: (idx * 0.1) + 's' }"

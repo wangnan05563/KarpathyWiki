@@ -12,8 +12,11 @@ import {
   CLEANUP_PAGE_TITLE,
   buildPreviewBanner,
 } from './cleanupPresentation';
-import { ISSUE_CATEGORIES, PAGE_SCOPE_DIRS, type IssueKey } from './dataCleanPresentation';
+import { ISSUE_CATEGORIES, MISPLACED_ISSUE_TEXT, PAGE_SCOPE_DIRS, type IssueKey } from './dataCleanPresentation';
 import { STEP_LABEL } from '../stores/compile';
+// T02941（批次 2）：仪表盘统计卡与体检项实名同源
+import { DASHBOARD_STAT_CARDS } from './dashboardPresentation';
+import { ISSUE_SECTIONS } from './healthSections';
 import {
   PASSWORD_RULE,
   SEED_ACCOUNT_HINT,
@@ -58,6 +61,10 @@ const issueDef = (key: IssueKey): (typeof ISSUE_CATEGORIES)[number] => {
 const DATA_CLEAN_PAGE_TYPES = PAGE_SCOPE_DIRS.join(' / ');
 const DATA_CLEAN_LABELS = ISSUE_CATEGORIES.map((c) => c.label).join('、');
 const DATA_CLEAN_FILL_ACTION = issueDef('missingFrontmatter').action;
+
+// 仪表盘统计卡（dashboard 章）与体检四类问题（health 章）：实名与类数不再手抄
+const DASHBOARD_STAT_LABELS = DASHBOARD_STAT_CARDS.map((c) => c.label).join('、');
+const HEALTH_SECTION_TITLES = ISSUE_SECTIONS.map((s) => s.title).join('、');
 
 // 用户管理（users 章）引用的规则原文（T02698）：不抄第二份，直接从守卫函数用「必然被拦」的上下文算出来。
 // 这样页面上的 data-tip 改了而文档没改时，文档里的句子也跟着变——两者不可能各说一套。
@@ -117,7 +124,7 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         type: 'feature',
         title: '核心功能',
-        content: 'Karpathy Wiki 是基于 LLM 的本地知识库问答系统。投递 Markdown / URL / 纯文本资料后，系统自动编译生成知识页面，支持基于引用的问答、知识图谱可视化、体检中心、内网穿透远程访问。',
+        content: 'Karpathy Wiki 是基于 LLM 的本地知识库问答系统。投递 Markdown / PDF / Word / URL / 纯文本等资料后，系统自动编译生成知识页面，支持基于引用的问答、知识图谱可视化、体检中心、内网穿透远程访问。左侧菜单按知识 / 生产 / 运维 / 系统四组排列。',
       },
       {
         type: 'steps',
@@ -126,10 +133,11 @@ export const DOC_SECTIONS: DocSection[] = [
         action: { label: `前往：配置中心 → ${tabLabel('ai')}`, view: 'config', tab: 'ai' },
         content: [
           `配置 LLM：进入「配置中心 → ${tabLabel('ai')}」标签页，选择 LLM 预设（OpenAI/DeepSeek/GLM/Qwen 等），填入 API Key 并保存`,
-          `投递资料：进入「${menuLabel('ingest')}」页面，拖拽 .md 文件 / 粘贴 URL / 输入纯文本，点击「开始编译」`,
+          `投递资料：进入「${menuLabel('ingest')}」页面，按资料形态选择文件 / 文件夹 / URL / 文本 / 浏览器书签 / 网页捕获 / QQ 聊天记录，点击「开始编译」`,
           `查看进度：进入「${menuLabel('progress')}」页面，观察「${COMPILE_STAGE_CHAIN}」各阶段进度`,
+          '可选 - 找回原件：投递页下方「已投递原始文档」列出你本人投递过的文件，可随时重新下载（文本粘贴 / URL 投递不产生原始文件）',
           `知识问答：进入「${menuLabel('query')}」页面，输入问题，AI 基于本地知识库回答并引用相关页面`,
-          `可选 - 体检：进入「${menuLabel('health')}」页面，检测孤立页面、断链、过期内容`,
+          `可选 - 体检：进入「${menuLabel('health')}」页面，检测孤立页面、断链、过期内容与知识时效`,
           `可选 - 远程访问：进入「${menuLabel('tunnel')}」页面，启动 Cloudflare 隧道暴露本机服务到公网`,
           `管理员专属：进入「${(['users', 'skill', 'dataclean'] as const).map(menuLabel).join(' / ')}」维护账户、技能与知识库质量`,
         ],
@@ -186,7 +194,7 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '展示知识库规模（总页面数、双向链接数、实体页 / 概念页等目录分布）、最近操作日志与编译运行历史。提供知识浏览 / 知识问答 / 图谱 / 帮助文档的快捷入口。',
+        content: `展示知识库规模（${DASHBOARD_STAT_LABELS}）与目录分布、最近操作日志与编译运行历史。提供知识浏览 / 知识问答 / 知识图谱 / 帮助文档的快捷入口。`,
       },
       {
         type: 'steps',
@@ -209,23 +217,25 @@ export const DOC_SECTIONS: DocSection[] = [
     id: 'ingest',
     title: menuLabel('ingest'),
     icon: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
-    intro: '知识库内容入口，支持文件 / URL / 纯文本三种方式。',
+    intro: '知识库内容入口，支持文件 / 文件夹 / URL / 纯文本 / 浏览器书签 / 网页捕获 / QQ 七种投递方式。',
     blocks: [
       {
         type: 'feature',
         title: '核心功能',
-        content: '支持 6 种投递入口：文件（拖拽 / 多选 .md）、文件夹、URL（自动抓取网页正文）、纯文本（直接编写 Markdown）、浏览器书签、QQ 聊天记录（核心为文件、URL、纯文本）。提交后自动存档到 vault/raw/ 并触发编译流程。',
+        content: '支持 7 种投递入口：文件上传（拖拽 / 多选）、文件夹上传、URL 粘贴（自动抓取网页正文）、文本粘贴（直接编写 Markdown）、浏览器书签（导入书签合集）、网页捕获（被站点 WAF / 出口 IP 拦截时，由你本机浏览器抓取正文回传）、QQ 聊天记录。文件与文件夹支持 .md / .txt / .pdf / .html / .json / .docx / .xlsx / .pptx / .doc / .xls；提交后自动存档到 vault/raw/ 并触发编译流程。页面下方「已投递原始文档」只列出你本人投递过的文件，可随时重新下载（文本粘贴 / URL 投递不产生原始文件）。',
       },
       {
         type: 'steps',
         title: '操作步骤',
         content: [
           enterStep('ingest'),
-          '选择投递方式：文件 / 文件夹 / URL / 文本 / 书签 / QQ',
-          '文件方式：拖拽 .md 文件到上传区，或点击选择文件',
+          '选择投递方式：文件 / 文件夹 / URL / 文本 / 浏览器书签 / 网页捕获 / QQ',
+          '文件方式：拖拽文件到上传区，或点击选择文件',
           'URL 方式：粘贴网页链接，系统自动抓取正文',
           '文本方式：直接在编辑器输入 Markdown 内容',
+          '网页捕获：把「网页捕获」拖到浏览器书签栏，在目标页点该书签，正文抓回本页后点「编译投递」',
           `点击「开始编译」提交，自动跳转到「${menuLabel('progress')}」页面`,
+          '需要重新下载以前投递的原件时，在页面下方「已投递原始文档」表格点「下载」',
         ],
       },
       {
@@ -236,7 +246,7 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         type: 'note',
         title: '注意事项',
-        content: '单文件大小上限 10MB；URL 抓取依赖站点反爬策略，部分站点可能失败；编译需要 LLM 调用，请确保 API Key 配额充足。',
+        content: '单文件大小上限 10MB、单次批量最多 50 个文件（均可在「配置中心 → 系统配置」调整）；URL 抓取依赖站点反爬策略，部分站点可能失败，此时改用「网页捕获」；编译需要 LLM 调用，请确保 API Key 配额充足。',
         noteType: 'warning',
       },
     ],
@@ -245,12 +255,12 @@ export const DOC_SECTIONS: DocSection[] = [
     id: 'progress',
     title: menuLabel('progress'),
     icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',
-    intro: '实时查看编译流程，支持断点续传。',
+    intro: '实时查看编译流程，支持断点续传与失败重试。',
     blocks: [
       {
         type: 'feature',
         title: '核心功能',
-        content: `通过 SSE 流式推送编译进度：${COMPILE_STAGE_CHAIN} → 完成。支持断点续传，中断后可从上次断点恢复。`,
+        content: `通过 SSE 流式推送编译进度：${COMPILE_STAGE_CHAIN} → 完成。支持断点续传，中断后可从上次断点恢复；编译失败时可按失败原因重试，无需重新上传——单文件复用上次投递内容，批量按文件组从 vault/raw/ 的已存档原件重编。完成后展示「本次编译结果」卡（生成页面路径与索引更新状态）；内容已编译过时提示「内容已编译过（缓存命中），已跳过本次编译」。`,
       },
       {
         type: 'steps',
@@ -261,6 +271,8 @@ export const DOC_SECTIONS: DocSection[] = [
           '查看每步生成的页面路径',
           '如需中断，关闭页面即可（状态已持久化）',
           '重新进入页面时点击「继续」恢复未完成任务',
+          '编译失败且可重试时点「重试」：单文件复用上次投递内容，批量按文件组从已存档原件重编，旁边会显示已重试次数',
+          '失败时页面会显示当前调用模型，可当场切换 LLM 预设后重试，不必跳到配置中心',
         ],
       },
       {
@@ -271,7 +283,7 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         type: 'note',
         title: '注意事项',
-        content: '编译进度页面仅在编译中或编译完成后可访问；空状态会自动禁用导航。断点续传依赖 .harness/state/ 目录下的状态文件，清理后无法恢复。',
+        content: '编译进度页面仅在编译中或编译完成后可访问；空状态会自动禁用导航。断点续传依赖 .harness/state/ 目录下的状态文件，清理后无法恢复。失败重试只重新编译失败的文件，已成功生成的页面不会重复消耗额度；重试仍走存档原件，内容指纹相同会自动去重。',
         noteType: 'warning',
       },
     ],
@@ -280,21 +292,22 @@ export const DOC_SECTIONS: DocSection[] = [
     id: 'browse',
     title: menuLabel('browse'),
     icon: 'M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z',
-    intro: '浏览编译生成的知识页面，支持全文检索。',
+    intro: '浏览编译生成的知识页面，支持目录树 / 看板 / 日历三视图、全文检索与筛选。',
     blocks: [
       {
         type: 'feature',
         title: '核心功能',
-        content: '左侧文件树展示 vault 目录结构，右侧渲染 Markdown 页面。支持全文检索（关键词高亮）、[[页面名]] 双向链接跳转、按 mtime 排序。',
+        content: '左侧面板可在目录树、看板（按页面类型分列）、日历三种视图间切换，右侧渲染 Markdown 页面。支持全文检索（关键词高亮）与筛选（来源 / 状态 / 类型）：筛选生效后按钮显示条件数角标，下方常驻 chip 行写明当前筛了什么，可单个 × 移除或「清除全部」。支持 [[页面名]] 双向链接跳转、页面内下载与按 mtime 排序。',
       },
       {
         type: 'steps',
         title: '操作步骤',
         content: [
           enterStep('browse'),
-          '在左侧文件树点击目标 .md 文件',
-          '右侧自动渲染页面内容',
+          '用视图切换器选择目录树 / 看板 / 日历',
+          '在左侧目录树点击目标 .md 文件，右侧自动渲染页面内容',
           '使用顶部搜索框进行全文检索',
+          '点筛选按钮按来源 / 状态 / 类型缩小范围，用 chip 行的 × 逐个移除或「清除全部」',
           '点击页面内的 [[链接]] 跳转到对应页面',
         ],
       },
@@ -314,7 +327,7 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '基于本地知识库的 RAG 问答，AI 回答时引用具体页面（[[页面名]] 格式）。通过工具栏「中间件」多选开关统一控制联网搜索（Tavily/Bing）、深度思考、扩展工具、追问建议、真流式；支持流式输出、思考过程展示、多模态图片输入（vision 模型）、TTS 朗读（Edge 神经网络语音，失败时回退浏览器语音）。',
+        content: '基于本地知识库的 RAG 问答，AI 回答时引用具体页面（[[页面名]] 格式）。输入框上方常驻显示当前模型名与来源（个人 / 共享），点击即可切换。通过工具栏「中间件」多选开关统一控制联网搜索（Tavily/Bing）、深度思考、扩展工具、追问建议、真流式；支持流式输出、思考过程展示、多模态图片输入（vision 模型）、消息级 TTS 朗读（Edge 神经网络语音，失败时回退浏览器语音）。移动端可把回复「加入聆听」排入连续朗读队列；悬浮问答入口在未展开过面板时显示一次性红点引导。',
       },
       {
         type: 'steps',
@@ -323,10 +336,10 @@ export const DOC_SECTIONS: DocSection[] = [
           enterStep('query'),
           '在底部输入框输入问题',
           '可选：通过工具栏「中间件」多选开启深度思考 / 联网搜索；点击附件按钮上传图片（需选择支持 vision 的模型）',
-          '可选：使用 ModelSelector 切换 LLM 模型',
+          '可选：点输入框上方常驻的模型名切换 LLM（会标明当前是个人配置还是共享配置）',
           '查看 AI 回答，点击引用标记跳转对应页面',
           '点击追问建议继续对话',
-          '点击消息工具栏复制 / 重新生成 / 朗读',
+          '点击消息工具栏复制 / 重新生成 / 朗读；移动端点「加入聆听」把该条回复排入朗读队列',
         ],
       },
       {
@@ -351,17 +364,18 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '使用 vis-network 渲染知识图谱，6 类节点（实体 / 概念 / 对比 / 问答 / 业务问答 / 方案沉淀）按目录着色，与 SCHEMA.md type 枚举对齐。支持缩放、拖拽、点击节点跳转、悬停高亮关联边。',
+        content: '使用 vis-network 渲染知识图谱。默认只渲染连接度最高的一批节点（Top-N）并显示标签，避免数百节点挤成看不清的一团；右上角可在「查看全图」与精简视图间切换，精简态会提示「已显示连接度最高的 X 个节点（共 Y 个）」。支持缩放、拖拽、搜索节点并定位、适应画布；点选节点后可用顶部「打开页面 / 找相关页面」，首次进入有一次操作指引。6 类节点（实体 / 概念 / 对比 / 问答 / 业务问答 / 方案沉淀）按目录着色，与 SCHEMA.md type 枚举对齐。',
       },
       {
         type: 'steps',
         title: '操作步骤',
         content: [
           enterStep('graph'),
-          '鼠标滚轮缩放图谱',
-          '拖拽节点重新布局',
-          '点击节点跳转到对应页面',
-          '悬停节点高亮其关联边',
+          '鼠标滚轮缩放图谱，拖拽节点重新布局',
+          '点选节点后，用顶部「打开页面」跳到该页面，或「找相关页面」打开相关推荐侧栏',
+          '在「搜索节点并定位」输入关键词，快速跳到目标节点',
+          '点「适应画布」把整张图谱缩放到当前视野',
+          '需要看全部节点时点右上角「查看全图」，再点一次回到精简视图',
         ],
       },
       {
@@ -375,12 +389,12 @@ export const DOC_SECTIONS: DocSection[] = [
     id: 'health',
     title: menuLabel('health'),
     icon: 'M19 3H5c-1.11 0-2 .89-2 2v14c0 1.11.89 2 2 2h14c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2zm-2 11h-3v3h-4v-3H7v-4h3V7h4v3h3v4z',
-    intro: '检测知识库健康度，支持一键修复。',
+    intro: '检测知识库健康度，支持批量修复作业与结果复核。',
     blocks: [
       {
         type: 'feature',
         title: '核心功能',
-        content: '检测 3 类问题：孤立页面（无入链）、断链（指向不存在的页面）、过期页面（超过 staleDays 未更新）。支持 LLM 驱动的一键修复，SSE 流式返回修复进度。',
+        content: `检测 ${ISSUE_SECTIONS.length} 类问题：${HEALTH_SECTION_TITLES}。问题列表支持搜索路径或断链目标、多选、分页与「展开全部」，同类问题聚合计数。批量修复改为后台作业：启动前先给出量化估算（问题数、LLM 调用次数、预计 tokens 与预计耗时，明确标注为估算而非承诺），可暂停、继续、取消；刷新或切走再回来进度仍在，并显示预计剩余时间。每项修复完成后再做一次定点复检，结果分「已消解 / 未消解 / 失败」三态，未消解与失败项可一键重试。不可自动修复的类别在列表中单独标注。`,
       },
       {
         type: 'steps',
@@ -388,9 +402,11 @@ export const DOC_SECTIONS: DocSection[] = [
         content: [
           enterStep('health'),
           '点击「重新体检」按钮',
-          '查看三类问题列表',
-          '点击问题项的「一键修复」按钮',
-          '观察修复进度日志，完成后自动重新体检',
+          `查看 ${ISSUE_SECTIONS.length} 类问题列表，用搜索框或目录分组定位要处理的问题`,
+          '勾选问题后点「批量修复选中」，或直接点「批量修复全部」',
+          '在「批量修复确认」弹窗核对估算（问题数 / LLM 调用次数 / 预计 tokens / 预计耗时）后启动',
+          '用作业面板暂停 / 继续 / 取消，观察已消解、未消解、失败计数与预计剩余时间',
+          '对未消解或失败项点「重试失败/未消解」，只把上次没达成的问题重新提交',
         ],
       },
       {
@@ -401,7 +417,7 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         type: 'note',
         title: '注意事项',
-        content: '一键修复会调用 LLM 生成修复内容，可能产生 token 消耗。修复前请确保已配置有效的 API Key。',
+        content: '批量修复与单条修复都会调用 LLM 生成修复内容，按你的额度计费；作业全程持有编译锁，期间编译任务会排队。修复只改正文，页面原有 frontmatter 字段逐字保留。修复前请确保已配置有效的 API Key。',
         noteType: 'warning',
       },
     ],
@@ -443,6 +459,11 @@ export const DOC_SECTIONS: DocSection[] = [
         content: '可保存的字段旁有一枚生效标签，含义在页顶图例里解释一次：「即时生效」= 保存即写入运行时，下一次使用就是新值；「改文件需热加载」= 直接编辑 config.json 只落盘，需点「热加载配置」才会被运行时读到，在本页保存则即时生效；「需重启服务」= 该值在进程启动时固定，保存后仍需重启服务才完全生效。只要有过一次保存落到「需重启服务」，页顶会常驻一条待重启汇总并逐项列出改了哪些字段；重启服务后点「我已重启，清除」收掉它——没真重启就别点，否则改动实际还没落地。',
       },
       {
+        type: 'feature',
+        title: '未保存改动怎么被提醒',
+        content: '改动只留在本页表单里，不会自动写入。页顶常驻一条「N 个页签有未保存改动」的汇总，对应页签名旁也会标记；切到别的页签时会提示上一页签还有几项没保存（只提醒、不阻断切换）；刷新或关闭页面前浏览器会二次确认。MCP 接口页签的 JSON 编辑模式切回表单时，JSON 里没提到的禁用条目会原样保留，不会被静默删除。',
+      },
+      {
         type: 'steps',
         title: '操作步骤',
         // T02623：配置中心章节自身也给直达；tab 用系统组实名，普通用户点开会看到权限说明而不是静默跳页
@@ -455,6 +476,7 @@ export const DOC_SECTIONS: DocSection[] = [
           `（管理员）在「系统」组的「系统配置 / SCHEMA 规范 / MCP 接口 / QQ 导入 / 数据迁移」，以及「AI 服务」组的「${tabLabel('sharedAi')} / ${tabLabel('prompts')}」编辑系统级配置并保存`,
           `（管理员）批量编译与运行参数、健康检查同在「${tabLabel('config')}」页签的「高级配置」分区内，不是独立页签`,
           '动手前先看字段旁的生效标签；改到需重启的字段后，页顶会汇总待重启项，重启后点「我已重启，清除」',
+          '改完在对应页签点保存；页顶出现「N 个页签有未保存改动」时按提示逐页签保存，刷新或关闭前会二次确认',
         ],
       },
       {
@@ -476,6 +498,11 @@ export const DOC_SECTIONS: DocSection[] = [
         type: 'feature',
         title: '核心功能',
         content: '通过 JSON-RPC 2.0 + Streamable HTTP（默认端点 /mcp）对外提供 15 个工具：8 个查询/检索类（列页、目录树、全文检索、读页、查路径、统计、智能问答、待审标签）与 7 个维护/增强类（写页、建页、删页、归档原稿、编译、AI 打标签、确认标签）。支持外部 AI Agent（Claude Code / Cursor / Cline 等）接入后对知识库进行全方位维护、增强与查询。采用 Bearer Token 双轨鉴权：userToken 读、adminToken 写。'
+      },
+      {
+        type: 'feature',
+        title: '表单与 JSON 两种编辑模式',
+        content: 'MCP 接口页签支持表单与 JSON 两种编辑模式。JSON 模式只写出已启用的 stdio 条目（兼容 Claude Desktop 格式）；切回表单时，JSON 里没提到的禁用服务器会原样保留，不会被静默删除，切换前页面会点名被隐藏的条目。MCP 端点配置在进程启动时读取，保存后需重启服务生效。',
       },
       {
         type: 'config',
@@ -527,7 +554,7 @@ export const DOC_SECTIONS: DocSection[] = [
     id: 'tunnel',
     title: menuLabel('tunnel'),
     icon: 'M20 10V8c0-1.1-.9-2-2-2h-7V5c0-.55-.45-1-1-1H6c-.55 0-1 .45-1 1v2c-1.1 0-2 .9-2 2v9c0 1.1.9 2 2 2h13c1.1 0 2-.9 2-2v-1h2v-5h-2z',
-    intro: 'Cloudflare / cpolar / tailscale 三种隧道方案。',
+    intro: 'Cloudflare / cpolar / tailscale 三种隧道方案，支持前置条件自检与 Named 隧道回收。',
     blocks: [
       {
         type: 'feature',
@@ -540,7 +567,7 @@ export const DOC_SECTIONS: DocSection[] = [
         content: [
           ['provider', 'cloudflare', '隧道提供商：cloudflare/cpolar/tailscale'],
           ['tunnelMode', 'quick', 'cloudflare 模式：quick 临时域名 / named 固定域名'],
-          ['localPort', '0', '本地端口，0 表示从 server.port 继承'],
+          ['localPort', '自动', '勾选「自动」即继承服务端口；取消勾选后手动填写端口号'],
           ['autoStart', 'false', '是否服务启动时自动建立隧道'],
           ['cpolarAuthtoken', '', 'cpolar 平台的 authtoken'],
           ['binaryPath', '', '隧道二进制文件路径（留空使用 PATH）'],
@@ -552,19 +579,21 @@ export const DOC_SECTIONS: DocSection[] = [
         content: [
           enterStep('tunnel'),
           '选择 Provider（推荐 Cloudflare quick 模式）——切换只改表单，不会自己写盘',
+          '本地端口默认勾选「自动」（继承服务端口）；需要指定时取消勾选再填端口号',
           '按需改端口 / 程序路径 / 开机自启，点「保存配置」写入；页面上方若出现「N 项改动尚未保存」，说明还有改动没落盘',
           '看「前置条件自检」卡片，标红/标黄的项按它给的入口处理，处理完点「重新检测」',
           '点击「启动隧道」',
           '等待 5-15 秒获取公网 URL',
           '点击 URL 在新窗口打开访问',
           '可选：点击「停止」关闭隧道',
+          'Named 模式不再使用时点「删除隧道」回收（需确认）；之后已分享的固定域名链接会失效',
           '启动失败时读页面顶部内联告警条（原因 + 建议动作），修好再重试',
         ],
       },
       {
         type: 'note',
         title: '注意事项',
-        content: 'quick 模式每次重启 URL 都会变化；named 模式需先执行 cloudflared tunnel 三步向导（创建隧道、配置 credentials、绑定 hostname）。CORS 默认仅放行 localhost，tunnel 域名需手动加白。配置改动只有点「保存配置」才生效——带着未保存改动点「启动隧道」，会先问你「保存并启动」还是「按已保存配置启动」（启动读的是已保存的那一份）。切换 Provider 会换掉公网地址，已分享出去的链接随之失效；隧道正在运行时切换不会中断它，需保存后停止并重新启动才换服务商。',
+        content: 'quick 模式每次重启 URL 都会变化；named 模式需先执行 cloudflared tunnel 三步向导（创建隧道、配置 credentials、绑定 hostname），不再使用时用「删除隧道」回收——它会同时清空本页保存的固定域名配置并切回快速模式，已分享出去的固定域名链接永久失效，DNS 的 CNAME 记录需要你到 Cloudflare 控制台手工删除（本页代办不了）。CORS 默认仅放行 localhost，tunnel 域名需手动加白。配置改动只有点「保存配置」才生效——带着未保存改动点「启动隧道」，会先问你「保存并启动」还是「按已保存配置启动」（启动读的是已保存的那一份）。切换 Provider 会换掉公网地址，已分享出去的链接随之失效；隧道正在运行时切换不会中断它，需保存后停止并重新启动才换服务商。',
         noteType: 'warning',
       },
     ],
@@ -579,7 +608,7 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         type: 'feature',
         title: '核心功能',
-        content: CLEANUP_FEATURE_TEXT,
+        content: `${CLEANUP_FEATURE_TEXT}真实删除被后端拦截时（有编译、问答或另一次清理正在进行），卡片结果区会给出后端原因与下一步操作指引，不会静默失败。`,
       },
       {
         type: 'config',
@@ -600,7 +629,8 @@ export const DOC_SECTIONS: DocSection[] = [
           '需要真实删除时关闭该开关——页面顶部出现红色横幅，点击后仍会弹二次确认',
           `按保留天数清理的两类（${CLEANUP_DAYS_TITLES}）可先调整天数`,
           '某类没有可清对象时按钮显示「无需清理」并置灰',
-          '想看实际路径与技术说明，点「高级：查看实际路径与技术说明」',
+          '真实删除被拦截时按卡片上的操作指引处理：等进行中任务结束，或先用「仅预览」查看将清理的内容',
+          '想看实际路径与技术说明，点「高级：查看实际路径与技术说明」——四类目标各有一份真实目录清单，规范位置与旧存放位置分列，卡面计数与清单逐目录对得上',
         ],
       },
       {
@@ -687,7 +717,7 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         type: 'feature',
         title: '核心功能',
-        content: '仅管理员可访问。导入外部技能文件（.skill 为 ZIP 归档，.md 为 Markdown，单文件上限 10MB），导入时做安全校验并提示警告。支持列表浏览、按名称 / ID / 描述搜索、按格式（ZIP / MD）筛选、查看详情（SKILL.md 内容与文件结构）、删除技能。统计技能总数与占用空间。',
+        content: '仅管理员可访问。导入外部技能文件（.skill 为 ZIP 归档，.md 为 Markdown，单文件上限 10MB），导入时做安全校验并提示警告。支持列表浏览、按名称 / ID / 描述搜索、按格式（ZIP / MD）筛选、查看详情（SKILL.md 内容与文件结构）、删除技能。统计技能总数 / 可用技能数 / 占用空间；每行有「启用 / 已禁用」状态徽标与启用开关，禁用的技能不再注入 AI 指令，可用技能数随之减少。',
       },
       {
         type: 'steps',
@@ -697,6 +727,7 @@ export const DOC_SECTIONS: DocSection[] = [
           '点击或拖拽文件到上传区，选择 .skill 或 .md 文件（≤10MB）',
           '等待导入完成，若含警告会弹窗提示',
           '使用搜索框与格式筛选定位技能，点击「查看详情」阅读 SKILL.md',
+          '用行内开关启用或禁用技能：禁用后状态徽标变为「已禁用」，统计区的「可用技能」随之减少',
           '点击「删除」移除不再需要的技能（需确认）',
         ],
       },
@@ -723,7 +754,7 @@ export const DOC_SECTIONS: DocSection[] = [
         type: 'feature',
         title: '核心功能',
         // T02784：页面目录口径与问题分类实名不再手抄，来自 dataCleanPresentation（与页面卡片同源）
-        content: `仅管理员可执行改动文件的操作（与缓存与日志清理同权限）。页面总数与仪表盘同源（${DATA_CLEAN_PAGE_TYPES} 六类页面，不含联调遗留的测试文件）。统计区不再显示「平均分 / 优秀 / 需改进」，改为五类可操作问题：${DATA_CLEAN_LABELS}，每类直接给批量动作。表格支持搜索路径与标题、按目录筛选、点列头排序（默认问题数倒序）、50/100/200 分页；翻页与其他页勾选会保留。另提供 Vault 预检（只读）、重复检测（内容哈希 + Jaccard 相似度，配对视图与分组视图）、行级差异对比、合并重复页、归档、补齐元信息，以及调用你自己模型的 AI 分析。`,
+        content: `仅管理员可执行改动文件的操作（与缓存与日志清理同权限）。页面总数与仪表盘同源（${DATA_CLEAN_PAGE_TYPES} 六类页面，不含联调遗留的测试文件）。统计区不再显示「平均分 / 优秀 / 需改进」，改为五类可操作问题：${DATA_CLEAN_LABELS}，每类直接给批量动作。表格支持搜索路径与标题、按目录筛选、点列头排序（默认问题数倒序）、50/100/200 分页；翻页与其他页勾选会保留。预检（只读）结果按分类逐行计数（如「${MISPLACED_ISSUE_TEXT}：N」），不再只给警告总数；检测到「${MISPLACED_ISSUE_TEXT}」的存量错位页会单列一块，可「一键归位」把它们搬回正确的顶层目录（只改落点、正文不动），目标位置已有同名或同标题页面的会被跳过并标注「需人工确认」。另提供重复检测（内容哈希 + Jaccard 相似度，配对视图与分组视图）、行级差异对比、合并重复页、归档、补齐元信息，以及调用你自己模型的 AI 分析。`,
       },
       {
         type: 'steps',
@@ -734,6 +765,7 @@ export const DOC_SECTIONS: DocSection[] = [
           `「${issueDef('missingFrontmatter').label}」卡的「${DATA_CLEAN_FILL_ACTION}」直接为这批页面写入 type 与 title（需管理员）`,
           `「${issueDef('duplicateTitle').label}」卡会选中这类页面并重跑重复检测，在配对 / 分组视图看相似度，再点「查看差异」对比行级 diff 或「合并」把低质量页并入代表页`,
           '在搜索框输入路径或标题关键字、用目录下拉缩小范围，点列头改排序，表格下方翻页',
+          `若出现「${MISPLACED_ISSUE_TEXT}」提示，点「一键归位」把可自动处理的页面搬回顶层目录；标「需人工确认」的先到下方「运行重复检测」逐条决定并页`,
           '勾选页面后用工具栏「归档」移入 archive/YYYY-MM-DD/，或「永久删除」（不可撤销，需管理员）',
         ],
       },
@@ -745,7 +777,7 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         type: 'note',
         title: '注意事项',
-        content: '归档、删除、合并与补齐元信息都会改动知识库文件；合并默认保留质量较高的代表页并替换双向链接，建议先「预检」与「查看差异」确认。非管理员账户这些按钮会整组置灰并说明需要管理员。AI 分析调用你在「配置 / 我的」填写的模型，按你的额度计费。',
+        content: '归档、删除、合并、补齐元信息与一键归位都会改动知识库文件；归位会移动页面文件，需要管理员账户。合并默认保留质量较高的页面并替换双向链接，建议先「预检」与「查看差异」确认。非管理员账户这些按钮会整组置灰并说明需要管理员。AI 分析调用你在「配置中心 → AI 服务」或移动端「我的」里填写的模型，按你的额度计费。',
         noteType: 'warning',
       },
     ],

@@ -54,6 +54,9 @@ import {
   estimateRangeText as buildEstimateRangeText,
 } from '../utils/healthList';
 import type { IssueKind, IssueRow } from '../utils/healthList';
+// T02941：四类问题实名/图标/空态文案的单一来源（帮助文档 health 章同挂接）
+import { ISSUE_SECTIONS } from '../utils/healthSections';
+import type { IssueSectionMeta } from '../utils/healthSections';
 
 // 默认折叠条数与「加载更多」步长：首屏每类只渲染 20 条，展开后每次再补 200 条，
 // 避免 597 行一次性进 DOM（原实现卡顿的根因）。
@@ -123,53 +126,6 @@ const jobStates = computed<Record<string, 'done' | 'failed' | 'ineffective'>>(()
   return out;
 });
 
-interface SectionMeta {
-  kind: IssueKind;
-  title: string;
-  icon: string;
-  iconClass: string;
-  desc: string;
-  emptyText: string;
-  reviewAction?: boolean;
-}
-
-// 4 类问题共用一套渲染与交互（原实现每类手写一段模板，改一处漏三处）
-const SECTIONS: SectionMeta[] = [
-  {
-    kind: 'orphan',
-    title: '孤立页面',
-    icon: '◈',
-    iconClass: 'icon-orphan',
-    desc: '没有任何页面通过双向链接指向它们 · 可自动补回链',
-    emptyText: '▸ 无孤立页面',
-  },
-  {
-    kind: 'broken',
-    title: '断开链接',
-    icon: '⟶',
-    iconClass: 'icon-broken',
-    desc: '指向不存在页面的 [[链接]] · 可自动创建目标页或改写链接',
-    emptyText: '▸ 无断链',
-  },
-  {
-    kind: 'stale',
-    title: '过期页面',
-    icon: '⏱',
-    iconClass: 'icon-stale',
-    desc: '长时间未更新的页面（默认 30 天）· 需人工判断，不参与批量修复',
-    emptyText: '▸ 无过期页面',
-  },
-  {
-    kind: 'knowledge_stale',
-    title: '知识时效复核',
-    icon: '◉',
-    iconClass: 'icon-review',
-    desc: 'knowledge_class=dated 且超过知识时效阈值的页面，复核后追加 reviewed_at 恢复为时效正常',
-    emptyText: '▸ 无知识时效过期页面',
-    reviewAction: true,
-  },
-];
-
 interface DirGroup {
   dir: string;
   visible: IssueRow[];
@@ -177,7 +133,7 @@ interface DirGroup {
 }
 
 interface SectionView {
-  meta: SectionMeta;
+  meta: IssueSectionMeta;
   count: number;
   fixableCount: number;
   groups: DirGroup[] | null;
@@ -198,7 +154,7 @@ function buildGroups(rows: IssueRow[], limit: number): { groups: DirGroup[]; vis
 }
 
 const sectionViews = computed<SectionView[]>(() =>
-  SECTIONS.map((meta) => {
+  ISSUE_SECTIONS.map((meta) => {
     const rows = rowsOfKind(searchRows.value, meta.kind);
     const limit = limits[meta.kind];
     const fixableCount = rows.filter((r) => r.fixable).length;

@@ -12,6 +12,8 @@ import { CONFIG_TAB_GROUPS } from '../src/utils/configTabs';
 import { CLEANUP_CARDS, CLEANUP_PAGE_TITLE, buildPreviewBanner } from '../src/utils/cleanupPresentation';
 import { ISSUE_CATEGORIES, PAGE_SCOPE_DIRS } from '../src/utils/dataCleanPresentation';
 import { STEP_LABEL } from '../src/stores/compile';
+import { DASHBOARD_STAT_CARDS } from '../src/utils/dashboardPresentation';
+import { ISSUE_SECTIONS } from '../src/utils/healthSections';
 
 const sectionOf = (id: string) => DOC_SECTIONS.find((s) => s.id === id);
 
@@ -127,6 +129,24 @@ describe('帮助文档与代码同源：progress 章节（T02784 批次 1）', (
   });
 });
 
+describe('帮助文档与代码同源：dashboard / health 章节（T02941 批次 2）', () => {
+  it('统计卡实名来自 DASHBOARD_STAT_CARDS', () => {
+    const raw = textOf('dashboard');
+    for (const c of DASHBOARD_STAT_CARDS) expect(raw).toContain(c.label);
+    expect(raw).toContain(DASHBOARD_STAT_CARDS.map((c) => c.label).join('、'));
+  });
+
+  it('体检项实名与类数来自 ISSUE_SECTIONS（旧「3 类」口径不再出现）', () => {
+    const raw = textOf('health');
+    for (const s of ISSUE_SECTIONS) expect(raw).toContain(s.title);
+    expect(raw).toContain(`检测 ${ISSUE_SECTIONS.length} 类问题`);
+    expect(raw).toContain(`查看 ${ISSUE_SECTIONS.length} 类问题列表`);
+    // T02941 修掉的漂移：页面已有 4 类（含知识时效复核），文档不能再写 3 类 / 断链
+    expect(raw).not.toContain('检测 3 类问题');
+    expect(raw).not.toContain('断链（指向不存在的页面）');
+  });
+});
+
 describe('帮助文档与代码同源：手抄回归守护（T02784）', () => {
   // 上面的断言与实现同取一个导入，来源变更时文档自动跟随（这是「同源」的期望行为，
   // 对它变异不该红）。本用例守护的是真正的失败模式：有人把推导改回手抄字面量——
@@ -137,6 +157,10 @@ describe('帮助文档与代码同源：手抄回归守护（T02784）', () => {
     expect(modSrc, '清理目标链被手抄回字面量').not.toContain('compile_cache/run_state/run_logs/raw_archive');
     expect(modSrc, '编译阶段链被手抄回字面量').not.toContain('读取结构规范 → 抽取要点');
     expect(modSrc, '问题分类实名被手抄回字面量').not.toContain('缺元信息、标题重复');
+    // T02941：仪表盘统计卡 / 体检项实名同样不得手抄（必须经单一来源拼接）
+    expect(modSrc, '统计卡实名被手抄回字面量').not.toContain('总页面数、双向链接数');
+    expect(modSrc, '体检项实名被手抄回字面量').not.toContain('断链（指向不存在的页面）');
+    expect(modSrc, '体检类数被手抄回字面量').not.toContain('检测 3 类问题');
     const handCopiedTitles = [...modSrc.matchAll(/title: menuLabel\('(\w+)'\)/g)].map((m) => m[1]);
     // 每个经 menuLabel 提供的章节标题，都不允许同文件里再出现同名字面量标题
     for (const key of handCopiedTitles) {
