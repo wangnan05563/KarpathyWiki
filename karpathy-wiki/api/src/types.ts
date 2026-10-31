@@ -315,6 +315,8 @@ export interface FixProgressEvent {
   // T02924：终端事件带实测 harness step 数与 token 消耗，批量作业据此累计
   // 「每项平均往返次数/费用」样本（llmCalls 估算不再按 1 项 = 1 次写死）。
   data?: { path?: string; harnessSteps?: number; tokens?: number };
+  // T02954：单修复经定点复检后的裁定（false 随 ineffective 事件下发）
+  resolved?: boolean;
 }
 
 // 批量修复请求体：items 为单个修复任务的有序列表，后端按顺序串行执行。

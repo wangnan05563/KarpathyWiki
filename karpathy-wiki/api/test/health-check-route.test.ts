@@ -182,6 +182,68 @@ describe('POST /api/health-check/fix（单问题 SSE）', () => {
     await a.close();
   });
 
+  // T02954：单修复路径复用 T02922 定点复检——done 事件只代表流程无报错，
+  // 复检未消解时必须显式报无效，不能把 `done` 读成「已修复」。
+  it('T02954：复检未消解 → 下发 ineffective、不再出现成功 done', async () => {
+    const events = [ev('scan', 'running'), ev('fixed', 'done'), ev('done', 'done')];
+    const stub = makeAdapter(() => iterEvents(events), async () => false);
+    const a = await withApp(stub);
+    const res = await a.inject({ method: 'POST', url: '/api/health-check/fix', payload: valid });
+    expect(res.statusCode).toBe(200);
+    const frames = parseSSE(res.body);
+    expect(frames.map((f) => f.event)).toEqual(['progress', 'fixed', 'ineffective']);
+    expect(frames[2].data).toMatchObject({ step: 'done', resolved: false });
+    expect(String(frames[2].data.message)).toContain('未消解');
+    // 零 LLM：修复流程只跑一次，复检是对 adapter 的直接调用（确定性实现，见 batch-fix-recheck.test.ts）
+    expect(stub.fix).toHaveBeenCalledTimes(1);
+    expect(stub.recheck).toHaveBeenCalledTimes(1);
+    expect(stub.recheck).toHaveBeenCalledWith(valid);
+    await a.close();
+  });
+
+  it('T02954：复检自身异常按未消解上报，不吞成成功', async () => {
+    const stub = makeAdapter(
+      () => iterEvents([ev('done', 'done')]),
+      async () => {
+        throw new Error('vault 不可读');
+      },
+    );
+    const a = await withApp(stub);
+    const res = await a.inject({ method: 'POST', url: '/api/health-check/fix', payload: valid });
+    const frames = parseSSE(res.body);
+    expect(frames.map((f) => f.event)).toEqual(['ineffective']);
+    expect(frames[0].data).toMatchObject({ resolved: false });
+    expect(String(frames[0].data.message)).toContain('复检失败');
+    await a.close();
+  });
+
+  it('T02954：复检已消解 / adapter 未实现复检 → 仍按 done 下发（正常路径不变）', async () => {
+    const resolvedStub = makeAdapter(() => iterEvents([ev('done', 'done')]), async () => true);
+    const a = await withApp(resolvedStub);
+    const res = await a.inject({ method: 'POST', url: '/api/health-check/fix', payload: valid });
+    expect(parseSSE(res.body).map((f) => f.event)).toEqual(['done']);
+    expect(resolvedStub.recheck).toHaveBeenCalledTimes(1);
+    await a.close();
+
+    const legacyStub = makeAdapter(() => iterEvents([ev('done', 'done')]));
+    delete legacyStub.adapter.recheckIssueResolved;
+    const b = await withApp(legacyStub);
+    const res2 = await b.inject({ method: 'POST', url: '/api/health-check/fix', payload: valid });
+    expect(parseSSE(res2.body).map((f) => f.event)).toEqual(['done']);
+    await b.close();
+  });
+
+  it('T02954：流程失败（done 且 status=error）不触发复检', async () => {
+    const stub = makeAdapter(() => iterEvents([ev('done', 'error', '模型超时')]), async () => true);
+    const a = await withApp(stub);
+    const res = await a.inject({ method: 'POST', url: '/api/health-check/fix', payload: valid });
+    const frames = parseSSE(res.body);
+    expect(frames.map((f) => f.event)).toEqual(['done']);
+    expect(frames[0].data).toMatchObject({ status: 'error', message: '模型超时' });
+    expect(stub.recheck).not.toHaveBeenCalled();
+    await a.close();
+  });
+
   // T02924：单个修复与批量作业共用 stats.json，usage 必须同样落盘，否则「先单独修几条」
   // 的用户第一次批量估算拿到的仍是默认值（接错对象的典型：只在批量路径采集）。
   it('单个修复：耗时样本同时记录 harnessSteps / tokens（供批量估算复用）', async () => {

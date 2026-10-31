@@ -587,6 +587,13 @@ async function handleFixEvent(eventType: string, data: string): Promise<void> {
     }
     return;
   }
+  // T02954：流程跑完但定点复检判定未消解——不再复用「修复完成」文案
+  if (eventType === 'ineffective') {
+    healthStore.pushFixLog(parsed);
+    ElMessage.warning(parsed.message || '流程完成但问题未消解（已处理，需复核）');
+    await runCheck();
+    return;
+  }
   if (eventType === 'error') {
     ElMessage.error(parsed.message || '修复出错');
   }

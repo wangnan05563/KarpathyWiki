@@ -477,13 +477,15 @@ export interface FixRequest {
   target: { from: string; to: string } | string;
 }
 
-// 修复进度事件（SSE progress/fixed/done 通用结构）
+// 修复进度事件（SSE progress/fixed/done/ineffective 通用结构）
 export interface FixProgressEvent {
   step: string;
   status: 'running' | 'done' | 'error';
   message: string;
   tool?: string;
   data?: { path?: string };
+  // T02954：单修复定点复检裁定；ineffective 事件为 false
+  resolved?: boolean;
 }
 
 // 批量修复请求体：items 为单个修复任务的有序列表，后端串行执行。

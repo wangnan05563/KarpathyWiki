@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import type { EngineAdapter, FixInput, BatchFixRequest } from '../types.js';
+import type { EngineAdapter, FixInput, FixProgressEvent, BatchFixRequest } from '../types.js';
 import { withCompileLock } from '../compile-queue.js';
 import { createSSESender, setupSSE } from '../utils/sse.js';
 import { type IsolationGuards, createIsolationGuards } from '../middleware/auth.js';
@@ -70,18 +70,44 @@ export function registerHealthCheckRoute(
       // 串行队列保护：fix 可能调用 write_file，与 compile 共享 vault 写入
       await withCompileLock(async () => {
         flowRan = true;
+        let doneEvent: FixProgressEvent | null = null;
         for await (const ev of adapter.healthCheckFix(body as FixInput)) {
           // 客户端已断开：提前退出迭代避免继续触发 LLM 调用与 vault 写入
           if (isAborted()) break;
           if (typeof ev.data?.harnessSteps === 'number') harnessSteps = ev.data.harnessSteps;
           if (typeof ev.data?.tokens === 'number') tokens = ev.data.tokens;
           if (ev.step === 'done') {
-            send('done', ev);
+            // T02954：done 只代表引擎流程无报错，成功终态等定点复检裁定后再下发
+            doneEvent = ev;
           } else if (ev.step === 'fixed') {
             send('fixed', ev);
           } else {
             send('progress', ev);
           }
+        }
+        if (isAborted() || !doneEvent) return;
+        if (doneEvent.status !== 'done') {
+          send('done', doneEvent);
+          return;
+        }
+        // T02954：复用 T02922 的定点复检（确定性、零 LLM），流程成功但问题未消解时
+        // 不再复用「已修复」语义；复检自身异常按未消解如实上报（与批量作业同口径）。
+        let resolved = true;
+        let recheckNote = '';
+        try {
+          resolved = (await adapter.recheckIssueResolved?.(body as FixInput)) ?? true;
+        } catch (err: unknown) {
+          resolved = false;
+          recheckNote = `复检失败: ${err instanceof Error ? err.message : String(err)}`;
+        }
+        if (resolved) {
+          send('done', doneEvent);
+        } else {
+          send('ineffective', {
+            ...doneEvent,
+            resolved: false,
+            message: recheckNote || '流程完成但问题未消解（已处理，需复核）',
+          });
         }
       });
     } catch (err: unknown) {
