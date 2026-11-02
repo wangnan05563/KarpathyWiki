@@ -167,6 +167,9 @@ export function registerQueryRoute(
       // 生图 BYOK：outputMode='image' 时透传的用户生图配置（baseUrl/key/model/size 等），
       // 优先生效于服务端 media.agnes，并支撑前端"用户独立额度"。
       imageConfig?: import('../types.js').MediaImageUserConfig;
+      // T04066 问答语义检索：FR-20 embedding BYOK 配置（与 /api/search/hybrid 的 embedding 同构）。
+      // 有 apiKey 才启用语义路；未配置时问答检索保持现有关键词行为。
+      embedding?: { baseUrl: string; apiKey: string; model: string };
       // X-2 可恢复流式：断线重连时携带首连拿到的 runId，后端据此订阅进行中的 run（不触发新问答）
       resume?: string;
       // ── 意图澄清续答字段 ──
@@ -228,6 +231,9 @@ export function registerQueryRoute(
       toolsConfig: body.toolsConfig,
       // 生图 BYOK：outputMode='image' 时透传用户生图配置（adapter→queryWorkflow→generateImage 优先生效）
       mediaImageConfig: body.imageConfig,
+      // T04066 问答语义检索：仅在携带 apiKey 时透传 embedding（与 /api/search/hybrid 同口径），
+      // 未配置时字段为 undefined → search_pages 保持关键词扫描，问答行为与现状一致。
+      embedding: body.embedding?.apiKey ? body.embedding : undefined,
       // 意图澄清续答字段透传：首轮无；用户选择后携带 clarifyId + choiceIndex 重发。
       // 合法性（会话存在/问题一致/选项越界）由澄清门禁校验，非法时按新提问处理。
       clarifyId: normalizeClarifyId(body.clarifyId),

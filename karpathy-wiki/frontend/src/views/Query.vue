@@ -43,6 +43,8 @@ import {
   loadAiUserConfigForPreset,
   loadSearchUserConfig,
   loadToolsUserConfig,
+  // T04066 问答语义检索：由已解析的 aiCfg 派生 embedding 配置（与搜索页同一判定口径）
+  embeddingConfigFromAi,
   type AiUserConfig,
 } from '../services/userConfig';
 // 媒体生成（生图/视频）用户 BYOK 配置：生图/视频生成时随请求透传用户自己的配置
@@ -733,6 +735,13 @@ async function buildQueryBody(
   const { aiCfg, searchCfg, toolsCfg } = await loadQueryUserConfigs(uid, modelStore);
   if (aiCfg?.apiKey) {
     body.llmConfig = aiCfg;
+  }
+  // T04066 问答语义检索：用户配置了个人 embeddingModel 时随问答请求携带 embedding 配置
+  // （BYOK，与 llmConfig 同模式，密钥不落服务端磁盘）。未配置则不下发该字段，
+  // 后端 search_pages 保持现有关键词扫描——问答行为与改造前完全一致。
+  const embeddingCfg = embeddingConfigFromAi(aiCfg);
+  if (embeddingCfg) {
+    body.embedding = embeddingCfg;
   }
   // LLM「共享 AI」降级提示（T00315）：用户未配置个人 AI（无 aiCfg.apiKey），且服务端共享 AI
   // 已配置 key（modelStore.apiKeySet）时，本次实际会降级使用管理员共享配置。

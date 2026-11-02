@@ -158,6 +158,17 @@ export async function saveAiUserConfigForPreset(
   await saveUserConfig(userId, 'ai', map);
 }
 
+// FR-20 语义检索：从已解析的 AI 配置派生 embedding 配置（BYOK，随请求下发，不落盘）。
+// embeddingModel 未配置（或缺 baseUrl/apiKey）时返回 null——语义路自动关闭（仅关键词检索，无报错无回落）。
+// 抽成纯函数：搜索页（按预设键读取）与问答页（复用已解析的 aiCfg，含 AUTO_MODEL 归一）共用同一判定口径，
+// 避免两处各写一份「什么算未配置」让语义路开关分叉。
+export function embeddingConfigFromAi(
+  cfg: AiUserConfig | null | undefined,
+): { baseUrl: string; apiKey: string; model: string } | null {
+  if (!cfg?.embeddingModel?.trim() || !cfg.apiKey || !cfg.baseUrl) return null;
+  return { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.embeddingModel.trim() };
+}
+
 // FR-20 语义搜索：读取当前用户当前预设的 embedding 配置（BYOK，随搜索请求下发）。
 // embeddingModel 未配置时返回 null——语义路自动关闭（仅关键词检索，无报错无回落）；
 // baseUrl/apiKey 复用 LLM 配置（OpenAI 兼容服务同域名提供 /embeddings）。
@@ -166,9 +177,7 @@ export async function loadEmbeddingConfigForSearch(
   presetKey: string | undefined,
   preset?: LlmPreset,
 ): Promise<{ baseUrl: string; apiKey: string; model: string } | null> {
-  const cfg = await loadAiUserConfigForPreset(userId, presetKey, preset);
-  if (!cfg.embeddingModel?.trim() || !cfg.apiKey || !cfg.baseUrl) return null;
-  return { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.embeddingModel.trim() };
+  return embeddingConfigFromAi(await loadAiUserConfigForPreset(userId, presetKey, preset));
 }
 
 export const DEFAULT_SEARCH_USER_CONFIG: SearchUserConfig = {

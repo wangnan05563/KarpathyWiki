@@ -3,7 +3,9 @@ import { Harness } from '@wiki/harness';
 import fs from 'node:fs/promises';
 import type { VaultService } from '../vault/vault-service.js';
 import type { QueryInput, AnswerChunk, ThinkingChunk, WebRef, WebSearchConfig, ToolsConfig, MediaConfig, MediaImageUserConfig, AppConfig } from '../types.js';
-import { searchPages } from '../search-util.js';
+import { searchPages, type SearchHit } from '../search-util.js';
+// T04066 问答接入混合检索：BYOK embedding 配置随问答请求携带，命中时改走 FR-20 双路召回（含懒索引）
+import { hybridSearch, type EmbeddingConfig } from '../search/hybrid-search.js';
 // T02921：wikilink 抽取取自 link-parser 单一来源（拆别名/锚点，refs 才能解析到真实页面）
 import { extractWikilinkTargets } from '../vault/link-parser.js';
 import { createWebSearchTool } from '../tools/web-search.js';
@@ -24,7 +26,7 @@ import type { ClarifySessionStore } from './clarify/clarify-store.js';
 
 // 加载 query prompt 单点存储。与 compile 共用 prompts/ 目录，保证两阶段等价（M-3）。
 // 路径解析统一走 runtime.ts，兼容开发模式与 SEA 打包模式
-import { getPromptPath } from '../utils/runtime.js';
+import { getPromptPath, getDataDir } from '../utils/runtime.js';
 async function loadQueryPrompt(): Promise<string> {
   return fs.readFile(getPromptPath('query.md'), 'utf8');
 }
@@ -38,13 +40,42 @@ function objSchema(properties: Record<string, unknown>, required: string[]) {
   } as const;
 }
 
+// T04066 问答取数：有 BYOK embedding 且无 FR-12 范围限定时走 FR-20 混合检索，其余保持关键词扫描。
+// 为什么范围限定场景不放宽：hybridSearch 作用于全库 chunk 索引、没有 folder/tags 过滤能力，
+// 带 scopeFilter 的问答改走它会扩大可召回页面集（AI 伙伴预设的范围限定被绕过），故固定走关键词路。
+// 为什么零命中也退回：混合检索只覆盖已入索引页面，未索引/刚保存的页面仍需关键词兜底，保证不比现状差。
+export async function retrieveForQuery(
+  vault: VaultService,
+  keywords: string,
+  scopeFilter?: { tags?: string[]; folder?: string },
+  options: { embedding?: EmbeddingConfig; dataDir?: string; limit?: number } = {},
+): Promise<Array<SearchHit & { source: 'keyword' | 'semantic' | 'both' }>> {
+  const limit = options.limit ?? 20;
+  if (options.embedding?.apiKey && !scopeFilter) {
+    try {
+      const { hits } = await hybridSearch(options.dataDir ?? getDataDir(), vault, {
+        query: keywords,
+        limit,
+        embedding: options.embedding,
+      });
+      if (hits.length > 0) {
+        return hits.map((h) => ({ path: h.path, title: h.title, snippet: h.snippet, hits: 0, source: h.source }));
+      }
+    } catch {
+      // 混合检索不可用（索引缺失 / embedding 调用失败）：退回关键词扫描，与 FR-20 静默降级一致
+    }
+  }
+  const hits = await searchPages(vault, keywords, limit, scopeFilter ? { folder: scopeFilter.folder, tags: scopeFilter.tags } : undefined);
+  return hits.map((h) => ({ ...h, source: 'keyword' as const }));
+}
+
 // query 工作流的工具集。仅提供只读工具，query 不允许写 Vault（AC-03-2）。
 // §5.2 当 options.webSearch 为 true 时，追加 web_search 工具。
 // FR-21 引用溯源：citationSink 收集 search_pages 命中的页面（保持调用顺序）作为
 // 引用槽位——槽位编号 n 与 LLM 答案中的 [n] 内联编号一一对应（done 时并入 refs）。
 export function createQueryTools(
   vault: VaultService,
-  options: { webSearch?: boolean; webSearchConfig?: WebSearchConfig; scopeFilter?: { tags?: string[]; folder?: string }; citationSink?: string[] } = {},
+  options: { webSearch?: boolean; webSearchConfig?: WebSearchConfig; scopeFilter?: { tags?: string[]; folder?: string }; citationSink?: string[]; embedding?: EmbeddingConfig; dataDir?: string } = {},
 ): ToolDefinition[] {
   const scopeFilter = options.scopeFilter;
   const tools: ToolDefinition[] = [
@@ -57,8 +88,11 @@ export function createQueryTools(
       ),
       handler: async (args: unknown) => {
         const { keywords } = args as { keywords: string };
-        // FR-12 scopeFilter：AI 伙伴预设的范围限定通过 search_pages 的 folder/tags 参数生效
-        const hits = await searchPages(vault, keywords, 20, scopeFilter ? { folder: scopeFilter.folder, tags: scopeFilter.tags } : undefined);
+        // FR-12 scopeFilter：AI 伙伴预设的范围限定通过检索范围生效；T04066 配了 embedding 时改走混合检索
+        const hits = await retrieveForQuery(vault, keywords, scopeFilter, {
+          embedding: options.embedding,
+          dataDir: options.dataDir,
+        });
         // FR-21：命中页面按返回顺序登记为引用槽位（跨多次搜索去重），并把 slot 下发给 LLM
         const sink = options.citationSink;
         return hits.map((h) => {
@@ -459,6 +493,8 @@ async function* queryWithHarness( // NOSONAR - S107 - 函数签名需要多个�
     // FR-12 scopeFilter：AI 伙伴预设的范围限定通过 search_pages 的 folder/tags 生效
     scopeFilter: options.scopeFilter,
     citationSink: citationSlots,
+    // T04066：BYOK embedding 随问答请求下发（input.embedding），有 key 才启用语义路
+    embedding: input.embedding,
   });
 
   // 加载扩展工具（委托给 loadExtendedToolsWithFeedback 降低复杂度 S3776）
@@ -699,6 +735,8 @@ async function* queryWithHarnessStream( // NOSONAR - S107 - 函数签名需要�
     webSearchConfig: options.webSearchConfig,
     scopeFilter: options.scopeFilter,
     citationSink: citationSlots,
+    // T04066：BYOK embedding 随问答请求下发（input.embedding），有 key 才启用语义路
+    embedding: input.embedding,
   });
   // 中间件 'extended_tools' 控制：与 queryWithHarness 一致的判断逻辑
   if (shouldRunMiddleware(input.middlewares, 'extended_tools')) {

@@ -126,6 +126,9 @@ export interface QueryInput {
   attachments?: Array<{ data: string; mimeType: string; filename: string }>;
   // 当前请求使用的模型（用于即时切换，覆盖 config.llm.model）
   model?: string;
+  // T04066 问答接入混合检索：BYOK embedding 配置随请求携带（与 llmConfig 同模式，密钥不落服务端磁盘）。
+  // 与 /api/search/hybrid 的 embedding 字段同构；未配置时问答检索保持现有关键词行为（FR-20 降级语义）。
+  embedding?: { baseUrl: string; apiKey: string; model: string };
   // FR-09-2 多模态输出模式：'normal'(默认) | 'mindmap' | 'faq' | 'timeline'
   // 为什么可选：未设置时走普通问答，设置非 normal 时在 done 前追加 multimodal 输出
   outputMode?: string;
