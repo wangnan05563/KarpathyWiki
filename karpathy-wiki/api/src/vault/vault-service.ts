@@ -11,6 +11,11 @@ import {
   extractWikilinkTargets,
   type PageNameIndex,
 } from './link-parser.js';
+// O3：全库读盘改有界并发 + 周期性让出事件循环（原先对全部页面一次 Promise.all，
+// 千页库会同时发起上千个 readFile 打满 libuv 线程池，并把事件循环压住）
+import { DEFAULT_SCAN_CONCURRENCY, mapWithConcurrency } from '../utils/async-pool.js';
+// O2 复核：全库派生结果统一走「页面签名 + 单飞」缓存，见 _linkGraphCache / _pendingTagsCache
+import { DerivedCache, computePageSignature } from '../utils/derived-cache.js';
 
 // 将底层 fs 读取错误包装为带 code 的 Error，保留准确文案（区分不存在/目录/权限/其它）。
 // 为什么需要：路由层需按 HTTP 状态码分流（目录→400、权限→403、不存在→404、其它→500），
@@ -75,6 +80,16 @@ export interface PendingTagPage {
   aiTags: string[];
   existingTags: string[];
 }
+
+// 双向链接图（buildLinkGraph 的产物，节点用页面相对路径）
+interface LinkGraph {
+  nodes: string[];
+  edges: Array<{ from: string; to: string }>;
+}
+
+// 全库派生结果（链接图 / 待审标签）的巡查节奏。
+// 真正的有效性判据是页面签名；TTL 到点只触发一次签名核对，签名没变就续期（见 DerivedCache）。
+const VAULT_SCAN_TTL_MS = 30_000;
 
 // 默认 SCHEMA 内容。init 时若 SCHEMA.md 不存在则写入此内容，保证首次启动即可用。
 // 与 data/vault/SCHEMA.md 保持同步：扩展 qa/solutions 类型与 QQ 导入子系统状态机规范
@@ -148,9 +163,10 @@ const DEFAULT_LOG = `# 操作日志\n\n`;
 export class VaultService {
   // buildLinkGraph 共享缓存：避免 /api/graph 与 /api/stats 各自缓存导致重复计算
   // 为什么下沉到 VaultService：单一数据源，writeFile 时自动失效
-  private _linkGraphCache: { nodes: string[]; edges: Array<{ from: string; to: string }> } | null = null;
-  private _linkGraphCachedAt = 0;
-  private static readonly LINK_GRAPH_TTL_MS = 30 * 1000; // 30 秒
+  // 为什么用 DerivedCache 而不是「TTL + 置空」：2026-11-01 压测里 20 并发下 TTL 一到，
+  //   每个在途请求都各自发起一次全库 readdir+readFile（无单飞），实测把 /api/graph 的
+  //   p50 1.3 ms 抬到 p99 2.7 s，并连带压住整条事件循环。签名键 + 单飞后同一份计算只跑一次。
+  private readonly _linkGraphCache = new DerivedCache<LinkGraph>(VAULT_SCAN_TTL_MS, 'linkGraph');
 
   // 文件级 mtime + rawLinks 缓存（P2-5 增量更新）
   // 为什么独立于 _linkGraphCache：跨 TTL 失效保留，仅文件 mtime 变化时清除对应条目
@@ -167,9 +183,14 @@ export class VaultService {
   // pending tags 结果缓存（P3-2）：避免 /api/tags/pending 每次请求都全量扫描
   // 为什么需要：listPendingTagPages 无缓存，大 vault 下 1000+ readFile + frontmatter 解析耗时长
   // 失效策略：writeFile 时主动失效（ai_tags 的增删改都经过 writeFile）
-  private _pendingTagsCache: PendingTagPage[] | null = null;
-  private _pendingTagsCachedAt = 0;
-  private static readonly PENDING_TAGS_TTL_MS = 30 * 1000; // 30 秒
+  // 与 _linkGraphCache 同理，改签名键 + 单飞（原先 30 s TTL 到期即并发重扫）
+  private readonly _pendingTagsCache = new DerivedCache<PendingTagPage[]>(VAULT_SCAN_TTL_MS, 'pendingTags');
+
+  // 文件变更版本号（O5）：writeFile 与 chokidar 的 add/change/unlink 都自增。
+  // 为什么用版本号而不是再挂一堆回调：路由层的目录树/页面列表缓存只需要一个 O(1) 的
+  //   「有没有变过」判据；TTL 单独用会有最长 30 s 的陈旧窗口，改一行 frontmatter 后
+  //   刷新页面看不到新标题正是这类问题。
+  private _changeRevision = 0;
 
   constructor(private readonly vaultPath: string) {}
 
@@ -178,13 +199,16 @@ export class VaultService {
     return this.vaultPath;
   }
 
+  // O5：文件变更版本号。路由层缓存以自己的 cachedRevision 与之比对，不等即重算。
+  getChangeRevision(): number {
+    return this._changeRevision;
+  }
+
   // 失效 link graph 缓存（写入文件后调用）
-  // 为什么不直接置 null：避免在并发请求中产生缓存击穿，保留旧缓存让下一次调用主动重算
   // § P2-5：不清除 _fileLinksCache，由 buildLinkGraph 通过 mtime 检测变化
   //   写入的文件 mtime 已变，下次 buildLinkGraph 会重新读取该文件
   private invalidateLinkGraphCache(): void {
-    this._linkGraphCache = null;
-    this._linkGraphCachedAt = 0;
+    this._linkGraphCache.clear();
   }
 
   // 失效单文件的内容缓存（P2-7）：writeFile / chokidar 变更时调用
@@ -192,12 +216,13 @@ export class VaultService {
     this._fileContentCache.delete(rel);
     // 文件内容变化也意味着 [[links]] 可能改变，清除该文件的 rawLinks 缓存
     this._fileLinksCache.delete(rel);
+    // O5：任何文件内容的增删改都推进版本号（chokidar 的 add/change/unlink 与 writeFile 都走这里）
+    this._changeRevision++;
   }
 
   // 失效 pending tags 缓存（P3-2）：ai_tags 的增删改都经过 writeFile
   private invalidatePendingTagsCache(): void {
-    this._pendingTagsCache = null;
-    this._pendingTagsCachedAt = 0;
+    this._pendingTagsCache.clear();
   }
 
   // 初始化 Vault 目录结构。已存在的文件不覆盖，避免破坏用户内容。
@@ -525,7 +550,8 @@ export class VaultService {
 
   // 列出所有正式页面的扁平化结构（FR-11 看板/日历视图数据源）。
   // 仅扫描 PAGE_DIRS 下的 .md 文件，跳过 drafts/raw 等非正式页面。
-  // 并行化 IO：每个目录独立 readdir + 解析 frontmatter，避免串行等待。
+  // O3：读盘改为有界并发（原实现按目录 Promise.all 全部文件，千页库同时上千 readFile）
+  //   结果顺序仍按「目录顺序 + 目录内 readdir 顺序」，与改造前一致。
   async listAllPages(): Promise<
     Array<{
       path: string;
@@ -534,39 +560,34 @@ export class VaultService {
       frontmatter: Record<string, unknown>;
     }>
   > {
-    const results = await Promise.all(
-      PAGE_DIRS.map(async (dir) => {
-        const dirFull = path.join(this.vaultPath, dir);
-        let entries: string[] = [];
-        try {
-          entries = await fs.readdir(dirFull);
-        } catch {
-          return [];
+    const pairs: Array<{ dir: string; file: string }> = [];
+    for (const dir of PAGE_DIRS) {
+      try {
+        const entries = await fs.readdir(path.join(this.vaultPath, dir));
+        for (const f of entries) {
+          if (f.endsWith('.md')) pairs.push({ dir, file: f });
         }
-        // 每个文件并行解析 frontmatter
-        return Promise.all(
-          entries
-            .filter((f) => f.endsWith('.md'))
-            .map(async (f) => {
-              const rel = `${dir}/${f}`;
-              let frontmatter: Record<string, unknown> = {};
-              try {
-                const content = await this.readFile(rel);
-                frontmatter = matter(content).data;
-              } catch {
-                // 解析失败时返回空 frontmatter，不阻断整体列表
-              }
-              return {
-                path: rel,
-                name: f.slice(0, -3),
-                dir,
-                frontmatter,
-              };
-            }),
-        );
-      }),
-    );
-    return results.flat();
+      } catch {
+        // 目录不存在：跳过
+      }
+    }
+
+    return mapWithConcurrency(pairs, DEFAULT_SCAN_CONCURRENCY, async ({ dir, file }) => {
+      const rel = `${dir}/${file}`;
+      let frontmatter: Record<string, unknown> = {};
+      try {
+        const content = await this.readFile(rel);
+        frontmatter = matter(content).data;
+      } catch {
+        // 解析失败时返回空 frontmatter，不阻断整体列表
+      }
+      return {
+        path: rel,
+        name: file.slice(0, -3),
+        dir,
+        frontmatter,
+      };
+    });
   }
 
   // 构建双向链接图。纯确定性逻辑，不调 LLM（M-2 healthCheck 与 harness 关系）。
@@ -577,12 +598,12 @@ export class VaultService {
   //   避免 30s TTL 同步过期时双倍重算；writeFile 时主动失效
   // § P2-5 增量更新：TTL 过期后重算时，通过 mtime 检测文件是否变化
   //   未变化的文件复用缓存的 rawLinks，跳过 readFile（stat 比 readFile 快 10-100 倍）
-  async buildLinkGraph(): Promise<{ nodes: string[]; edges: Array<{ from: string; to: string }> }> {
-    const now = Date.now();
-    if (this._linkGraphCache && (now - this._linkGraphCachedAt) < VaultService.LINK_GRAPH_TTL_MS) {
-      return this._linkGraphCache;
-    }
+  async buildLinkGraph(): Promise<LinkGraph> {
+    const signature = await computePageSignature(this.vaultPath, this._changeRevision);
+    return this._linkGraphCache.get(signature, () => this.computeLinkGraph());
+  }
 
+  private async computeLinkGraph(): Promise<LinkGraph> {
     // T02951：nameToPath 保留同名页全部候选；出边按 nodes 全量扫描，避免被覆盖页丢边
     const nameToPath: PageNameIndex = new Map();
     const nodes: string[] = [];
@@ -592,9 +613,13 @@ export class VaultService {
       PAGE_DIRS.map((d) => this.collectPagesFromDir(d, nodes, nameToPath)),
     );
 
-    // 并行获取每个文件的 rawLinks（命中 mtime 缓存则跳过 readFile）
-    const rawLinksArrays = await Promise.all(
-      nodes.map((fromPath) => this.getRawLinksForPage(fromPath)),
+    // O3：有界并发获取每个文件的 rawLinks（命中 mtime 缓存则跳过 readFile）。
+    // 为什么不再用 Promise.all：千页库会一次发起上千 stat/readFile，把 libuv 线程池排满，
+    //   其他接口的 readFile 只能排队——这正是压测里「9–16 s 离群」的传导路径之一。
+    const rawLinksArrays = await mapWithConcurrency(
+      nodes,
+      DEFAULT_SCAN_CONCURRENCY,
+      (fromPath) => this.getRawLinksForPage(fromPath),
     );
 
     // 用最新 nameToPath 解析 rawLinks 为 edges（T02921：解析走唯一 resolver——精确优先 + 大小写不敏感回落）
@@ -611,10 +636,7 @@ export class VaultService {
       }
     }
 
-    const result = { nodes, edges };
-    this._linkGraphCache = result;
-    this._linkGraphCachedAt = now;
-    return result;
+    return { nodes, edges };
   }
 
   // 收集单个目录下的 .md 页面，填充 nodes 与 nameToPath 映射
@@ -689,17 +711,16 @@ export class VaultService {
 
   // 列出所有含 ai_tags 字段的页面（FR-10-1 / P3-2）
   // 为什么在 VaultService：缓存失效需要与 writeFile 联动
-  // § P3-2：添加 30s TTL 结果缓存，大 vault 下连续请求命中缓存从全量扫描降至 < 5ms
+  // § P3-2：结果缓存，大 vault 下连续请求命中缓存从全量扫描降至 < 5ms
   // § P3-3：分批并发（每批 50 个），避免 1000+ readFile 同时发起耗尽 libuv 线程池
+  // § O2 复核：缓存键从「30 s TTL」换成页面签名 + 单飞——原先 TTL 一到，
+  //   并发在途的每个请求各自全量重扫，压测里 /api/tags/pending p50 0.9 ms 而 p99 2.6 s。
   async listPendingTagPages(): Promise<PendingTagPage[]> {
-    // 缓存命中：TTL 内直接返回
-    if (
-      this._pendingTagsCache !== null &&
-      Date.now() - this._pendingTagsCachedAt < VaultService.PENDING_TAGS_TTL_MS
-    ) {
-      return this._pendingTagsCache;
-    }
+    const signature = await computePageSignature(this.vaultPath, this._changeRevision);
+    return this._pendingTagsCache.get(signature, () => this.computePendingTagPages());
+  }
 
+  private async computePendingTagPages(): Promise<PendingTagPage[]> {
     // 第 1 步：并行 readdir 所有页面目录
     const dirEntries = await Promise.all(
       PAGE_DIRS.map(async (dir) => {
@@ -720,11 +741,8 @@ export class VaultService {
     // 第 3 步：分批并行读取 + 解析 frontmatter（提取为独立函数降低 listPendingTagPages 认知复杂度）
     const parsedResults = await this.batchParsePendingTags(allFiles);
 
-    // 第 4 步：过滤 + 写缓存
-    const result = parsedResults.filter((p): p is PendingTagPage => p !== null);
-    this._pendingTagsCache = result;
-    this._pendingTagsCachedAt = Date.now();
-    return result;
+    // 第 4 步：过滤出含 ai_tags 的页面
+    return parsedResults.filter((p): p is PendingTagPage => p !== null);
   }
 
   // 分批并行读取文件的 frontmatter，提取 ai_tags 字段（P3-3）

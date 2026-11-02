@@ -274,3 +274,14 @@ export function listPendingPages(dataDir: string): string[] {
   return rows.map((r) => r.page_path);
 }
 
+/** 已建索引页面 → 最近写入时间（ms）。用于按文件 mtime 增量同步（O1） */
+export function listIndexedPageTimes(dataDir: string): Map<string, number> {
+  const d = getIndexDb(dataDir);
+  const rows = d.prepare('SELECT page_path, updated_at FROM index_status').all() as Array<{ page_path: string; updated_at: string }>;
+  const times = new Map<string, number>();
+  for (const row of rows) {
+    const ms = Date.parse(row.updated_at);
+    times.set(row.page_path, Number.isFinite(ms) ? ms : 0);
+  }
+  return times;
+}

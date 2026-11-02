@@ -7,6 +7,10 @@ import { createWebSearchTool } from '../tools/web-search.js';
 // FR-20 语义搜索：混合检索（FTS5 关键词 + BYOK 向量语义双路 RRF）与索引管理
 import { hybridSearch, rebuildIndex, listVaultPages, indexPage } from '../search/hybrid-search.js';
 import { getIndexDb, getIndexStatus } from '../search/sqlite-index.js';
+// O1：/api/search 优先走 FTS5 索引（自动增量同步），不可用时回退 searchPages
+import { ensureIndexSynced, getIndexSyncInfo, searchPagesIndexed } from '../search/indexed-search.js';
+// O7：缓存命中率/重算耗时随索引状态一并暴露，便于定位「为什么某个接口忽快忽慢」
+import { getDerivedCacheStats } from '../utils/derived-cache.js';
 
 // 注册全文检索路由。
 //   GET /api/search?q=关键词&source=&status=&type=  全文检索 + frontmatter 过滤
@@ -21,6 +25,9 @@ import { getIndexDb, getIndexStatus } from '../search/sqlite-index.js';
 // auth 启用时——chunks 是引用溯源数据源，匿名可读即泄露 vault 页面原文，要求登录；
 // rebuild/reindex-page 是触发 embedding 消耗的写操作，要求管理员（与 PUT /api/files 同档）。
 export function registerSearchRoute(app: FastifyInstance, vault: VaultService, dataDir?: string, guards?: IsolationGuards) {
+  // O1：启动后在后台建库/增量同步，首次搜索无需承担全量索引耗时
+  if (dataDir) void ensureIndexSynced(dataDir, vault).catch(() => { /* 同步失败时搜索回退全库扫描 */ });
+
   app.get('/api/search', { config: { rateLimit: { max: 300, timeWindow: '1 minute' } } }, async (request: FastifyRequest, reply: FastifyReply) => {
     const query = request.query as { q?: string; source?: string; status?: string; type?: string };
     const hasFilter = query.source || query.status || query.type;
@@ -29,7 +36,15 @@ export function registerSearchRoute(app: FastifyInstance, vault: VaultService, d
     }
 
     try {
-      const hits = await searchPages(vault, query.q || '', 20, {
+      // O1：有关键词时优先走 FTS5 索引（毫秒级）；纯过滤或索引异常回退全库扫描
+      const indexed = dataDir
+        ? await searchPagesIndexed(dataDir, vault, query.q || '', 20, {
+          source: query.source,
+          status: query.status,
+          type: query.type,
+        }).catch(() => null)
+        : null;
+      const hits = indexed ?? await searchPages(vault, query.q || '', 20, {
         source: query.source,
         status: query.status,
         type: query.type,
@@ -94,10 +109,10 @@ export function registerSearchRoute(app: FastifyInstance, vault: VaultService, d
   // ── FR-20 索引状态（设置页展示：已索引/待补页面数）──
   app.get('/api/search/status', async (_request: FastifyRequest, reply: FastifyReply) => {
     if (!dataDir) {
-      return reply.send({ enabled: false, indexedPages: 0, pendingPages: 0, totalChunks: 0 });
+      return reply.send({ enabled: false, indexedPages: 0, pendingPages: 0, totalChunks: 0, caches: getDerivedCacheStats() });
     }
     const status = getIndexStatus(dataDir);
-    reply.send({ enabled: true, ...status });
+    reply.send({ enabled: true, ...status, sync: getIndexSyncInfo(), caches: getDerivedCacheStats() });
   });
 
   // ── FR-21 引用溯源：读取某页面的全部 chunk（浮层展示 chunk 原文 + 定位）──
