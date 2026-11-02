@@ -158,6 +158,16 @@ export function removePageIndex(dataDir: string, pagePath: string): void {
 /** FTS5 关键词路召回：BM25 排序 top-N。
  * 分词说明：trigram tokenizer 支持 CJK 子串匹配（默认 unicode61 会把整段中文当一个 token）。
  * trigram 的限制是查询串须 ≥3 字符——短查询与 FTS 语法错误一律降级 LIKE 扫描，保证功能可用。 */
+// T04068：LIKE 的字面量匹配口径单一来源。SQLite 仅在语句显式声明 ESCAPE 时才把该字符
+// 当转义符，因此「转义」与「ESCAPE 子句」必须成对出现（见 keywordRecall 两处 LIKE）。
+// 转义符自身必须先替换，否则用户输入的反斜杠会变成转义符并吞掉后一个字符。
+const LIKE_ESCAPE_CHAR = '\\';
+
+export function toLikePattern(term: string): string {
+  const escaped = term.replace(/[\\%_]/g, (c) => LIKE_ESCAPE_CHAR + c);
+  return `%${escaped}%`;
+}
+
 export function keywordRecall(dataDir: string, query: string, limit: number): Array<ChunkRow & { score: number }> {
   const d = getIndexDb(dataDir);
   const terms = query.trim().split(/\s+/).filter(Boolean);
@@ -166,10 +176,10 @@ export function keywordRecall(dataDir: string, query: string, limit: number): Ar
   const useLike = terms.some((t) => t.length < 3) || /["*()]/.test(query);
   if (useLike) {
     const likeTerms = terms.slice(0, 3);
-    const where = likeTerms.map(() => 'content LIKE ?').join(' AND ');
+    const where = likeTerms.map(() => `content LIKE ? ESCAPE '${LIKE_ESCAPE_CHAR}'`).join(' AND ');
     const rows = d.prepare(`
       SELECT page_path, chunk_index, content, heading FROM chunks WHERE ${where} LIMIT ?
-    `).all(...likeTerms.map((t) => `%${t.replace(/[%_]/g, (c) => '\\' + c)}%`), limit) as Array<{ page_path: string; chunk_index: number; content: string; heading: string | null }>;
+    `).all(...likeTerms.map(toLikePattern), limit) as Array<{ page_path: string; chunk_index: number; content: string; heading: string | null }>;
     return rows.map((r) => ({ pagePath: r.page_path, chunkIndex: r.chunk_index, content: r.content, heading: r.heading, score: -1 }));
   }
   const match = terms.map((t) => `"${t.replace(/"/g, '""')}"`).join(' OR ');
@@ -183,8 +193,10 @@ export function keywordRecall(dataDir: string, query: string, limit: number): Ar
     return rows.map((r) => ({ pagePath: r.page_path, chunkIndex: r.chunk_index, content: r.content, heading: r.heading, score: r.score }));
   } catch {
     // FTS5 语法错误等：LIKE 兜底，不让关键词路崩溃
-    const rows = d.prepare('SELECT page_path, chunk_index, content, heading FROM chunks WHERE content LIKE ? LIMIT ?')
-      .all(`%${terms[0]}%`, limit) as Array<{ page_path: string; chunk_index: number; content: string; heading: string | null }>;
+    // T04068：兜底分支与上方同一转义口径——历史上这里裸拼 `%${terms[0]}%`，
+    // 用户输入的 %/_ 会退化成通配符（把全库当命中结果返回）。
+    const rows = d.prepare(`SELECT page_path, chunk_index, content, heading FROM chunks WHERE content LIKE ? ESCAPE '${LIKE_ESCAPE_CHAR}' LIMIT ?`)
+      .all(toLikePattern(terms[0]), limit) as Array<{ page_path: string; chunk_index: number; content: string; heading: string | null }>;
     return rows.map((r) => ({ pagePath: r.page_path, chunkIndex: r.chunk_index, content: r.content, heading: r.heading, score: -1 }));
   }
 }
