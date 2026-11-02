@@ -14,14 +14,18 @@ import { computeKnowledgeStatus } from './knowledge-status.js';
 // 为一批引用路径构建信号对象。
 // 单页读失败时仍保留该引用（authority/review/confidence 置 unknown/false），
 // 保证低置信引用不被静默丢弃（AC-19-6：全部引用保持可见）。
+// neighborPaths（T04072）：图拓来的一跳邻居路径集合，命中这些路径的引用标记 origin='neighbor'，
+// 其余标记 origin='hit'，让前端/审计能区分「一手依据」与「关联参考」。
 export async function buildRefSignals(
   paths: string[],
   vault: VaultService,
   appConfig?: AppConfig,
+  neighborPaths?: Iterable<string>,
 ): Promise<RefSignal[]> {
   const authorityMap = appConfig?.refs?.authorityMap ?? {};
   // knowledge.staleDays 默认 365，与 defaultConfig 保持一致
   const staleDays = appConfig?.knowledge?.staleDays ?? 365;
+  const neighborSet = neighborPaths ? new Set(neighborPaths) : null;
 
   return Promise.all(paths.map(async (p) => {
     let source: unknown;
@@ -60,6 +64,7 @@ export async function buildRefSignals(
         { knowledge_class: knowledgeClass, updated, reviewed_at: reviewedAt },
         staleDays,
       ),
+      origin: neighborSet?.has(p) ? 'neighbor' : 'hit',
     };
   }));
 }

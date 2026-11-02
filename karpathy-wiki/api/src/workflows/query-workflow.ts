@@ -2,8 +2,10 @@ import type { ToolDefinition, HarnessConfig, StepEvent } from '@wiki/harness';
 import { Harness } from '@wiki/harness';
 import fs from 'node:fs/promises';
 import type { VaultService } from '../vault/vault-service.js';
-import type { QueryInput, AnswerChunk, ThinkingChunk, WebRef, WebSearchConfig, ToolsConfig, MediaConfig, MediaImageUserConfig, AppConfig } from '../types.js';
+import type { QueryInput, AnswerChunk, ThinkingChunk, WebRef, WebSearchConfig, ToolsConfig, MediaConfig, MediaImageUserConfig, AppConfig, QueryGraphExpandConfig } from '../types.js';
 import { searchPages, type SearchHit } from '../search-util.js';
+// T04072 命中页一跳图拓：沿 wikilink/反向链接取邻居摘要，邻居不算一手命中（不给 slot）
+import { expandNeighbors } from '../search/graph-expand.js';
 // T04066 问答接入混合检索：BYOK embedding 配置随问答请求携带，命中时改走 FR-20 双路召回（含懒索引）
 import { hybridSearch, type EmbeddingConfig } from '../search/hybrid-search.js';
 // T02921：wikilink 抽取取自 link-parser 单一来源（拆别名/锚点，refs 才能解析到真实页面）
@@ -73,15 +75,17 @@ export async function retrieveForQuery(
 // §5.2 当 options.webSearch 为 true 时，追加 web_search 工具。
 // FR-21 引用溯源：citationSink 收集 search_pages 命中的页面（保持调用顺序）作为
 // 引用槽位——槽位编号 n 与 LLM 答案中的 [n] 内联编号一一对应（done 时并入 refs）。
+// T04072：graphExpand 开启时额外返回一跳邻居（kind='neighbor'，只有摘要、无 slot），
+// neighborSink 收集这些邻居路径供 done 时标记 RefSignal.origin（不计引用槽位）。
 export function createQueryTools(
   vault: VaultService,
-  options: { webSearch?: boolean; webSearchConfig?: WebSearchConfig; scopeFilter?: { tags?: string[]; folder?: string }; citationSink?: string[]; embedding?: EmbeddingConfig; dataDir?: string } = {},
+  options: { webSearch?: boolean; webSearchConfig?: WebSearchConfig; scopeFilter?: { tags?: string[]; folder?: string }; citationSink?: string[]; embedding?: EmbeddingConfig; dataDir?: string; graphExpand?: QueryGraphExpandConfig; neighborSink?: string[] } = {},
 ): ToolDefinition[] {
   const scopeFilter = options.scopeFilter;
   const tools: ToolDefinition[] = [
     {
       name: 'search_pages',
-      description: '按关键词搜索知识库页面。返回匹配页面的槽位编号（slot）、路径与摘要片段；答案中用 [slot] 引用对应页面。',
+      description: '按关键词搜索知识库页面。返回匹配页面（kind="hit"，含槽位编号 slot、路径与摘要片段）；图拓开启时还可能返回 kind="neighbor" 的一跳关联页（仅摘要、无 slot，需要全文请用 read_page）。答案中用 [slot] 引用 hit 页面。',
       parameters: objSchema(
         { keywords: { type: 'string', description: '搜索关键词，多个词用空格分隔' } },
         ['keywords'],
@@ -93,9 +97,13 @@ export function createQueryTools(
           embedding: options.embedding,
           dataDir: options.dataDir,
         });
+        // T04072：命中页拓一跳邻居；关闭时整段跳过（零破坏）
+        const neighbors = options.graphExpand?.enabled
+          ? await expandNeighbors(vault, hits.map((h) => h.path), options.graphExpand)
+          : [];
         // FR-21：命中页面按返回顺序登记为引用槽位（跨多次搜索去重），并把 slot 下发给 LLM
         const sink = options.citationSink;
-        return hits.map((h) => {
+        const hitEntries = hits.map((h) => {
           let slot = -1;
           if (sink) {
             const existing = sink.indexOf(h.path);
@@ -104,9 +112,23 @@ export function createQueryTools(
               sink.push(h.path);
               slot = sink.length;
             }
+            // 该页已被本次检索正式命中：从邻居集合移除，避免 refs 被误标为 neighbor
+            const ns = options.neighborSink;
+            const neighborIdx = ns ? ns.indexOf(h.path) : -1;
+            if (ns && neighborIdx >= 0) ns.splice(neighborIdx, 1);
           }
-          return { slot: slot > 0 ? slot : undefined, path: h.path, title: h.title, snippet: h.snippet };
+          return { kind: 'hit', slot: slot > 0 ? slot : undefined, path: h.path, title: h.title, snippet: h.snippet };
         });
+        // 邻居只给摘要与链接方向，不占引用槽位；已作为 slot 引用过的页面不重复展示
+        const neighborEntries = neighbors
+          .filter((n) => !sink?.includes(n.path))
+          .map((n) => {
+            if (options.neighborSink && !options.neighborSink.includes(n.path)) {
+              options.neighborSink.push(n.path);
+            }
+            return { kind: 'neighbor', path: n.path, title: n.title, snippet: n.snippet, via: n.via };
+          });
+        return [...hitEntries, ...neighborEntries];
       },
     },
     {
@@ -463,7 +485,7 @@ async function* queryWithHarness( // NOSONAR - S107 - 函数签名需要多个�
   harnessConfig: HarnessConfig,
   vault: VaultService,
   input: QueryInput,
-  options: { webSearchConfig?: WebSearchConfig; toolsConfig?: ToolsConfig; scopeFilter?: { tags?: string[]; folder?: string }; systemPrompt?: string },
+  options: { webSearchConfig?: WebSearchConfig; toolsConfig?: ToolsConfig; scopeFilter?: { tags?: string[]; folder?: string }; systemPrompt?: string; appConfig?: AppConfig; neighborSink?: string[] },
   collectedThinking: ThinkingChunk[],
   collectedWebRefs: WebRef[],
   collectedProgress: QueryProgress[],
@@ -495,6 +517,9 @@ async function* queryWithHarness( // NOSONAR - S107 - 函数签名需要多个�
     citationSink: citationSlots,
     // T04066：BYOK embedding 随问答请求下发（input.embedding），有 key 才启用语义路
     embedding: input.embedding,
+    // T04072：图拓开关来自配置中心（默认关），邻居路径收集到 neighborSink 供 refs 标 origin
+    graphExpand: options.appConfig?.query?.graphExpand,
+    neighborSink: options.neighborSink,
   });
 
   // 加载扩展工具（委托给 loadExtendedToolsWithFeedback 降低复杂度 S3776）
@@ -559,7 +584,11 @@ async function* queryWithHarness( // NOSONAR - S107 - 函数签名需要多个�
   // 8. 提取引用并标记完成
   // FR-21：引用槽位（search_pages 命中顺序）优先，[[页面名]] 链接式引用并入去重——
   // refs 数组下标即 LLM 答案中 [n] 的槽位 n-1，前端据此解析角标与浮层
-  const refs = mergeCitationSlots(citationSlots, await extractRefs(answer, vault));
+  // T04072：图拓邻居排在槽位之后、链接式引用之前（无 slot，不占用 [n] 编号）
+  const refs = mergeCitationSlots(
+    mergeCitationSlots(citationSlots, options.neighborSink ?? []),
+    await extractRefs(answer, vault),
+  );
   // §5.2 联网搜索引用：collectedWebRefs 已在 afterStep 中累加。
   // 去重（同 url 多次出现时只保留首次），无数量限制，展示全部参考资料
   const seenUrls = new Set<string>();
@@ -654,6 +683,8 @@ interface EmitPostStreamParams {
   runId?: string;
   // FR-21 引用槽位：search_pages 命中页面（顺序即 [n] 编号），done 时并入 refs
   citationSlots?: string[];
+  // T04072 图拓邻居路径：排在槽位之后并入 refs（upgradeRefs 据此标 origin='neighbor'）
+  neighborSink?: string[];
 }
 
 // FR-21：合并引用槽位与 [[页面名]] 链接式引用——槽位（搜索顺序）在前保证 [n] 对齐，
@@ -669,7 +700,7 @@ function mergeCitationSlots(slots: string[], linkRefs: string[]): string[] {
 async function* emitPostStreamChunks(
   params: EmitPostStreamParams,
 ): AsyncGenerator<AnswerChunk, void, unknown> {
-  const { collectedProgress, collectedThinking, collectedWebRefs, outputModes, finalAnswer, vault, input, runId, citationSlots } = params;
+  const { collectedProgress, collectedThinking, collectedWebRefs, outputModes, finalAnswer, vault, input, runId, citationSlots, neighborSink } = params;
   // progress 在流式分支也需推送（harness 阶段已收集）
   for (const p of collectedProgress) {
     yield { progress: p };
@@ -685,7 +716,11 @@ async function* emitPostStreamChunks(
 
   const answer = finalAnswer || '知识库未覆盖此问题。';
   // FR-21：引用槽位并入 refs（流式分支）
-  const refs = mergeCitationSlots(citationSlots ?? [], await extractRefs(answer, vault));
+  // T04072：图拓邻居排在槽位之后并入（无 slot，不占用 [n] 编号）
+  const refs = mergeCitationSlots(
+    mergeCitationSlots(citationSlots ?? [], neighborSink ?? []),
+    await extractRefs(answer, vault),
+  );
   const seenUrls = new Set<string>();
   const webRefs = collectedWebRefs.filter((r) => {
     if (seenUrls.has(r.url)) return false;
@@ -711,7 +746,7 @@ async function* queryWithHarnessStream( // NOSONAR - S107 - 函数签名需要�
   harnessConfig: HarnessConfig,
   vault: VaultService,
   input: QueryInput,
-  options: { webSearchConfig?: WebSearchConfig; toolsConfig?: ToolsConfig; scopeFilter?: { tags?: string[]; folder?: string }; systemPrompt?: string },
+  options: { webSearchConfig?: WebSearchConfig; toolsConfig?: ToolsConfig; scopeFilter?: { tags?: string[]; folder?: string }; systemPrompt?: string; appConfig?: AppConfig; neighborSink?: string[] },
   collectedThinking: ThinkingChunk[],
   collectedWebRefs: WebRef[],
   collectedProgress: QueryProgress[],
@@ -737,6 +772,9 @@ async function* queryWithHarnessStream( // NOSONAR - S107 - 函数签名需要�
     citationSink: citationSlots,
     // T04066：BYOK embedding 随问答请求下发（input.embedding），有 key 才启用语义路
     embedding: input.embedding,
+    // T04072：图拓开关来自配置中心（默认关），邻居路径收集到 neighborSink 供 refs 标 origin
+    graphExpand: options.appConfig?.query?.graphExpand,
+    neighborSink: options.neighborSink,
   });
   // 中间件 'extended_tools' 控制：与 queryWithHarness 一致的判断逻辑
   if (shouldRunMiddleware(input.middlewares, 'extended_tools')) {
@@ -793,7 +831,7 @@ async function* queryWithHarnessStream( // NOSONAR - S107 - 函数签名需要�
   }
 
   // §收尾推流：通过 emitPostStreamChunks 处理 progress/thinking/refs/followups
-  yield* emitPostStreamChunks({ collectedProgress, collectedThinking, collectedWebRefs, outputModes, finalAnswer, vault, input, runId: queryRunId, citationSlots });
+  yield* emitPostStreamChunks({ collectedProgress, collectedThinking, collectedWebRefs, outputModes, finalAnswer, vault, input, runId: queryRunId, citationSlots, neighborSink: options.neighborSink });
 }
 
 // 降级链第 2 级：queryWithSearchFallback
@@ -805,6 +843,8 @@ async function* queryWithSearchFallback(
   harnessConfig: HarnessConfig,
   vault: VaultService,
   input: QueryInput,
+  // T04072：降级路径同样支持图拓——邻居摘要分区拼入 prompt，路径并入 refs 并标 origin
+  options: { appConfig?: AppConfig; neighborSink?: string[] } = {},
 ): AsyncGenerator<AnswerChunk, void, unknown> {
   // 1. 直接调 searchPages 拿到 Top-K 相关页面
   // 截断避免长问题拖慢搜索（searchPages 按 includes 匹配，长字符串扫描慢）
@@ -835,6 +875,23 @@ async function* queryWithSearchFallback(
     throw new Error('search fallback: all page reads failed');
   }
 
+  // T04072：命中页拓一跳邻居（关闭时为空），只给摘要，单独分区展示，避免与一手依据混淆
+  const graphExpandConfig = options.appConfig?.query?.graphExpand;
+  const neighbors = graphExpandConfig?.enabled
+    ? await expandNeighbors(vault, hits.map((h) => h.path), graphExpandConfig)
+    : [];
+  for (const n of neighbors) {
+    refPaths.push(n.path);
+    if (options.neighborSink && !options.neighborSink.includes(n.path)) {
+      options.neighborSink.push(n.path);
+    }
+  }
+  const neighborSection = neighbors.length > 0
+    ? `\n## 关联参考（一跳邻居，仅摘要，供线索参考）\n${neighbors
+      .map((n) => `- [[${n.title}]]（${n.path}，${n.via === 'outlink' ? '正文链接' : n.via === 'backlink' ? '反向链接' : '双向链接'}）：${n.snippet}`)
+      .join('\n')}\n`
+    : '';
+
   // 3. 构造单轮 prompt：检索结果 + 用户问题（+ 用户已确认的意图）
   const intentHint = input.confirmedIntent
     ? `\n用户已确认其意图为：${input.confirmedIntent}，请严格基于该意图回答。\n`
@@ -842,7 +899,7 @@ async function* queryWithSearchFallback(
   const fallbackPrompt = `你是知识库助手。以下是检索到的相关页面：
 
 ${pageContents.join('\n\n---\n\n')}
-
+${neighborSection}
 ## 用户问题
 ${input.question}
 ${intentHint}
@@ -1027,6 +1084,8 @@ function createHarnessWithMultimodal( // NOSONAR - S107 - 参数过多是函数�
     mediaConfig?: MediaConfig;
     appConfig?: AppConfig;
     mediaImageConfig?: MediaImageUserConfig;
+    // T04072：图拓邻居收集器（由 queryWorkflow 创建并透传给 refs 升级）
+    neighborSink?: string[];
   },
   collectedThinking: ThinkingChunk[],
   collectedWebRefs: WebRef[],
@@ -1048,11 +1107,11 @@ function createFallbackWithMultimodal(
   harnessConfig: HarnessConfig,
   vault: VaultService,
   input: QueryInput,
-  options: { mediaConfig?: MediaConfig; appConfig?: AppConfig; mediaImageConfig?: MediaImageUserConfig },
+  options: { mediaConfig?: MediaConfig; appConfig?: AppConfig; mediaImageConfig?: MediaImageUserConfig; neighborSink?: string[] },
   outputModes: Set<OutputMode> | null,
 ): AsyncIterable<AnswerChunk> {
   return wrapWithMultimodal({
-    source: queryWithSearchFallback(harnessConfig, vault, input),
+    source: queryWithSearchFallback(harnessConfig, vault, input, { appConfig: options.appConfig, neighborSink: options.neighborSink }),
     harnessConfig, vault, input, outputModes,
     mediaConfig: options.mediaConfig, appConfig: options.appConfig, imageOverride: options.mediaImageConfig,
   });
@@ -1101,12 +1160,14 @@ export async function* upgradeRefs(
   source: AsyncIterable<AnswerChunk>,
   vault: VaultService,
   appConfig?: AppConfig,
+  // T04072：图拓邻居路径，用于把 refs 标为 origin='neighbor'
+  neighborPaths?: Iterable<string>,
 ): AsyncGenerator<AnswerChunk, void, unknown> {
   for await (const chunk of source) {
     if (chunk.done && Array.isArray(chunk.refs) && chunk.refs.length > 0) {
       // 双形态兼容：既有对象则取其 path，纯字符串直接作为路径
       const paths = chunk.refs.map((r) => (typeof r === 'string' ? r : r.path));
-      const signals = await buildRefSignals(paths, vault, appConfig);
+      const signals = await buildRefSignals(paths, vault, appConfig, neighborPaths);
       yield { ...chunk, refs: signals };
     } else {
       yield chunk;
@@ -1212,6 +1273,9 @@ export async function* queryWorkflow(
   const collectedWebRefs: WebRef[] = [];
   // F-3.10 progress 收集器：harness afterStep 中收集 web_search 进度
   const collectedProgress: QueryProgress[] = [];
+  // T04072 图拓邻居收集器：harness/fallback 的 search_pages 命中页拓到的邻居路径，
+  // 供 done 时 upgradeRefs 标记 origin='neighbor'（配置关闭时恒为空数组）
+  const neighborSink: string[] = [];
 
   // ── 阶段耗时埋点（logs-review 诊断项，纯增量）──
   // 与路由层 query-pipeline 日志（accepted/first-token/done）配合，定位 143s 级长耗时卡点。
@@ -1268,9 +1332,9 @@ export async function* queryWorkflow(
   try {
     for await (const chunk of upgradeRefs(
       createHarnessWithMultimodal(
-      useStream, harnessConfig, vault, clarifyInput, options,
+      useStream, harnessConfig, vault, clarifyInput, { ...options, neighborSink },
       collectedThinking, collectedWebRefs, collectedProgress, outputModes,
-    ), vault, options.appConfig)) {
+    ), vault, options.appConfig, neighborSink)) {
       yield chunk;
     }
     harnessSucceeded = true;
@@ -1291,8 +1355,8 @@ export async function* queryWorkflow(
   try {
     for await (const chunk of upgradeRefs(
       createFallbackWithMultimodal(
-      harnessConfig, vault, clarifyInput, options, outputModes,
-    ), vault, options.appConfig)) {
+      harnessConfig, vault, clarifyInput, { ...options, neighborSink }, outputModes,
+    ), vault, options.appConfig, neighborSink)) {
       yield chunk;
     }
     fallbackSucceeded = true;

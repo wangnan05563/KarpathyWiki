@@ -245,6 +245,9 @@ function defaultConfig(): AppConfig {
     knowledge: { staleDays: 365 },
     graph: { minPages: 20 },
     refs: { authorityMap: { web: 'high', manual: 'medium', 'qq-chat': 'low' } },
+    // T04072 问答召回图拓：默认关闭（零破坏，检索口径保持现状）。
+    // 上限为默认值：3 个邻居 × 200 字摘要，总字数 900 兜底（浅合并时由使用方补默认，见 graph-expand.ts）。
+    query: { graphExpand: { enabled: false, maxNeighbors: 3, charsPerPage: 200, totalChars: 900 } },
     // 自动更新配置（T00883）：默认关闭，零破坏向后兼容。
     // manifestUrl 留空串作为"未配置"哨兵：enabled 需用户显式置 true 且填写 manifestUrl
     //   才启用远端检查，否则 check-update 维持既有"固定 has_update=false"的本地行为。
@@ -393,6 +396,8 @@ function mergeConfigObjects(defaults: AppConfig, parsed: Partial<AppConfig>): Ap
     knowledge: mergeSectionWhenBoth(defaults.knowledge, parsed.knowledge),
     graph: mergeSectionWhenBoth(defaults.graph, parsed.graph),
     refs: mergeRefsSection(defaults.refs, parsed.refs),
+    // T04072 问答召回图拓：浅合并支持只覆盖部分字段，缺失字段在使用方补默认
+    query: mergeSectionWhenBoth(defaults.query, parsed.query),
     // 自动更新配置合并：parsed.update 可选，未配置时用默认值（关闭）；浅合并支持单字段覆盖
     update: mergeSectionWhenBoth(defaults.update, parsed.update),
   };
@@ -1229,7 +1234,7 @@ const CONFIG_TOP_LEVEL_KEYS: ReadonlySet<string> = new Set([
   'webSearch', 'logging', 'batch', 'tools', 'auth', 'qq', 'urlCrawl', 'audio', 'ocr',
   'podcast', 'media', 'skills', 'activeSkill', 'sessionPersistence', 'contextGovernor',
   'enableSubAgents', 'enableResumableStream', 'clarify', 'mcp', 'knowledge', 'graph', 'refs',
-  'update',
+  'query', 'update',
 ]);
 
 // 导入校验专属错误：路由据此返回 400（格式/完整性不符），区别于写盘 500。

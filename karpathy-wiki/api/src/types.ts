@@ -230,6 +230,9 @@ export interface RefSignal {
   review: boolean;
   // 时效状态（继承 FR-18 的 knowledge_status）
   knowledgeStatus: KnowledgeStatus;
+  // T04072 引用来源：直接检索命中（hit）还是沿 wikilink/反向链接拓来的一跳邻居（neighbor）。
+  // 为什么可选：老调用方/测试构造的 RefSignal 无此字段，缺省视为命中，保持向后兼容。
+  origin?: 'hit' | 'neighbor';
 }
 
 // 引用统一形态：兼容旧的纯字符串路径，与新的信号对象
@@ -487,8 +490,20 @@ export interface AppConfig {
   knowledge?: KnowledgeConfig;
   graph?: GraphGapsConfig;
   refs?: RefsConfig;
+  // T04072 问答召回图拓配置：可选，缺失时由 defaultConfig 提供默认值（关闭，零破坏）
+  query?: { graphExpand?: QueryGraphExpandConfig };
   // 自动更新配置（T00883）：可选，缺失时由 defaultConfig 提供默认值（enabled=false，零破坏）
   update?: UpdateConfig;
+}
+
+// T04072 命中页一跳图拓配置。
+// 为什么默认关闭：拓一跳会额外读邻居页并增加 prompt/工具结果体积，需实测 token 增量后再裁决默认值。
+// 三个上限共同约束 token 增量：条数（maxNeighbors）、单页摘要（charsPerPage）、总量（totalChars）。
+export interface QueryGraphExpandConfig {
+  enabled?: boolean;
+  maxNeighbors?: number;
+  charsPerPage?: number;
+  totalChars?: number;
 }
 
 // MCP 服务端配置（对外给外部 AI Agent 调用知识库的 MCP Server）
