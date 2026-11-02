@@ -10,6 +10,7 @@ import AppModal from '../components/AppModal.vue';
 import { useCompileStore } from '../stores/compile';
 import { stepStatusLabel } from '../utils/status';
 import { consumeSSE } from '../utils/sse';
+import { saveBatchSnapshot, loadBatchSnapshot, clearBatchSnapshot } from '../utils/compile-batch-snapshot';
 import BatchProgressBar from '../components/BatchProgressBar.vue';
 import SingleFileProgressBar from '../components/SingleFileProgressBar.vue';
 // T02476（PRD X2/X8）：三态统一走 StateBlock，空态主按钮经 gotoView 直达投递页
@@ -99,7 +100,50 @@ const robotMood = computed<string>(() => {
   return 'thinking';
 });
 
-const showRunsList = computed(() => !store.isCompiling && !store.isDone && !store.errorMessage && !store.isCancelled);
+// T04095：切页/刷新导致批量流断开后，快照仍可读但要如实标成「已中断」，
+// 不能落回历史列表，也不能把残留的 running 分组继续显示成转圈。
+const batchInterrupted = ref(false);
+
+const showRunsList = computed(() => !store.isCompiling && !store.isDone && !store.errorMessage && !store.isCancelled && !batchInterrupted.value);
+
+// 批量快照只含可序列化字段；FormData（pendingBatchPayload）不落盘，
+// 刷新后仍可通过分组里的 rawPath 重试失败文件。
+function persistBatchSnapshot() {
+  if (!store.isBatchMode) return;
+  saveBatchSnapshot({
+    groups: store.batchGroups,
+    fileCount: store.pendingBatchFileCount,
+    rejected: store.batchRejected,
+    isCompiling: store.isCompiling,
+    isDone: store.isDone,
+    isCancelled: store.isCancelled,
+    errorMessage: store.errorMessage,
+    doneMessage: store.doneMessage,
+  });
+}
+
+// 快照恢复只用于「store 里已经没有在途状态」的场景（整页刷新/重新打开）；
+// 同会话切页时 store 本身还在，只从快照补中断标记，避免覆盖更新的事件。
+function restoreBatchSnapshot() {
+  const snapshot = loadBatchSnapshot();
+  if (store.isBatchMode) {
+    batchInterrupted.value = snapshot !== null
+      && snapshot.isCompiling && !snapshot.isDone && !snapshot.isCancelled;
+    return;
+  }
+  if (!snapshot) return;
+  if (store.isCompiling || store.isDone || store.isCancelled || store.errorMessage || store.pendingPayload) return;
+  store.isBatchMode = true;
+  store.pendingBatchFileCount = snapshot.fileCount || snapshot.groups.length;
+  store.batchRejected = snapshot.rejected ?? [];
+  store.batchGroups = snapshot.groups;
+  store.isCompiling = false;
+  store.isDone = snapshot.isDone;
+  store.isCancelled = snapshot.isCancelled;
+  store.errorMessage = snapshot.errorMessage;
+  store.doneMessage = snapshot.doneMessage;
+  batchInterrupted.value = snapshot.isCompiling && !snapshot.isDone && !snapshot.isCancelled;
+}
 
 // T02475（PRD X1/N5）：菜单名 = 页标题。原来 h2 整个是运行态四态文案（「准备就绪」/「编译完成」…），
 // 用户在页头读不到自己所在的功能名；状态降为标题右侧徽标，四态信息量不减。
@@ -161,6 +205,8 @@ async function retrySingle() {
 // T03591 批量分组重试：从 raw/ 存档重新编译，无需重新上传
 async function retryGroup(fileIndex: number) {
   await store.retryFileGroup(fileIndex);
+  // T04095：重试走 store 内部 consumeSSE，不经过本页 handleSSE，这里补一次快照
+  persistBatchSnapshot();
   if (store.dedupeMessage) ElMessage.info(store.dedupeMessage);
 }
 
@@ -208,6 +254,8 @@ async function startResume(runId: string) {
 // reset 会同时清掉持久化快照，避免下次进入把已看完的成功态又恢复出来。
 async function backToRuns() {
   store.reset();
+  clearBatchSnapshot();
+  batchInterrupted.value = false;
   await store.loadRuns();
 }
 
@@ -216,6 +264,11 @@ async function backToRuns() {
 // §优化方案3：每次事件处理后同步持久化，确保切走页面时 localStorage 是最新状态
 function handleSSE(eventType: string, parsed: any) {
   store.handleEvent(eventType, parsed);
+  // T04095：批量模式 store.persistState() 不落盘，改由本页保存可序列化快照
+  if (store.isBatchMode) {
+    persistBatchSnapshot();
+    return;
+  }
   store.persistState();
 }
 
@@ -229,6 +282,8 @@ async function consumeCompileSSE(response: Response) {
 function handleBatchCancel() {
   abortController?.abort();
   store.cancelCompile();
+  // 取消态也要留快照：刷新/切回后仍能看到已完成的成果与取消说明
+  persistBatchSnapshot();
   ElMessage.info('已取消批量编译');
 }
 
@@ -239,6 +294,7 @@ function handleSingleCancel() {
   store.cancelCompile();
   // 单文件取消后清除持久化状态，避免切回时误恢复
   store.clearPersistedState();
+  clearBatchSnapshot();
   ElMessage.info('已取消编译');
 }
 
@@ -251,6 +307,8 @@ onMounted(() => {
   // 为什么在 onMounted 最前面：恢复的 pendingPayload/isDone 等会影响后续 startCompile 判断，
   //   必须在判断之前完成恢复
   const needResume = store.loadPersistedState();
+  // T04095：批量进度没有 resume 接口，靠本页快照恢复；单文件有待续传时优先走单文件
+  if (!needResume) restoreBatchSnapshot();
   // §done 态恢复后清除 localStorage：用户已看到结果，下次刷新不需要再恢复
   // 为什么不清除 running 态：running 态需要 resume 接续，localStorage 是 resume 的数据源
   // 为什么不清除 error/cancelled 态：保留让用户切走再切回仍能看到失败原因，避免"消失了"的困惑
@@ -267,13 +325,21 @@ onMounted(() => {
   // 之前用 !isCompiling 是逻辑反向 bug：首次进入时 isCompiling=true 导致 !isCompiling=false，
   //   startCompile 永远不会被调用，页面卡在"正在编译… 0/0 0%"
   if (store.isBatchMode && store.pendingBatchPayload && !store.isDone && store.isCompiling && !store.isCancelled) {
+    // 新一轮批量编译会覆盖旧快照，先清掉避免下次刷新又恢复上一批
+    clearBatchSnapshot();
+    batchInterrupted.value = false;
     startCompile(store.pendingBatchPayload);
   } else if (store.pendingPayload && !store.isDone && store.isCompiling && !store.isCancelled) {
+    clearBatchSnapshot();
     startCompile(store.pendingPayload);
   } else if (needResume && store.currentRunId) {
     // §优化方案3：切走时正在编译且记录了 runId → 调用 resume 接口恢复未完成的编译
     // 为什么独立分支：startCompile 会重置状态从头开始，与 resume 语义冲突
+    clearBatchSnapshot();
     startResume(store.currentRunId);
+  } else if (store.isBatchMode) {
+    // T04095：内存（同会话切页）或快照（刷新重开）里已有批量进度，
+    // 原地展示既有分组与统计，不再拉历史列表覆盖当前视图。
   } else {
     store.loadRuns();
   }
@@ -320,8 +386,15 @@ onBeforeUnmount(() => {
   // 为什么 persistState 在 abortCompile 之前：abortCompile 会复位 isCompiling，
   //   persistState 内部判断 isBatchMode 才跳过，单文件模式依赖 isCompiling 标识"需恢复"
   //   实际持久化的 isCompiling 字段来自 state.isCompiling，与 store 当前值同步即可
-  if (store.isCompiling && !store.isBatchMode) {
-    store.persistState();
+  if (store.isCompiling) {
+    if (store.isBatchMode) {
+      // T04095：批量模式没有 resume 接口，快照是切回/刷新后唯一的进度来源；
+      // 保存后再标记中断，切回时不会把残留的 running 分组继续画成转圈。
+      persistBatchSnapshot();
+      batchInterrupted.value = true;
+    } else {
+      store.persistState();
+    }
   }
   // 通知 store 编译已中止：让 isCompiling 复位，避免切回时 onMounted 误判为"正在编译"
   // 而跳过 startCompile 重入，导致进度条卡死
@@ -330,6 +403,8 @@ onBeforeUnmount(() => {
 
 function handleRestart() {
   store.reset();
+  clearBatchSnapshot();
+  batchInterrupted.value = false;
   emit('restart');
 }
 
@@ -398,7 +473,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
       <!-- 批量编译模式：按文件分组渲染 -->
       <div v-if="store.isBatchMode" class="batch-view">
         <!-- 实时进度条组件：显示已完成/总数/百分比，支持取消与状态持久化 -->
-        <BatchProgressBar @cancel="handleBatchCancel" />
+        <BatchProgressBar :interrupted="batchInterrupted" @cancel="handleBatchCancel" />
 
         <!-- 拒绝列表：扫描文件夹时不符白名单的文件 -->
         <div v-if="store.batchRejected.length > 0" class="batch-rejected">
@@ -422,11 +497,13 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
             <div class="batch-group-head">
               <span class="batch-group-idx">#{{ group.fileIndex + 1 }}</span>
               <span class="batch-group-name">{{ group.fileName || '待处理' }}</span>
-              <span class="batch-group-status" :class="group.status">
-                <el-icon v-if="group.status === 'running'" class="spin-icon"><Loading /></el-icon>
+              <!-- T04095：中断后仍为 running 的分组不能继续转圈，如实标「已中断」 -->
+              <span class="batch-group-status" :class="batchInterrupted && group.status === 'running' ? 'interrupted' : group.status">
+                <el-icon v-if="group.status === 'running' && !batchInterrupted" class="spin-icon"><Loading /></el-icon>
+                <el-icon v-else-if="group.status === 'running'"><Minus /></el-icon>
                 <el-icon v-else-if="group.status === 'done'"><Check /></el-icon>
                 <el-icon v-else-if="group.status === 'error'"><Close /></el-icon>
-                <span>{{ stepStatusLabel(group.status) }}</span>
+                <span>{{ batchInterrupted && group.status === 'running' ? '已中断' : stepStatusLabel(group.status) }}</span>
               </span>
               <!-- T03591：失败可重试时从 raw/ 存档重编，无需重新上传；重试期间禁用所有分组按钮 -->
               <el-button

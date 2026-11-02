@@ -17,6 +17,9 @@ import { gotoView } from '../utils/nav';
 // 持久化策略：store 状态跨页面切换保留，组件 onMounted 时通过 computed 自动恢复显示
 const store = useCompileStore();
 
+// T04095：切页/刷新中断后由父组件传入，快照仍可读但连接已断，不能继续显示成 running
+const props = defineProps<{ interrupted?: boolean }>();
+
 // 总文件数：batch_start 事件后初始化 batchGroups，长度即总数
 const totalCount = computed(() => store.batchGroups.length);
 
@@ -53,13 +56,15 @@ const progressPercentage = computed(() => {
 // 'done'：编译正常结束（含部分失败，整体完成）
 // 'error'：整体错误（如 multipart 解析失败）
 // 'cancelled'：用户主动取消
-type ProgressStatus = 'idle' | 'running' | 'done' | 'error' | 'cancelled';
+// 'interrupted'：切页/刷新导致连接断开（T04095）
+type ProgressStatus = 'idle' | 'running' | 'done' | 'error' | 'cancelled' | 'interrupted';
 
 const currentStatus = computed<ProgressStatus>(() => {
   if (store.errorMessage) return 'error';
   if (store.isCancelled) return 'cancelled';
   if (store.isDone) return 'done';
   if (store.isCompiling) return 'running';
+  if (props.interrupted) return 'interrupted';
   return 'idle';
 });
 
@@ -106,6 +111,8 @@ const statusTitle = computed(() => {
       return '编译过程出错';
     case 'cancelled':
       return '编译已取消';
+    case 'interrupted':
+      return `编译已中断，完成 ${completedCount.value}/${totalCount.value} 个页面`;
     default:
       return '准备开始编译';
   }
@@ -128,6 +135,8 @@ const statusSubtitle = computed(() => {
       return store.errorMessage || '未知错误';
     case 'cancelled':
       return `已保留 ${completedCount.value}/${totalCount.value} 篇编译成果`;
+    case 'interrupted':
+      return `切换页面或刷新后连接已断开，已完成 ${completedCount.value}/${totalCount.value} 个页面不受影响；未完成的文件可返回投递页重新提交`;
     default:
       return '上传文件后将自动开始批量编译';
   }
@@ -141,6 +150,7 @@ const elProgressStatus = computed<'success' | 'exception' | 'warning' | undefine
   }
   if (currentStatus.value === 'error') return 'exception';
   if (currentStatus.value === 'cancelled') return 'warning';
+  if (currentStatus.value === 'interrupted') return 'warning';
   return undefined;
 });
 
@@ -155,6 +165,8 @@ const progressColor = computed(() => {
       return 'var(--neon-magenta)';
     case 'cancelled':
       return 'var(--neon-pink)';
+    case 'interrupted':
+      return 'var(--neon-amber)';
     case 'running':
       return 'var(--neon-pink)';
     default:
@@ -258,6 +270,14 @@ function handleCancel() {
           已取消编译，保留 {{ completedCount }}/{{ totalCount }} 篇成果
         </span>
       </div>
+
+      <!-- 中断态提示 banner（T04095）：切页/刷新断了流，进度快照仍可核对 -->
+      <div v-else-if="currentStatus === 'interrupted'" key="interrupted" class="progress-banner interrupted-banner">
+        <el-icon class="banner-icon"><CircleClose /></el-icon>
+        <span class="banner-text">
+          编译已中断，保留 {{ completedCount }}/{{ totalCount }} 个页面成果；未完成的文件可返回投递页重新提交
+        </span>
+      </div>
     </Transition>
   </div>
 </template>
@@ -294,6 +314,19 @@ function handleCancel() {
   border-color: var(--accent-pink-a35);
   background: var(--accent-pink-a05);
   box-shadow: 0 2px 12px var(--accent-pink-a08);
+}
+
+/* T04095：中断态用琥珀色，和「失败」区分开——连接断了不代表文件编译失败 */
+.batch-progress-container.interrupted {
+  border-color: var(--accent-purple-a35);
+  background: var(--accent-purple-a05);
+  box-shadow: 0 2px 12px var(--accent-purple-a08);
+}
+
+.batch-progress-container.interrupted .progress-status-dot {
+  background: var(--neon-amber);
+  color: var(--neon-amber);
+  box-shadow: 0 0 8px currentColor;
 }
 
 .progress-header {
@@ -475,6 +508,15 @@ function handleCancel() {
 
 .cancelled-banner::before {
   background: var(--neon-pink);
+}
+
+.interrupted-banner {
+  background: var(--accent-purple-a08);
+  color: var(--neon-amber);
+}
+
+.interrupted-banner::before {
+  background: var(--neon-amber);
 }
 
 .banner-icon {
