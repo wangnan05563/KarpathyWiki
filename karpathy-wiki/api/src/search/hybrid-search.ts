@@ -18,6 +18,7 @@ import {
   vectorRecall,
   getIndexStatus,
   listPendingPages,
+  listStaleModelPages,
   removePageIndex,
   type IndexStatus,
 } from './sqlite-index.js';
@@ -160,10 +161,15 @@ export async function rebuildIndex(dataDir: string, vault: VaultService, embeddi
   return getIndexStatus(dataDir);
 }
 
-/** 懒索引：为待补页面补算向量（每次搜索限量，避免一次搜索触发海量 embedding 调用） */
+/** 懒索引：为待补页面补算向量（每次搜索限量，避免一次搜索触发海量 embedding 调用）
+ *  T04067：工作清单并入「模型与当前 embedding 不一致」的页面，且排在前面——
+ *  模型切换后旧向量既不能参与召回，也只能靠这里补算；否则切换一次模型语义路就永久失配。 */
 async function lazyIndexPending(dataDir: string, vault: VaultService, embedding: EmbeddingConfig, maxPages = 5): Promise<void> {
-  const pending = listPendingPages(dataDir).slice(0, maxPages);
-  for (const p of pending) {
+  const work = [...new Set([
+    ...listStaleModelPages(dataDir, embedding.model),
+    ...listPendingPages(dataDir),
+  ])].slice(0, maxPages);
+  for (const p of work) {
     await indexPageVectors(dataDir, vault, p, embedding);
   }
 }
@@ -220,7 +226,7 @@ export async function hybridSearch(dataDir: string, vault: VaultService, opts: H
   if (embedding) {
     try {
       const [qv] = await embedTexts(embedding, [opts.query]);
-      vectorHits = vectorRecall(dataDir, qv, 20);
+      vectorHits = vectorRecall(dataDir, qv, 20, embedding.model);
     } catch {
       vectorHits = []; // 查询向量失败（如 key 无效/限流）：语义路静默关闭，关键词路兜底
     }

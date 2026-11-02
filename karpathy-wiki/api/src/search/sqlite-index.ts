@@ -201,17 +201,25 @@ export function keywordRecall(dataDir: string, query: string, limit: number): Ar
   }
 }
 
-/** 向量路召回：与查询向量做余弦相似度，top-N。无向量数据时返回空（语义路自动关闭） */
+/** 向量路召回：与查询向量做余弦相似度，top-N。无向量数据时返回空（语义路自动关闭）
+ *  T04067：model 是召回口径的一部分。dim 相同不代表语义空间相同——切换 embedding 模型后，
+ *  旧模型向量与新查询向量做余弦会得到「看似很高」的分数并排在前面。传入 model 时只召回同模型向量；
+ *  不传保持旧口径（供尚未确定模型的场景与测试使用）。 */
 export function vectorRecall(
   dataDir: string,
   queryVec: Float32Array,
   limit: number,
+  model?: string,
 ): Array<ChunkRow & { similarity: number }> {
   const d = getIndexDb(dataDir);
-  const rows = d.prepare(`
+  const base = `
     SELECT c.page_path, c.chunk_index, c.content, c.heading, v.vec, v.dim
-    FROM chunk_vecs v JOIN chunks c ON c.page_path = v.page_path AND c.chunk_index = v.chunk_index
-  `).all() as Array<{ page_path: string; chunk_index: number; content: string; heading: string | null; vec: Buffer; dim: number }>;
+    FROM chunk_vecs v JOIN chunks c ON c.page_path = v.page_path AND c.chunk_index = v.chunk_index`;
+  const rows = (
+    model
+      ? d.prepare(`${base} WHERE v.model = ?`).all(model)
+      : d.prepare(base).all()
+  ) as Array<{ page_path: string; chunk_index: number; content: string; heading: string | null; vec: Buffer; dim: number }>;
   if (rows.length === 0) return [];
   const dim = queryVec.length;
   const scored = rows
@@ -243,9 +251,26 @@ export function getIndexStatus(dataDir: string): IndexStatus {
   return { indexedPages: indexed, pendingPages: pending, totalChunks: chunks };
 }
 
+/** 模型过期页面清单（T04067）：chunk 已切分，但向量缺失或属于其它 embedding 模型。
+ *  模型切换后这些页面的旧向量不可比——既不能参与召回，也要交给懒索引按新模型补算。
+ *  判据按页聚合：只要有任一分块的向量不等于当前模型（含 LEFT JOIN 出的「无向量」NULL），该页即待补。 */
+export function listStaleModelPages(dataDir: string, model: string): string[] {
+  const d = getIndexDb(dataDir);
+  const rows = d.prepare(`
+    SELECT c.page_path AS page_path
+    FROM chunks c
+    LEFT JOIN chunk_vecs v ON v.page_path = c.page_path AND v.chunk_index = c.chunk_index
+    GROUP BY c.page_path
+    HAVING SUM(CASE WHEN v.model = ? THEN 1 ELSE 0 END) < COUNT(*)
+    ORDER BY MIN(c.id)
+  `).all(model) as Array<{ page_path: string }>;
+  return rows.map((r) => r.page_path);
+}
+
 /** 全部待补/未索引页面清单（懒索引与重建的工作清单） */
 export function listPendingPages(dataDir: string): string[] {
   const d = getIndexDb(dataDir);
   const rows = d.prepare(`SELECT page_path FROM index_status WHERE status = 'pending' OR attempts > 0`).all() as Array<{ page_path: string }>;
   return rows.map((r) => r.page_path);
 }
+
