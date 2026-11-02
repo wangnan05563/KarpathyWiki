@@ -190,6 +190,8 @@ async function startResume(runId: string) {
 
     await consumeCompileSSE(response);
     store.handleStreamEnd();
+    // T04094：续传结束后立即刷新历史列表，返回列表时状态已是后端落盘的最新值
+    await store.loadRuns();
   } catch (err) {
     if ((err as Error).name === 'AbortError') {
       store.abortCompile();
@@ -200,6 +202,13 @@ async function startResume(runId: string) {
   } finally {
     abortController = null;
   }
+}
+
+// T04094：恢复成功的终态与历史列表共用同一页面，没有回列表的入口时用户只能「再投一篇」。
+// reset 会同时清掉持久化快照，避免下次进入把已看完的成功态又恢复出来。
+async function backToRuns() {
+  store.reset();
+  await store.loadRuns();
 }
 
 // SSE 流消费委托给 utils/sse.ts 的通用 consumeSSE，降低本函数认知复杂度（S3776）
@@ -515,6 +524,10 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
           <el-button type="primary" size="large" data-tip="返回投递页，开始编译下一篇文章" @click="handleRestart">
             再投一篇
           </el-button>
+          <!-- T04094：恢复成功后回到历史列表，核对本次运行的状态已更新为完成 -->
+          <el-button size="large" data-tip="回到历史编译任务，查看本次恢复后的运行状态" @click="backToRuns">
+            返回历史编译任务
+          </el-button>
         </div>
       </div>
       <!-- 批量编译完成区块：进度条组件已显示统计，这里仅保留操作按钮 -->
@@ -523,6 +536,10 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
         <div class="restart-bar">
           <el-button type="primary" size="large" data-tip="返回投递页，开始编译下一批内容" @click="handleRestart">
             再投一批
+          </el-button>
+          <!-- T04094：与单文件成功态一致，提供回历史列表的闭环入口 -->
+          <el-button size="large" data-tip="回到历史编译任务，查看本次恢复后的运行状态" @click="backToRuns">
+            返回历史编译任务
           </el-button>
         </div>
       </div>

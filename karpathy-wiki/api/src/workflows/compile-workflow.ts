@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import matter from 'gray-matter';
-import type { ToolDefinition, HarnessConfig, StepResult } from '@wiki/harness';
+import type { ToolDefinition, HarnessConfig, StepResult, RunResult, RunState, StateStore } from '@wiki/harness';
 import { Harness } from '@wiki/harness';
 import type { VaultService } from '../vault/vault-service.js';
 // T02686：目录集合取自 page-scope 单一来源
@@ -485,6 +485,32 @@ ${schema}
   yield finalEvent;
 }
 
+// T04094：harness.resume() 只返回运行结果、不回写 run-state，历史列表的 status 会一直停在
+// 恢复前的「失败」。宿主侧（api）在续传结束后把终态合并回原 state 文件；不改 @wiki/harness
+// （该包由 T02811 单独维护）。事件序列无法从 RunResult 重建，故保留原 events。
+export async function persistResumedRunState(
+  stateStore: StateStore | undefined,
+  runId: string,
+  result: { status: RunResult['status']; step?: number; tokenUsed?: number; timings?: RunResult['timings'] },
+): Promise<void> {
+  if (!stateStore) return;
+  try {
+    const prev = await stateStore.load(runId);
+    if (!prev) return;
+    const next: RunState = {
+      ...prev,
+      // 与 harness.run 的落盘口径一致：只有 done 算成功，budget_exceeded 归为 failed
+      status: result.status === 'done' ? 'done' : 'failed',
+      step: result.step ?? prev.step,
+      tokenUsed: result.tokenUsed ?? prev.tokenUsed,
+      timings: result.timings ?? prev.timings,
+    };
+    await stateStore.save(runId, next);
+  } catch {
+    // 状态回写失败不应影响续传结果：产物已落盘，列表下次刷新仍是旧值
+  }
+}
+
 // 通用 harness 事件桥接：构造 afterStep hook → 事件队列 → AsyncGenerator yield。
 // compileWorkflow 传入 harness.run，resumeCompileWorkflow 传入 harness.resume，
 // 两者共享相同的事件推送、draft 标记、日志双写逻辑，避免闭包重建代码重复。
@@ -501,6 +527,8 @@ async function* bridgeHarnessToEvents(
   // FR-10-1: 传出本次生成的页面路径，供调用方追加 AI tag 建议
   // 为什么用 ref 参数：避免重构 generatedPages 内部逻辑，最小侵入式扩展
   generatedPagesRef?: string[],
+  // T04094：续传路径需要在拿到 RunResult 后回写 run-state，其他调用方可忽略
+  onRunResult?: (result: RunResult) => void | Promise<void>,
 ): AsyncGenerator<ProgressEvent, ProgressEvent, void> {
   // 事件队列：afterStep hook 推入，AsyncGenerator yield 出去。
   // finished 标志避免 generator 提前退出时 harness 仍在写队列导致事件丢失。
@@ -580,10 +608,13 @@ async function* bridgeHarnessToEvents(
 
   // T03613：终态事件暂存到这里，由生成器 return 给调用方统一收口
   let finalEvent: ProgressEvent | null = null;
+  // T04094：RunResult 同样暂存，供续传路径回写 run-state
+  let runResult: RunResult | null = null;
 
   // 启动 harness（run 或 resume），完成后落定终态事件 + 记录终态日志
   const runPromise = runFn(harness)
     .then(async (result) => {
+      runResult = result;
       const isError = result.status === 'failed';
       finalEvent = {
         step: 'done',
@@ -669,6 +700,11 @@ async function* bridgeHarnessToEvents(
   }
 
   await runPromise;
+  // T04094：run 与 resume 都走这里，但只有 resume 需要回写（run 由 harness 自己保存）。
+  // 放在事件排空之后：前端已收到终态，列表刷新能读到新状态。
+  if (runResult !== null && onRunResult) {
+    await onRunResult(runResult);
+  }
   // then/catch 必然已写入 finalEvent（finally 只在其后运行）。兜底一条终态是边界保护：
   // SSE 侧收不到终态就会让前端假死在「运行中」，宁可显式报错也不能不发。
   return finalEvent ?? {
@@ -693,6 +729,9 @@ export async function* resumeCompileWorkflow(
 
   // T03613：终态改成生成器返回值后，`yield*` 只会转发它 yield 的事件、不转发返回值，
   // 所以 resume 必须显式补发终态，否则收口事件永远到不了前端。
+  // T04094：续传成功后把终态写回 run-state，历史列表不再滞留「失败」；
+  // harness 抛错时拿不到 RunResult，这里按「本轮恢复未完成」写 failed（step/token 沿用原值）。
+  let stateWritten = false;
   const finalEvent = yield* bridgeHarnessToEvents(
     harnessConfig,
     vault,
@@ -700,6 +739,14 @@ export async function* resumeCompileWorkflow(
     '',
     null,
     null,
+    undefined,
+    async (result) => {
+      stateWritten = true;
+      await persistResumedRunState(harnessConfig.stateStore, runId, result);
+    },
   );
+  if (!stateWritten && finalEvent.status === 'error') {
+    await persistResumedRunState(harnessConfig.stateStore, runId, { status: 'failed' });
+  }
   yield finalEvent;
 }
