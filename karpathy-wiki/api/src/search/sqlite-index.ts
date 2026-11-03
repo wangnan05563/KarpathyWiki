@@ -80,6 +80,24 @@ export function getIndexDb(dataDir: string): SyncDb {
       INSERT INTO chunks_fts(chunks_fts, rowid, content, page_path) VALUES ('delete', old.id, old.content, old.page_path);
       INSERT INTO chunks_fts(rowid, content, page_path) VALUES (new.id, new.content, new.page_path);
     END;
+    -- T04069 向量缓存失效判据：单行「变更代号」，由 chunk_vecs 上的三个触发器在同一事务内推进。
+    -- 为什么用触发器而不是让各写函数显式清缓存：改到向量的入口不止本模块
+    -- （rebuildIndex 的裸 DELETE、补算/测试里的裸 UPDATE），显式清缓存必漏；
+    -- 代号由数据库自己推进，读到不一致就重建，调用方无需知道缓存存在。
+    -- 事务回滚时触发器一并回滚 → 代号不变 → 缓存继续有效（回滚确实没改到数据）。
+    CREATE TABLE IF NOT EXISTS vec_gen (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      gen INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TRIGGER IF NOT EXISTS vec_gen_ai AFTER INSERT ON chunk_vecs BEGIN
+      INSERT INTO vec_gen (id, gen) VALUES (1, 1) ON CONFLICT (id) DO UPDATE SET gen = gen + 1;
+    END;
+    CREATE TRIGGER IF NOT EXISTS vec_gen_ad AFTER DELETE ON chunk_vecs BEGIN
+      INSERT INTO vec_gen (id, gen) VALUES (1, 1) ON CONFLICT (id) DO UPDATE SET gen = gen + 1;
+    END;
+    CREATE TRIGGER IF NOT EXISTS vec_gen_au AFTER UPDATE ON chunk_vecs BEGIN
+      INSERT INTO vec_gen (id, gen) VALUES (1, 1) ON CONFLICT (id) DO UPDATE SET gen = gen + 1;
+    END;
   `);
   return db;
 }
@@ -88,6 +106,9 @@ export function getIndexDb(dataDir: string): SyncDb {
 export function closeIndexDb(): void {
   db?.close();
   db = null;
+  // T04069：连接释放时一并释放向量矩阵——缓存按 dataDir 归组，而代号要从库里读；
+  // 不在此清理的话，测试隔离里同名临时目录复用会挂着上一轮矩阵（数据已删）。
+  resetVectorCache();
 }
 
 /** 写入一页的 chunk（先清旧再写新，保证幂等） */
@@ -212,34 +233,329 @@ export function vectorRecall(
   model?: string,
 ): Array<ChunkRow & { similarity: number }> {
   const d = getIndexDb(dataDir);
-  const base = `
-    SELECT c.page_path, c.chunk_index, c.content, c.heading, v.vec, v.dim
-    FROM chunk_vecs v JOIN chunks c ON c.page_path = v.page_path AND c.chunk_index = v.chunk_index`;
-  const rows = (
-    model
-      ? d.prepare(`${base} WHERE v.model = ?`).all(model)
-      : d.prepare(base).all()
-  ) as Array<{ page_path: string; chunk_index: number; content: string; heading: string | null; vec: Buffer; dim: number }>;
-  if (rows.length === 0) return [];
+  if (queryVec.length === 0 || limit <= 0) return [];
+  const top = recallCandidates(d, dataDir, queryVec, limit, model);
+  if (top.length === 0) return [];
+  return attachChunkContents(d, top);
+}
+
+// ── T04069 向量召回加速：进程内向量矩阵缓存 ────────────────────────────────
+// 方案取舍：ticket 的首选是 sqlite-vec 下推，但它要随包分发平台相关的扩展二进制
+// （node:sqlite 还得显式开 enableLoadExtension），与本项目「单机零安装 / 单文件发布」路线冲突，
+// 故采纳备选：进程内缓存向量矩阵。两处收益都被 vector-recall-bench.test.ts 实测锁住——
+//   1. 向量不再每次查询重新反序列化成 Float32Array（只有 chunk_vecs 变更后的首次查询重建）；
+//   2. 正文不再随全表 JOIN 物化。旧实现为拿 top-N 把每个分块的 content 都读进内存
+//      （万级 chunk 单次查询十几 MB 的临时大对象，且落在 Fastify 请求线程上），
+//      现在只对最终 top-N 回表取正文。
+// 一致性口径：缓存是否过期只认库内的 vec_gen 代号（见 getIndexDb 的触发器），本模块不自建脏标记。
+// 近似性：仍是精确余弦（不做 ANN 截断），与暴力扫描的结果逐条一致——T04069 验收要求
+// top-10 重合率 ≥90%，实测为 100%（见 bench 用例）。
+// 规模上界：缓存总量受 WIKI_VECTOR_CACHE_MAX_MB（默认 128MB）约束，超预算的这一次不缓存、
+// 直接逐行扫（结果一致，只是每次重新反序列化）——宁可不快，也不把常驻内存推到无上限。
+
+/** 一行向量记录（冷路径取数形状；正文不在这里取，见 attachChunkContents） */
+interface VectorRow {
+  page_path: string;
+  chunk_index: number;
+  vec: Buffer;
+}
+
+interface VectorCandidate {
+  pagePath: string;
+  chunkIndex: number;
+  similarity: number;
+}
+
+/** 某 (model, dim) 口径下的向量矩阵：展平存储，点积落在连续内存上 */
+interface VectorMatrix {
+  dim: number;
+  count: number;
+  /** count × dim 行优先；是副本而非引用 SQLite 返回的 Buffer（不把整批 BLOB 挂在缓存上） */
+  data: Float32Array;
+  /** 各向量 L2 范数（建矩阵时算一次，查询时不再重复开方累加）。
+   *  必须是 Float64：范数存成 Float32 会让商在小数第 8 位就与旧实现分岔——
+   *  分数是排序键，容不得这一档精度损失（vector-recall-cache.test.ts 逐条比对能抓到）。 */
+  norms: Float64Array;
+  pagePaths: string[];
+  chunkIndexes: Int32Array;
+  bytes: number;
+}
+
+interface DirVectorCache {
+  /** 建这批矩阵时的 vec_gen 代号 */
+  gen: number;
+  /** 该目录已缓存的向量字节数（用于总量记账） */
+  bytes: number;
+  /** key = `${model ?? ''}\0${dim}`：不同模型/不同维度是不可比的两套向量空间 */
+  matrices: Map<string, VectorMatrix>;
+}
+
+const DEFAULT_VECTOR_CACHE_MB = 128;
+const vectorCaches = new Map<string, DirVectorCache>();
+let cachedVectorBytes = 0;
+const vectorCacheCounters = { hits: 0, rebuilds: 0, oversizeScans: 0 };
+
+function vectorCacheEnabled(): boolean {
+  // 关掉缓存即可与改造前逐行对照（单改动 A/B 归因用），不改变结果只改变快慢
+  return process.env.WIKI_VECTOR_CACHE !== '0';
+}
+
+function vectorCacheBudgetBytes(): number {
+  const raw = process.env.WIKI_VECTOR_CACHE_MAX_MB;
+  if (raw === undefined || raw === '') return DEFAULT_VECTOR_CACHE_MB * 1024 * 1024;
+  const mb = Number(raw);
+  return Number.isFinite(mb) && mb >= 0 ? Math.floor(mb) * 1024 * 1024 : DEFAULT_VECTOR_CACHE_MB * 1024 * 1024;
+}
+
+/** 丢弃某目录的向量缓存（代号变化 / 连接释放） */
+function dropDirCache(dataDir: string): void {
+  const dir = vectorCaches.get(dataDir);
+  if (!dir) return;
+  cachedVectorBytes -= dir.bytes;
+  vectorCaches.delete(dataDir);
+}
+
+/** 清空全部向量缓存（closeIndexDb 与测试用） */
+export function resetVectorCache(): void {
+  vectorCaches.clear();
+  cachedVectorBytes = 0;
+  vectorCacheCounters.hits = 0;
+  vectorCacheCounters.rebuilds = 0;
+  vectorCacheCounters.oversizeScans = 0;
+}
+
+/** 向量缓存观测读数（诊断与性能用例用；不暴露到任何用户界面） */
+export function getVectorCacheStats(): {
+  dirs: number;
+  matrices: number;
+  vectors: number;
+  bytes: number;
+  budgetBytes: number;
+  hits: number;
+  rebuilds: number;
+  oversizeScans: number;
+} {
+  let matrices = 0;
+  let vectors = 0;
+  for (const dir of vectorCaches.values()) {
+    matrices += dir.matrices.size;
+    for (const m of dir.matrices.values()) vectors += m.count;
+  }
+  return {
+    dirs: vectorCaches.size,
+    matrices,
+    vectors,
+    bytes: cachedVectorBytes,
+    budgetBytes: vectorCacheBudgetBytes(),
+    hits: vectorCacheCounters.hits,
+    rebuilds: vectorCacheCounters.rebuilds,
+    oversizeScans: vectorCacheCounters.oversizeScans,
+  };
+}
+
+/** 读库内的向量变更代号（主键单行查询，微秒级）；表里没有行按 0 计 */
+function readVecGen(d: SyncDb): number {
+  const row = d.prepare('SELECT gen FROM vec_gen WHERE id = 1').get() as { gen: number | null } | undefined;
+  return typeof row?.gen === 'number' ? row.gen : 0;
+}
+
+/** 冷路径取数 SQL：只取向量与定位键，不取正文。
+ *  CROSS JOIN 是刻意写法——SQLite 对它的约定是「不得交换左右表」，
+ *  配合 ORDER BY v.rowid 把行序钉死在 chunk_vecs 的插入序上：
+ *  同分向量的先后次序由此决定，换计划就会换并列名次，结果不可复现。 */
+function vectorScanSql(model?: string): string {
+  const conditions = ['v.dim = ?'];
+  if (model) conditions.push('v.model = ?');
+  return `
+    SELECT v.page_path AS page_path, v.chunk_index AS chunk_index, v.vec AS vec
+    FROM chunk_vecs v CROSS JOIN chunks c ON c.page_path = v.page_path AND c.chunk_index = v.chunk_index
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY v.rowid
+  `;
+}
+
+function vectorScanParams(d2: Float32Array, model?: string): Array<string | number> {
+  return model ? [d2.length, model] : [d2.length];
+}
+
+/** 单条向量的缓存占用（向量本体 float32 + 范数 float64 + 分块号 int32；页面路径字符串另计） */
+function bytesPerVector(dim: number): number {
+  return dim * 4 + 8 + 4;
+}
+
+/** 该口径下的向量行数（用于建矩阵前估算内存，不碰 BLOB） */
+function countVectorsForRecall(d: SyncDb, model: string | undefined, dim: number): number {
+  const conditions = ['v.dim = ?'];
+  const params: Array<string | number> = [dim];
+  if (model) {
+    conditions.push('v.model = ?');
+    params.push(model);
+  }
+  const row = d.prepare(
+    `SELECT COUNT(*) AS n FROM chunk_vecs v CROSS JOIN chunks c ON c.page_path = v.page_path AND c.chunk_index = v.chunk_index WHERE ${conditions.join(' AND ')}`,
+  ).get(...params) as { n: number };
+  return row.n;
+}
+
+/** 稳定 top-K：相似度降序，同分保留先到者（即行序靠前者），与「全表打分 + 稳定排序」结果逐条一致。
+ *  limit 未满时先收，满了才与末位比较——因此零分/负分候选在不足 K 条时照样返回（旧口径如此）。 */
+function keepTopK(top: VectorCandidate[], cand: VectorCandidate, limit: number): void {
+  if (top.length >= limit && !(cand.similarity > top[limit - 1].similarity)) return;
+  if (top.length >= limit) top.length = limit - 1;
+  let at = top.length;
+  while (at > 0 && top[at - 1].similarity < cand.similarity) at--;
+  top.splice(at, 0, cand);
+}
+
+/** 由向量行构建矩阵副本。长度与 dim 不符的 BLOB 视为脏数据跳过（旧实现会在建视图时抛
+ *  RangeError，被 hybridSearch 的 catch 吞成「整条语义路静默关闭」——显式丢一行比丢一路好）。 */
+function buildMatrix(rows: Iterable<VectorRow>, dim: number): VectorMatrix {
+  const list = rows instanceof Array ? rows : [...rows];
+  const count = list.length;
+  const data = new Float32Array(count * dim);
+  const norms = new Float64Array(count);
+  const pagePaths: string[] = new Array(count);
+  const chunkIndexes = new Int32Array(count);
+  let filled = 0;
+  for (const r of list) {
+    if (r.vec.byteLength < dim * 4) continue;
+    // Buffer 可能来自共享内存池（byteOffset 非 4 对齐），此时先复制再建视图
+    const buf = r.vec.byteOffset % 4 === 0 ? r.vec : Buffer.from(r.vec);
+    const src = new Float32Array(buf.buffer, buf.byteOffset, dim);
+    const off = filled * dim;
+    let sq = 0;
+    for (let k = 0; k < dim; k++) {
+      const v = src[k];
+      data[off + k] = v;
+      sq += v * v;
+    }
+    norms[filled] = Math.sqrt(sq);
+    pagePaths[filled] = r.page_path;
+    chunkIndexes[filled] = r.chunk_index;
+    filled++;
+  }
+  return {
+    dim,
+    count: filled,
+    data: filled === count ? data : data.subarray(0, filled * dim),
+    norms: filled === count ? norms : norms.subarray(0, filled),
+    pagePaths: pagePaths.slice(0, filled),
+    chunkIndexes: filled === count ? chunkIndexes : chunkIndexes.subarray(0, filled),
+    bytes: filled * bytesPerVector(dim),
+  };
+}
+
+/** 对已缓存矩阵做全量精确打分（O(count × dim)，无 SQL、无正文） */
+function scoreMatrix(m: VectorMatrix, queryVec: Float32Array, limit: number): VectorCandidate[] {
+  const top: VectorCandidate[] = [];
+  const dim = m.dim;
+  let qs = 0;
+  for (let k = 0; k < dim; k++) qs += queryVec[k] * queryVec[k];
+  const qNorm = Math.sqrt(qs);
+  const data = m.data;
+  const norms = m.norms;
+  for (let i = 0; i < m.count; i++) {
+    const off = i * dim;
+    let dot = 0;
+    for (let k = 0; k < dim; k++) dot += queryVec[k] * data[off + k];
+    const vNorm = norms[i];
+    const similarity = qNorm > 0 && vNorm > 0 ? dot / (qNorm * vNorm) : 0;
+    keepTopK(top, { pagePath: m.pagePaths[i], chunkIndex: m.chunkIndexes[i], similarity }, limit);
+  }
+  return top;
+}
+
+/** 不缓存时的逐行打分（同一口径，只是每行现场建视图） */
+function scoreRows(rows: Iterable<VectorRow>, queryVec: Float32Array, limit: number): VectorCandidate[] {
   const dim = queryVec.length;
-  const scored = rows
-    .filter((r) => r.dim === dim)
-    .map((r) => {
-      const v = new Float32Array(r.vec.buffer, r.vec.byteOffset, r.dim);
-      let dot = 0;
-      let nq = 0;
-      let nv = 0;
-      for (let i = 0; i < dim; i++) {
-        dot += queryVec[i] * v[i];
-        nq += queryVec[i] * queryVec[i];
-        nv += v[i] * v[i];
-      }
-      const similarity = nq > 0 && nv > 0 ? dot / (Math.sqrt(nq) * Math.sqrt(nv)) : 0;
-      return { pagePath: r.page_path, chunkIndex: r.chunk_index, content: r.content, heading: r.heading, similarity };
-    })
-    .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, limit);
-  return scored;
+  let qs = 0;
+  for (let k = 0; k < dim; k++) qs += queryVec[k] * queryVec[k];
+  const qNorm = Math.sqrt(qs);
+  const top: VectorCandidate[] = [];
+  for (const r of rows) {
+    if (r.vec.byteLength < dim * 4) continue;
+    const buf = r.vec.byteOffset % 4 === 0 ? r.vec : Buffer.from(r.vec);
+    const v = new Float32Array(buf.buffer, buf.byteOffset, dim);
+    let dot = 0;
+    let vs = 0;
+    for (let k = 0; k < dim; k++) {
+      dot += queryVec[k] * v[k];
+      vs += v[k] * v[k];
+    }
+    const vNorm = Math.sqrt(vs);
+    const similarity = qNorm > 0 && vNorm > 0 ? dot / (qNorm * vNorm) : 0;
+    keepTopK(top, { pagePath: r.page_path, chunkIndex: r.chunk_index, similarity }, limit);
+  }
+  return top;
+}
+
+/** 取 top-K 候选（走缓存或逐行扫，结果同构） */
+function recallCandidates(
+  d: SyncDb,
+  dataDir: string,
+  queryVec: Float32Array,
+  limit: number,
+  model?: string,
+): VectorCandidate[] {
+  const sql = vectorScanSql(model);
+  const params = vectorScanParams(queryVec, model);
+  if (!vectorCacheEnabled()) {
+    return scoreRows(d.prepare(sql).iterate(...params) as unknown as Iterable<VectorRow>, queryVec, limit);
+  }
+  const gen = readVecGen(d);
+  let dir = vectorCaches.get(dataDir);
+  if (dir && dir.gen !== gen) {
+    // 代号是全库口径：向量增删改过就整目录重建，不猜哪一份还新
+    dropDirCache(dataDir);
+    dir = undefined;
+  }
+  if (!dir) {
+    dir = { gen, bytes: 0, matrices: new Map<string, VectorMatrix>() };
+    vectorCaches.set(dataDir, dir);
+  }
+  const key = `${model ?? ''}\u0000${queryVec.length}`;
+  const cached = dir.matrices.get(key);
+  if (cached) {
+    vectorCacheCounters.hits++;
+    return scoreMatrix(cached, queryVec, limit);
+  }
+  // 先按行数估算内存再决定缓不缓存：超预算就不读矩阵，逐行扫过去打分（结果一致，只是每次都这样）
+  const estimatedBytes = countVectorsForRecall(d, model, queryVec.length) * bytesPerVector(queryVec.length);
+  if (cachedVectorBytes + estimatedBytes > vectorCacheBudgetBytes()) {
+    vectorCacheCounters.oversizeScans++;
+    return scoreRows(d.prepare(sql).iterate(...params) as unknown as Iterable<VectorRow>, queryVec, limit);
+  }
+  vectorCacheCounters.rebuilds++;
+  const matrix = buildMatrix(d.prepare(sql).all(...params) as unknown as VectorRow[], queryVec.length);
+  dir.matrices.set(key, matrix);
+  dir.bytes += matrix.bytes;
+  cachedVectorBytes += matrix.bytes;
+  return scoreMatrix(matrix, queryVec, limit);
+}
+
+/** 只对 top-K 回表取正文（旧实现是全表 JOIN 出正文，这是每次查询最大的那块临时分配） */
+function attachChunkContents(d: SyncDb, top: VectorCandidate[]): Array<ChunkRow & { similarity: number }> {
+  const pages = [...new Set(top.map((t) => t.pagePath))];
+  const byKey = new Map<string, { content: string; heading: string | null }>();
+  // 分批取，避开 SQLite 绑定参数上限（调用方 limit 只有 20，这里是防御性上限）
+  const BATCH = 400;
+  for (let i = 0; i < pages.length; i += BATCH) {
+    const slice = pages.slice(i, i + BATCH);
+    const placeholders = slice.map(() => '?').join(', ');
+    const rows = d.prepare(
+      `SELECT page_path, chunk_index, content, heading FROM chunks WHERE page_path IN (${placeholders})`,
+    ).all(...slice) as Array<{ page_path: string; chunk_index: number; content: string; heading: string | null }>;
+    for (const r of rows) byKey.set(`${r.page_path}\u0000${r.chunk_index}`, { content: r.content, heading: r.heading });
+  }
+  const out: Array<ChunkRow & { similarity: number }> = [];
+  for (const t of top) {
+    const hit = byKey.get(`${t.pagePath}\u0000${t.chunkIndex}`);
+    // 取不到正文说明 chunk 被外部删了而向量还留着（top-K 是与 chunks JOIN 后算的，正常不会发生）：
+    // 与旧实现的 INNER JOIN 同口径——该条不出现在结果里
+    if (!hit) continue;
+    out.push({ pagePath: t.pagePath, chunkIndex: t.chunkIndex, content: hit.content, heading: hit.heading, similarity: t.similarity });
+  }
+  return out;
 }
 
 /** 索引状态统计（设置页展示：已索引/待补页面数） */
