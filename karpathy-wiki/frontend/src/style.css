@@ -84,9 +84,12 @@
    * 现补齐真 token（= 本主题 *-base，随主题变化）+ 前景配对 readable：
    * --purple-readable 默认值取提亮紫，因为 --accent-purple-base #b026ff 即使在深底卡片上
    * 也只有 4.43:1；浅底主题各自覆盖为同色相压暗值（逐主题数值见各 themes/*.css）。
+   * T04449 第五组再提亮一档（#bf4fff → #c258ff）：导入页把紫族文字压在比卡片更深一档的
+   * `--accent-purple-a20` tint 面上，#bf4fff 在该面只有 4.34:1；#c258ff 实测
+   * a20 4.61 / a15 4.89 / a12 5.05 / 卡片 5.51，各面同步变好。
    * 判定同样由 test/qa-contrast-pairing.test.ts 按 WCAG AA 实算。 */
   --pink-readable: #ff338b;
-  --purple-readable: #bf4fff;
+  --purple-readable: #c258ff;
   /* T04449：成功绿的前景口径（图标/状态文字）。深底主题沿用霓虹绿，浅底主题一律压暗到 ≥4.6:1。 */
   --lime-readable: var(--neon-lime, #c1ff3e);
 

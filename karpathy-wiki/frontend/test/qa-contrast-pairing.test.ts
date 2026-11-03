@@ -324,15 +324,18 @@ describe('T04448 粉/紫前景口径守护（不得再裸用 --accent-pink / --a
     //  · 粉族（T04449 第三组）——淡粉 tint 面上文字实测 4.11~4.44 < 4.5；
     //  · 紫族（T04449 第四组）——`--accent-purple-a12/a15` 面上 4.34~4.37，6 个主题全中（含深底）；
     //    product 的紫改不动 :root（深底要更亮才达标），故新增主题内覆盖。
+    //  · 紫族二次（T04449 第五组）——导入页把紫族文字压到更深一档的 `--accent-purple-a20` 面，
+    //    原值在 5 个主题上 4.30~4.47 < 4.5（ecommerce/enterprise/macaron 压暗，default/creative/product 提亮），
+    //    其余档位（a15/a12/a05/卡片）随方向同步变好。
     const EXPECT: Record<string, { pink: string; purple: string }> = {
-      'default(:root)': { pink: '#ff338b', purple: '#bf4fff' },
-      creative: { pink: '#ff338b', purple: '#bf4fff' },
-      ecommerce: { pink: '#ac4824', purple: '#6354d3' },
-      enterprise: { pink: '#2d63bb', purple: '#235ddc' },
+      'default(:root)': { pink: '#ff338b', purple: '#c258ff' },
+      creative: { pink: '#ff338b', purple: '#c258ff' },
+      ecommerce: { pink: '#ac4824', purple: '#5d4fc6' },
+      enterprise: { pink: '#2d63bb', purple: '#2158d1' },
       'light-business': { pink: '#b52e2e', purple: '#1554d1' },
-      macaron: { pink: '#8c6273', purple: '#7c6490' },
+      macaron: { pink: '#8c6273', purple: '#7a628d' },
       portfolio: { pink: '#735f46', purple: '#1a1a1a' },
-      product: { pink: '#ff2994', purple: '#c051ff' },
+      product: { pink: '#ff2994', purple: '#c35aff' },
     };
     const LIGHT = ['ecommerce', 'enterprise', 'light-business', 'macaron', 'portfolio'];
     for (const [name, exp] of Object.entries(EXPECT)) {

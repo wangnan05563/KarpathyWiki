@@ -1502,7 +1502,7 @@ function handleUrlInputChange() {
 .hero-tag {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   letter-spacing: 2px;
   display: block;
   margin-bottom: 10px;
@@ -1593,7 +1593,7 @@ function handleUrlInputChange() {
 
 .upload-icon {
   font-size: 48px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   margin-bottom: 12px;
   font-family: var(--font-display);
   text-shadow: var(--glow-cyan);
@@ -1693,7 +1693,7 @@ function handleUrlInputChange() {
 }
 
 .folder-dropzone:hover {
-  border-color: var(--neon-purple);
+  border-color: var(--purple-readable, var(--neon-purple));
   background: var(--accent-purple-a05, rgba(176, 38, 255, 0.05));
 }
 
@@ -1714,7 +1714,7 @@ function handleUrlInputChange() {
 
 .folder-files-title {
   font-size: 13px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   font-family: var(--font-mono);
   font-weight: 600;
 }
@@ -1786,7 +1786,7 @@ function handleUrlInputChange() {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .qq-step-title {
@@ -1837,7 +1837,7 @@ function handleUrlInputChange() {
 .meta-value.mono {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-cyan-a10);
   padding: 2px 8px;
   border-radius: 4px;
@@ -1864,7 +1864,7 @@ function handleUrlInputChange() {
 }
 
 .drafts-tip strong {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   font-size: 16px;
 }
 
@@ -1891,7 +1891,7 @@ function handleUrlInputChange() {
 .drafts-path {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   word-break: break-all;
 }
 
@@ -2021,7 +2021,7 @@ function handleUrlInputChange() {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .url-step-title {
@@ -2108,7 +2108,7 @@ function handleUrlInputChange() {
 .url-attachments-title {
   margin: 0 0 8px;
   font-size: 13px;
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
   font-family: var(--font-mono);
   font-weight: 600;
 }
@@ -2151,7 +2151,7 @@ function handleUrlInputChange() {
 .url-page-depth {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   flex-shrink: 0;
 }
 
@@ -2171,7 +2171,7 @@ function handleUrlInputChange() {
 .url-att-type {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   flex-shrink: 0;
 }
 
@@ -2199,7 +2199,7 @@ function handleUrlInputChange() {
 .url-att-group-title {
   margin: 0 0 6px;
   font-size: 12px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   font-family: var(--font-mono);
   font-weight: 600;
 }

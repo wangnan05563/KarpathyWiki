@@ -245,6 +245,19 @@ export function findBareBaseForegroundUses(
   src: string,
   opts: { baseTokens: RegExp[]; readable?: RegExp },
 ): string[] {
+  return [...new Set(listBareBaseForegroundUses(src, opts))];
+}
+
+/**
+ * 同上的「逐处」版本（不去重）。
+ * 去重版适合「有没有违规」的断言，但全站索引锁要的是**每个文件还剩几处**——
+ * `.a { color: var(--neon-cyan) }` 与 `.b { color: var(--neon-cyan) }` 是两个真实消费点，
+ * 去重后会变成一个，基线数就会失去意义（接入进度按处数只降不升来追踪）。
+ */
+export function listBareBaseForegroundUses(
+  src: string,
+  opts: { baseTokens: RegExp[]; readable?: RegExp },
+): string[] {
   const readable = opts.readable ?? /--[\w-]+-readable/; // 任意 readable 家族都算包裹：家族配对对不对由数值清单负责，这里只判「有没有裸用基色」
   const css = stripComments(styleText(src));
   const violations: string[] = [];
@@ -264,5 +277,5 @@ export function findBareBaseForegroundUses(
     if (readable.test(decl.slice(colon + 1))) continue;
     violations.push(`${prop} → ${decl.slice(colon + 1).replace(/\s+/g, ' ').slice(0, 110)}`);
   }
-  return [...new Set(violations)];
+  return violations;
 }

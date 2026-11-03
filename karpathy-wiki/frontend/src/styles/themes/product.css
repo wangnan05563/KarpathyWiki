@@ -29,7 +29,9 @@
   --neon-violet: #8b5cf6;
   --neon-pink: #ff3d71;
   --pink-readable: #ff2994;
-  --purple-readable: #c051ff;
+  /* T04449 第五组：紫族前景在导入页 `--accent-purple-a20` 面上由 #c051ff 的 4.36 再提亮一档到
+     #c35aff，实测 a20 4.63 / a15 4.92 / a12 5.09 / 卡片 5.65；深底主题只可能更亮。 */
+  --purple-readable: #c35aff;
   --neon-lime: #00ff88;
 
   /* 深黑背景层次 */

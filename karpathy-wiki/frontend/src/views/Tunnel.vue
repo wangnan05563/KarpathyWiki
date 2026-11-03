@@ -1088,7 +1088,7 @@ onBeforeUnmount(() => {
   font-family: var(--font-display, sans-serif);
   font-size: 18px;
   font-weight: 700;
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   margin: 0 0 16px 0;
   letter-spacing: 1px;
 }
@@ -1126,7 +1126,7 @@ onBeforeUnmount(() => {
 .url-text {
   font-family: var(--font-mono, monospace);
   font-size: 14px;
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: var(--accent-cyan-a08, rgba(0, 245, 255, 0.08));
   padding: 6px 12px;
   border-radius: 8px;
@@ -1231,7 +1231,7 @@ onBeforeUnmount(() => {
   background: var(--accent-pink-a10, rgba(255, 0, 110, 0.1));
   padding: 2px 8px;
   border-radius: 4px;
-  color: var(--neon-pink, #ff006e);
+  color: var(--pink-readable, var(--neon-pink, #ff006e));
   word-break: break-all;
 }
 
@@ -1245,7 +1245,7 @@ onBeforeUnmount(() => {
 .download-link {
   font-family: var(--font-mono, monospace);
   font-size: 12px;
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   text-decoration: none;
   word-break: break-all;
 }
@@ -1289,7 +1289,7 @@ onBeforeUnmount(() => {
   background: var(--accent-cyan-a08, rgba(0, 245, 255, 0.08));
   padding: 2px 8px;
   border-radius: 4px;
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   word-break: break-all;
 }
 
@@ -1322,7 +1322,7 @@ onBeforeUnmount(() => {
 .auth-url-link {
   font-family: var(--font-mono, monospace);
   font-size: 12px;
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   word-break: break-all;
 }
 
@@ -1388,7 +1388,7 @@ onBeforeUnmount(() => {
 }
 
 .prereq-stale {
-  color: var(--neon-pink, #ff006e);
+  color: var(--pink-readable, var(--neon-pink, #ff006e));
   font-style: normal;
 }
 
@@ -1399,7 +1399,7 @@ onBeforeUnmount(() => {
 .prereq-error {
   margin-top: 10px;
   font-size: 12px;
-  color: var(--neon-pink, #ff006e);
+  color: var(--pink-readable, var(--neon-pink, #ff006e));
 }
 
 .prereq-list {
@@ -1467,7 +1467,7 @@ onBeforeUnmount(() => {
 
 .prereq-link {
   margin-left: 6px;
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   text-decoration: none;
   white-space: nowrap;
 }
@@ -1491,7 +1491,7 @@ onBeforeUnmount(() => {
 
 .prereq-goto:hover {
   background: rgba(21, 84, 209, 0.12);
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* 响应式：窄屏配置行堆叠 */

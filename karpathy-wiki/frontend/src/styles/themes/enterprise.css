@@ -47,9 +47,11 @@
      test/qa-contrast-pairing.test.ts。填充用途不变。 */
   --accent-readable: #046e80;
   /* T04448 粉/紫前景压暗值：本主题 base #3b82f6 / #2563eb 在白卡片 tint 面上为 3.28 / 4.50:1，
-     同色相向黑混合 20% / 3% 后实测 4.79 / 4.66:1。 */
+     同色相向黑混合 20% / 3% 后实测 4.79 / 4.66:1。
+     T04449 第五组：紫族再压暗一档（#235ddc → #2158d1）——导入页 `--accent-purple-a20` 面上
+     原值 4.31 < 4.5，新值实测 a20 4.67 / a15 5.03 / a12 5.25 / 卡片 6.21。 */
   --pink-readable: #2d63bb;
-  --purple-readable: #235ddc;
+  --purple-readable: #2158d1;
   --lime-readable: #0c855d;
   --warning-readable: #a05e00;
 
