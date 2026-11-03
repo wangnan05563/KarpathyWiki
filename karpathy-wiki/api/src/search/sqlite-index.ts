@@ -122,8 +122,13 @@ export function replacePageChunks(dataDir: string, pagePath: string, chunks: Arr
     tx.prepare('DELETE FROM chunks WHERE page_path = ?').run(pagePath);
     const ins = tx.prepare('INSERT INTO chunks (page_path, chunk_index, content, heading, updated_at) VALUES (?, ?, ?, ?, ?)');
     chunks.forEach((c, i) => ins.run(pagePath, i, c.content, c.heading, now));
+    // T04182：切分的第一步已经把该页向量删干净了（上面那条 DELETE FROM chunk_vecs），
+    // 所以冲突分支必须连同 status 一起退回 pending。此前只清 attempts 不重置 status，
+    // 「重切后从未重算」的页面还挂着上一轮的 'indexed'：设置页「向量覆盖 N/M 页」虚高，
+    // 且与按 chunk_vecs 实际有无判定的 staleModelPages 互相矛盾（同一时刻 N 与 stale 数对不上）。
+    // 唯一能把 status 改回 indexed 的入口是 savePageVectors——向量真的写进去了才算覆盖。
     tx.prepare(`INSERT INTO index_status (page_path, status, attempts, updated_at) VALUES (?, 'pending', 0, ?)
-                ON CONFLICT(page_path) DO UPDATE SET attempts = 0, updated_at = excluded.updated_at`).run(pagePath, now);
+                ON CONFLICT(page_path) DO UPDATE SET status = 'pending', attempts = 0, updated_at = excluded.updated_at`).run(pagePath, now);
     tx.exec('COMMIT');
   } catch (err) {
     tx.exec('ROLLBACK');
