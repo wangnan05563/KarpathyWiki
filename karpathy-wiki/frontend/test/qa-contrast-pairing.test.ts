@@ -12,146 +12,26 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-
-const ROOT = join(__dirname, '..');
-const THEMES_DIR = join(ROOT, 'src/styles/themes');
-const STYLE_CSS = join(ROOT, 'src/style.css');
-
+// T04449：解析器与实算口径抽到 test/helpers/contrast.ts 共用（各页面推广时不再复制一套判定）。
+import {
+  ROOT,
+  STYLE_CSS,
+  THEMES_DIR,
+  THRESHOLD,
+  auditThemes,
+  formatFailures,
+  loadThemes,
+  luminance,
+  pageOf,
+  parseDecls,
+  rgbToHex,
+  resolve,
+  stripComments,
+  worstRatio,
+} from './helpers/contrast';
 // 前景配对的消费点（问答页三处入口，含悬浮问答，同一套 token 口径）
 const QA_FILES = ['src/views/Query.vue', 'src/components/MessageToolbar.vue', 'src/components/FloatingChat.vue'];
 
-const stripComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, '');
-
-function parseDecls(css: string): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const m of css.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
-    if (!out.has(m[1])) out.set(m[1], m[2].trim());
-  }
-  return out;
-}
-
-interface ThemeTokens {
-  name: string;
-  decls: Map<string, string>;
-}
-
-/** :root 兜底主题 + styles/themes/ 下每个主题；主题未声明的 token 回落 :root（与浏览器一致） */
-function loadThemes(): ThemeTokens[] {
-  const rootDecl = parseDecls(stripComments(readFileSync(STYLE_CSS, 'utf8')).match(/:root\s*\{([\s\S]*?)\n\}/)![1]);
-  const themes: ThemeTokens[] = [{ name: 'default(:root)', decls: new Map(rootDecl) }];
-  const files = readdirSync(THEMES_DIR).filter((f) => f.endsWith('.css') && f !== 'index.css').sort();
-  for (const f of files) {
-    const theme = f.replace(/\.css$/, '');
-    const css = readFileSync(join(THEMES_DIR, f), 'utf8');
-    const own = new Map<string, string>();
-    for (const m of css.matchAll(new RegExp(`\\[data-theme=["']${theme}["']\\]\\s*\\{([\\s\\S]*?)\\n\\}`, 'g'))) {
-      for (const [k, v] of parseDecls(stripComments(m[1]))) {
-        if (!own.has(k)) own.set(k, v);
-      }
-    }
-    const merged = new Map(own);
-    for (const [k, v] of rootDecl) if (!merged.has(k)) merged.set(k, v);
-    themes.push({ name: theme, decls: merged });
-  }
-  return themes;
-}
-
-// ---------- 颜色实算 ----------
-interface RGB { r: number; g: number; b: number; a: number }
-
-function hexToRgb(h: string): RGB {
-  let x = h.replace('#', '');
-  if (x.length === 3) x = x.split('').map((c) => c + c).join('');
-  return { r: parseInt(x.slice(0, 2), 16), g: parseInt(x.slice(2, 4), 16), b: parseInt(x.slice(4, 6), 16), a: x.length === 8 ? parseInt(x.slice(6, 8), 16) / 255 : 1 };
-}
-const rgbToHex = (c: RGB) => '#' + [c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
-
-/** 解析 var() 链（含嵌套 fallback）与 rgba()/hex，返回可用于合成的实色或渐变端点 */
-function resolve(expr: string, decls: Map<string, string>, depth = 0): { solid: RGB } | { stops: RGB[] } {
-  const e = expr.trim();
-  const varName = e.match(/^var\((--[\w-]+)\)$/);
-  if (varName) {
-    const v = decls.get(varName[1]);
-    if (v === undefined) throw new Error(`token ${varName[1]} 未声明且无 fallback（表达式：${expr}）`);
-    return resolve(v, decls, depth + 1);
-  }
-  // var(--x, <fallback>)：fallback 用括号配平静默取出，支持嵌套
-  const open = e.match(/^var\(\s*(--[\w-]+)\s*,/);
-  if (open && e.endsWith(')')) {
-    const rest = e.slice(e.indexOf(',') + 1, e.length - 1).trim();
-    const v = decls.get(open[1]);
-    return resolve(v !== undefined ? v : rest, decls, depth + 1);
-  }
-  if (/^linear-gradient/.test(e)) {
-    const inner = e.replace(/^linear-gradient\([^,]*,/, '').replace(/\)$/, '');
-    const stops: RGB[] = [];
-    for (const part of splitTopLevel(inner)) {
-      const c = part.trim().replace(/\s+[-\d.]+%$/, '');
-      if (!c || /(?:deg|turn|rad)\b/i.test(part) && !/[#r]/.test(part)) continue;
-      const r = resolve(c, decls, depth + 1);
-      if ('stops' in r) stops.push(...r.stops);
-      else stops.push(r.solid);
-    }
-    return { stops };
-  }
-  const rgba = e.match(/^rgba?\(([^)]+)\)$/i);
-  if (rgba) {
-    const p = rgba[1].split(/[,\s/]+/).filter(Boolean).map(Number);
-    return { solid: { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 } };
-  }
-  if (e === 'transparent') return { solid: { r: 0, g: 0, b: 0, a: 0 } };
-  if (/^#[0-9a-f]{3,8}$/i.test(e)) return { solid: hexToRgb(e) };
-  throw new Error(`无法解析颜色表达式：${expr}`);
-}
-
-/** 按逗号切分但忽略括号内的逗号（渐变端点里可能嵌 var(...)） */
-function splitTopLevel(s: string): string[] {
-  const out: string[] = [];
-  let depth = 0;
-  let buf = '';
-  for (const ch of s) {
-    if (ch === '(') depth++;
-    else if (ch === ')') depth--;
-    if (ch === ',' && depth === 0) {
-      out.push(buf);
-      buf = '';
-      continue;
-    }
-    buf += ch;
-  }
-  if (buf) out.push(buf);
-  return out;
-}
-
-function composite(fg: RGB, bg: RGB): RGB {
-  const a = fg.a;
-  return { r: fg.r * a + bg.r * (1 - a), g: fg.g * a + bg.g * (1 - a), b: fg.b * a + bg.b * (1 - a), a: 1 };
-}
-function luminance(c: RGB): number {
-  const f = (v: number) => {
-    const s = v / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
-}
-function contrast(a: RGB, b: RGB): number {
-  const l1 = luminance(a);
-  const l2 = luminance(b);
-  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
-}
-
-/** 前景表达式对「所在面」的最差对比度：渐变面逐端点取最小值 */
-function worstRatio(fgExpr: string, bgExpr: string, decls: Map<string, string>, page: RGB): number {
-  const bg = resolve(bgExpr, decls);
-  const surfaces = 'stops' in bg ? bg.stops.map((s) => composite(s, page)) : [composite(bg.solid, page)];
-  const fg = resolve(fgExpr, decls);
-  const fgs = 'stops' in fg ? fg.stops : [fg.solid];
-  let worst = Infinity;
-  for (const s of surfaces) {
-    for (const f of fgs) worst = Math.min(worst, contrast(composite(f, s), s));
-  }
-  return worst;
-}
 
 const themes = loadThemes();
 
@@ -201,20 +81,6 @@ const AUDIT: Array<{ label: string; fg: string; bg: string; kind: 'text' | 'ui' 
   { label: '技能页·删除按钮 hover 文字', fg: 'var(--pink-readable)', bg: 'var(--accent-pink-a10)', kind: 'text' },
 ];
 
-const THRESHOLD = { text: 4.5, ui: 3.0 };
-
-/**
- * 所在页的可见底：卡片是半透明的，真实落点是 --bg-void 之上（浏览器就是这么合成的）。
- * 直接拿 --bg-card-solid 当不透明底会让深色主题的卡片偏亮，判定随之失真。
- */
-function pageOf(decls: Map<string, string>): RGB {
-  const base = resolve('var(--bg-void)', decls);
-  const page = 'stops' in base ? base.stops[0] : base.solid;
-  const card = resolve('var(--bg-card-solid)', decls);
-  if ('stops' in card) throw new Error('卡片面不应是渐变');
-  return composite(card.solid, page);
-}
-
 describe('T04175 主题 token 解析', () => {
   it('主题清单齐全（防目录变化导致用例空转）', () => {
     expect(themes.length).toBeGreaterThanOrEqual(8);
@@ -243,7 +109,9 @@ describe('T04175 主题 token 解析', () => {
     expect(hexOf('enterprise', '--accent-readable')).toBe('#046e80');
     expect(hexOf('light-business', '--accent-readable')).toBe('#1554d1');
     expect(hexOf('macaron', '--accent-readable')).toBe('#2b7a6e');
-    expect(hexOf('portfolio', '--accent-readable')).toBe('#786349');
+    // portfolio 在 T04449 口径推广里再压暗一档：帮助页锚点 hover 的黑淡底
+    // （--accent-purple-a12，本主题的「紫」即墨色）实测 4.36:1 → #715d45 后 4.81:1
+    expect(hexOf('portfolio', '--accent-readable')).toBe('#715d45');
     // readable 必须比原强调色更暗或相同（浅底主题只允许压暗，不允许提亮成霓虹）
     for (const name of ['ecommerce', 'enterprise', 'light-business', 'macaron', 'portfolio']) {
       const acc = resolve(`var(--accent-readable)`, themes.find((x) => x.name === name)!.decls);

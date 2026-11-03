@@ -442,7 +442,7 @@ onMounted(() => {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.18em;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   text-transform: uppercase;
   margin-bottom: 2px;
 }
@@ -492,7 +492,7 @@ onMounted(() => {
   font-family: var(--font-display);
   font-size: 22px;
   font-weight: 900;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   text-shadow: 0 0 12px var(--accent-cyan-a30);
   margin-bottom: 6px;
 }
@@ -560,7 +560,7 @@ onMounted(() => {
 }
 
 .block-bracket {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   text-shadow: 0 0 8px var(--accent-cyan-a50);
 }
 
@@ -643,7 +643,7 @@ onMounted(() => {
 }
 
 .advanced-toggle:hover {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* 关闭预览后的红色横幅：role=alert，位置在操作卡之前 */
@@ -811,9 +811,9 @@ onMounted(() => {
 }
 
 .cleanup-btn:hover:not(.is-disabled) {
-  border-color: var(--neon-cyan) !important;
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff)) !important;
   box-shadow: var(--glow-cyan) !important;
-  color: var(--neon-cyan) !important;
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff)) !important;
 }
 
 /* 危险按钮：非预览模式变红 */
@@ -844,7 +844,7 @@ onMounted(() => {
 
 .result-summary {
   font-weight: 700;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   margin-bottom: 6px;
   letter-spacing: 0.04em;
 }

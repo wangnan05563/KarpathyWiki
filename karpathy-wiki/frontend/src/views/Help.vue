@@ -366,7 +366,7 @@ onBeforeUnmount(() => {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.18em;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   text-transform: uppercase;
 }
 
@@ -403,7 +403,7 @@ onBeforeUnmount(() => {
 
 .anchor-item:hover {
   background: var(--accent-purple-a12);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .anchor-item.active {
@@ -518,7 +518,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   flex-shrink: 0;
 }
 
@@ -616,7 +616,7 @@ onBeforeUnmount(() => {
 
 .note-text.note-info {
   background: var(--accent-cyan-a08);
-  border-left-color: var(--neon-cyan);
+  border-left-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .note-text.note-warning {
@@ -647,7 +647,7 @@ onBeforeUnmount(() => {
   padding: 6px 14px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: var(--accent-cyan-a08);
   border: 1px solid var(--accent-cyan-a10);
   border-radius: var(--radius-btn, 8px);
@@ -702,7 +702,7 @@ onBeforeUnmount(() => {
 
 .block-config code {
   background: var(--accent-cyan-a10);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 11px;
@@ -763,7 +763,7 @@ onBeforeUnmount(() => {
 }
 
 .code-copy-btn:hover {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   border-color: var(--accent-cyan-a50);
   background: var(--accent-cyan-a10);
 }
