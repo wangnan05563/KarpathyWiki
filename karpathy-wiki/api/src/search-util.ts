@@ -27,6 +27,12 @@ export interface SearchFilter {
   tags?: string[];
 }
 
+// 错误信息压成一行：日志走 JSON.stringify，多行原文会把它撑成一条不可读的长串
+function firstLine(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.split('\n')[0].slice(0, 160);
+}
+
 // 检查页面是否匹配搜索过滤器（frontmatter 过滤）
 function matchSearchFilter(
   content: string,
@@ -51,6 +57,12 @@ function matchSearchFilter(
 }
 
 // 处理单个页面文件：读取内容、过滤、匹配关键词，返回 SearchHit 或 null
+// T04176：badPageSink 收集「frontmatter 解析失败」的页面。为什么必须就地吞掉而不是让它冒出去：
+// gray-matter 对坏 YAML 是抛异常（未闭合 flow collection / 重复键 / 值里裸冒号），而带 source、
+// status、type、tags 任一过滤条件时每个页面都会过 matter() 一次。此前没人接这个异常——
+// 于是全库里只要有一页 frontmatter 写坏，整次扫描连坐中断，问答降级链两级同时失败，
+// 用户看到的是「知识库未覆盖此问题」，真实原因却是「有一页 YAML 头坏了」。
+// 坏页跳过（无法证明它属于过滤范围），其余页面照常召回；无论扫描是串行还是并发池，口径一致。
 async function processSearchFile(
   vault: VaultService,
   rel: string,
@@ -58,6 +70,7 @@ async function processSearchFile(
   f: string,
   terms: string[],
   filter?: SearchFilter,
+  badPageSink?: Array<{ path: string; reason: string }>,
 ): Promise<SearchHit | null> {
   if (!f.endsWith('.md')) return null;
   let content: string;
@@ -68,7 +81,13 @@ async function processSearchFile(
   }
   if (filter?.folder && !rel.startsWith(filter.folder + '/')) return null;
 
-  const filterResult = matchSearchFilter(content, filter, terms);
+  let filterResult: { matched: boolean; content?: string };
+  try {
+    filterResult = matchSearchFilter(content, filter, terms);
+  } catch (err) {
+    badPageSink?.push({ path: rel, reason: firstLine(err) });
+    return null;
+  }
   if (!filterResult.matched) return null;
 
   // 纯过滤模式（无关键词）直接返回
@@ -106,6 +125,7 @@ export async function searchPages(
   if (terms.length === 0 && !hasFilter) return [];
 
   const results: SearchHit[] = [];
+  const badPages: Array<{ path: string; reason: string }> = [];
 
   for (const d of pageDirs) {
     const dirFull = path.join(vault.getVaultPath(), d);
@@ -116,9 +136,17 @@ export async function searchPages(
       continue;
     }
     for (const f of entries) {
-      const hit = await processSearchFile(vault, `${d}/${f}`, d, f, terms, filter);
+      const hit = await processSearchFile(vault, `${d}/${f}`, d, f, terms, filter, badPages);
       if (hit) results.push(hit);
     }
+  }
+
+  // 一次扫描只打一条：坏页多时逐页 warn 会把日志刷满，排查要的只是「哪几页坏了 + 一共几页」
+  if (badPages.length > 0) {
+    console.warn('[search-scan] frontmatter 解析失败已跳过', JSON.stringify({
+      total: badPages.length,
+      sample: badPages.slice(0, 3),
+    }));
   }
 
   results.sort((a, b) => {

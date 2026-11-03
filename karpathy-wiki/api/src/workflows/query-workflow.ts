@@ -14,6 +14,10 @@ import { ensureIndexSynced } from '../search/indexed-search.js';
 import { extractWikilinkTargets } from '../vault/link-parser.js';
 import { createWebSearchTool } from '../tools/web-search.js';
 import { loadExtendedTools } from '../tools/registry.js';
+// T04176 兜底归因：降级链失败时按 LLM 错误分类记原因，并把「未覆盖」与「服务故障」两种兜底文案分开
+import { friendlyLlmError } from '../utils/llm-error.js';
+// T04176 降级检索取词：中文问题按空白切词只剩整句，需先抽关键词再交给 searchPages
+import { extractSearchKeywords } from '../utils/query-keywords.js';
 // FR-19 引用置信：把 harness/fallback 产出的 string[] refs 升级为携带三信号（权威/完整/复核）+ 时效的对象数组。
 // 为什么在顶层做统一升级：refs 最终只有 harness/fallback 两处产出，顶层包装一次即可覆盖全部降级链，
 // 避免在每个 yield refs 点各插一遍转换逻辑（DRY + 降低遗忘风险）。
@@ -859,7 +863,12 @@ async function* queryWithSearchFallback(
 ): AsyncGenerator<AnswerChunk, void, unknown> {
   // 1. 直接调 searchPages 拿到 Top-K 相关页面
   // 截断避免长问题拖慢搜索（searchPages 按 includes 匹配，长字符串扫描慢）
-  const keywords = input.question.slice(0, 100);
+  // T04176：先抽关键词再搜。为什么不能直接把问题原文丢给 searchPages：searchPages 的口径是
+  // 「按空白切词 + 逐词 includes」，中文没有空格，整句会作为**一个**词项去匹配——页面正文必须
+  // 逐字包含整句才算命中，中文问句因此几乎必然 0 命中、必然 throw、必然落到兜底文案。
+  // 抽不出词（纯符号/纯虚词问句）时退回原文，保持与改造前一致，不让它变成「无需检索」。
+  const rawQuestion = input.question.slice(0, 100);
+  const keywords = extractSearchKeywords(rawQuestion) || rawQuestion;
   const hits = await searchPages(vault, keywords, 5);
 
   if (hits.length === 0) {
@@ -1257,6 +1266,71 @@ async function runClarifyStage(params: {
   return { kind: 'continue', input: nextInput };
 }
 
+// ── T04176 降级链失败归因 ──
+// 为什么需要：改造前两级是 `catch { stage('harness-failed') }`，错误对象被丢掉，日志只有 phase
+// 没有原因；用户侧则永远只看到同一句「知识库未覆盖此问题，或当前问答服务暂不可用。」。
+// 「库里没有」和「服务挂了」是两件事，混在一句话里等于两件事都没说——SRS 统计 45 条问答里 39 条
+// 落到这里，靠这句文案无法归因，只能靠人肉复现。现在按原因分类记日志，并给对应的文案。
+
+// 降级链第 2 级用固定消息表达「检索没命中」/「命中页全部读取失败」：那是内容缺失，不是服务故障
+const NO_COVERAGE_PATTERN = /^search fallback: (no hits|all page reads failed)$/;
+
+// 记日志前先把疑似密钥抹掉：provider 的错误信息有时会把请求 URL 整条回显，
+// BYOK 场景下那条 URL 可能就带着用户自己的 key。兜底归因不该顺手把密钥写进日志文件。
+const SECRET_PATTERN = /(sk-[A-Za-z0-9_-]{6,}|Bearer\s+\S+|(?:api[_-]?key|access[_-]?token|secret|key|token)=[^\s&]+)/gi;
+
+export type QueryFailureKind = 'no_coverage' | 'service_error';
+
+export interface QueryFailure {
+  level: 'harness' | 'fallback';
+  kind: QueryFailureKind;
+  // 细分来源：no_hits / page_read_failed，或 LLM 错误分类（service_down、timeout、auth…）
+  category: string;
+  // 压成一行、截断、脱敏，只进服务端日志，不透给前端（原始错误可能带 provider 的整页 HTML）
+  reason: string;
+}
+
+export function describeQueryFailure(level: QueryFailure['level'], err: unknown): QueryFailure {
+  const message = err instanceof Error ? err.message : String(err);
+  const reason = message.split('\n')[0].slice(0, 160).replaceAll(SECRET_PATTERN, '[已脱敏]');
+  if (NO_COVERAGE_PATTERN.test(message)) {
+    return {
+      level,
+      kind: 'no_coverage',
+      category: message === 'search fallback: no hits' ? 'no_hits' : 'page_read_failed',
+      reason,
+    };
+  }
+  // 复用 LLM 错误分类：provider 故障/超时/限流/认证各有特征，比这里再造一套正则口径靠谱
+  return { level, kind: 'service_error', category: friendlyLlmError(err).category, reason };
+}
+
+// 用户可见文案。两条都保留需求 AC-03-2 要求的「明确说明未覆盖」语义，但各自只讲自己那件事，
+// 并把下一步动作写清楚（换关键词 vs 查配置），避免用户对着同一句话反复重试。
+export const FALLBACK_NO_COVERAGE_TEXT =
+  '知识库未覆盖此问题：没有检索到与问题相关的页面。' +
+  '可以换个说法、改用页面里出现过的关键词再问一次；若相关内容是刚投递的，请先确认它已编译入库。';
+export const FALLBACK_SERVICE_ERROR_TEXT =
+  '当前问答服务暂不可用：深度问答与降级检索两次尝试都没有完成，' +
+  '原因已记入服务端日志（[query-stage] harness-failed / fallback-failed）。请稍后重试；' +
+  '若持续出现，请在「配置中心 → AI 服务」检查模型配置与网络。';
+
+export function composeFallbackText(failures: readonly QueryFailure[]): string {
+  // 定性看「最后一级」（降级链第 2 级）的失败原因：它是「纯检索 + 单轮生成」，
+  // 由它说「没检索到」就是库里真没有；此时 harness 的异常只补一句，不抢主线。
+  // 反过来，若第 2 级本身是故障（LLM 不可达/限流…），就不能对用户说「未覆盖」——
+  // 那正是本单主诉：把可修复的配置故障伪装成知识库缺陷，用户反复换关键词也没用。
+  const proximate = [...failures].reverse().find((f) => f.level === 'fallback') ?? failures[failures.length - 1];
+  if (proximate?.kind === 'no_coverage') {
+    const harnessBroke = failures.some((f) => f.level === 'harness' && f.kind === 'service_error');
+    return harnessBroke
+      ? `${FALLBACK_NO_COVERAGE_TEXT}\n另：本轮深度问答未完成（原因已记入服务端日志），可稍后重试。`
+      : FALLBACK_NO_COVERAGE_TEXT;
+  }
+  // 兜底链全故障，或异常发生在本不该出现的时机（failures 为空）——一律按「暂不可用」说更安全
+  return FALLBACK_SERVICE_ERROR_TEXT;
+}
+
 export async function* queryWorkflow(
   harnessConfig: HarnessConfig,
   vault: VaultService,
@@ -1287,6 +1361,9 @@ export async function* queryWorkflow(
   // T04072 图拓邻居收集器：harness/fallback 的 search_pages 命中页拓到的邻居路径，
   // 供 done 时 upgradeRefs 标记 origin='neighbor'（配置关闭时恒为空数组）
   const neighborSink: string[] = [];
+  // T04176 降级链失败收集器：两级各自的失败原因（kind/category/reason），
+  // 兜底文案据此在「库里没有」与「服务没通」之间二选一
+  const failures: QueryFailure[] = [];
 
   // ── 阶段耗时埋点（logs-review 诊断项，纯增量）──
   // 与路由层 query-pipeline 日志（accepted/first-token/done）配合，定位 143s 级长耗时卡点。
@@ -1350,9 +1427,12 @@ export async function* queryWorkflow(
     }
     harnessSucceeded = true;
     stage('harness-done');
-  } catch {
+  } catch (err) {
     // harness 失败（LLM 异常、预算耗尽、工具循环错误），落入降级链
-    stage('harness-failed');
+    // T04176：记下原因（旧实现 `catch {}` 丢掉 err，线上无从归因）
+    const failure = describeQueryFailure('harness', err);
+    failures.push(failure);
+    stage('harness-failed', { kind: failure.kind, category: failure.category, reason: failure.reason });
   }
 
   if (harnessSucceeded) return;
@@ -1372,9 +1452,12 @@ export async function* queryWorkflow(
     }
     fallbackSucceeded = true;
     stage('fallback-done');
-  } catch {
+  } catch (err) {
     // fallback 也失败，落入兜底
-    stage('fallback-failed');
+    // T04176：同上，兜底文案要能对上真实原因
+    const failure = describeQueryFailure('fallback', err);
+    failures.push(failure);
+    stage('fallback-failed', { kind: failure.kind, category: failure.category, reason: failure.reason });
   }
 
   if (fallbackSucceeded) return;
@@ -1383,7 +1466,8 @@ export async function* queryWorkflow(
   // 为什么不包装兜底：兜底是无相关结果场景，multimodal 必然失败（无 context pages），直接 yield 节省调用
   // 兜底文本也按 outputModes.answer 过滤（关闭 answer 时不发任何兜底文本）
   if (shouldEmit('answer', outputModes)) {
-    yield { text: '知识库未覆盖此问题，或当前问答服务暂不可用。' };
+    // T04176：按失败原因选文案——库里真没有 vs 服务没跑通，是两句不同的话
+    yield { text: composeFallbackText(failures) };
   }
   stage('workflow-done');
   yield { refs: [], done: true };
