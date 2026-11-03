@@ -5305,7 +5305,7 @@ async function importConfig() {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.18em;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   text-transform: uppercase;
   margin-bottom: 2px;
 }
@@ -5608,7 +5608,7 @@ async function importConfig() {
 }
 
 .section-tag {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.1em;
@@ -5649,9 +5649,9 @@ async function importConfig() {
 }
 
 .neon-btn:hover:not(.is-disabled) {
-  border-color: var(--neon-cyan) !important;
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff)) !important;
   box-shadow: var(--glow-cyan) !important;
-  color: var(--neon-cyan) !important;
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff)) !important;
 }
 
 /* 主按钮：渐变填充 */
@@ -5682,7 +5682,7 @@ async function importConfig() {
 }
 
 .schema-editor :deep(.el-textarea__inner):focus {
-  border-color: var(--neon-cyan) !important;
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff)) !important;
   box-shadow: 0 0 16px var(--accent-cyan-a30) !important;
 }
 
@@ -5728,7 +5728,7 @@ async function importConfig() {
 }
 
 .block-bracket {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   text-shadow: 0 0 8px var(--accent-cyan-a50);
 }
 
@@ -5768,7 +5768,7 @@ async function importConfig() {
 .key-status.set {
   background: var(--accent-cyan-a15);
   border-color: var(--accent-cyan-a50);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .key-status.unset {
@@ -5797,7 +5797,7 @@ async function importConfig() {
 .key-badge-shared {
   background: var(--accent-cyan-a15);
   border-color: var(--accent-cyan-a40);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .env-name {
@@ -5848,7 +5848,7 @@ async function importConfig() {
   border-radius: 6px;
   font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .reload-bar {
@@ -5881,7 +5881,7 @@ async function importConfig() {
 }
 
 .reload-applied strong {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .applied-tag {
@@ -5891,7 +5891,7 @@ async function importConfig() {
   border-radius: var(--radius-pill);
   font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .reload-warn {
@@ -5976,7 +5976,7 @@ async function importConfig() {
 .commit-hash {
   font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: var(--accent-cyan-a10);
   border: 1px solid var(--accent-cyan-a25);
   padding: 2px 8px;
@@ -6059,7 +6059,7 @@ async function importConfig() {
 }
 
 .diff-line.add .line-prefix {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .diff-line.del .line-prefix {
@@ -6089,7 +6089,7 @@ async function importConfig() {
   color: var(--text-soft);
   background: var(--accent-purple-a06);
   border: 1px solid var(--accent-purple-a20);
-  border-left: 3px solid var(--neon-cyan);
+  border-left: 3px solid var(--accent-readable, var(--neon-cyan, #00f5ff));
   border-radius: var(--radius-card);
 }
 
@@ -6098,7 +6098,7 @@ async function importConfig() {
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.04em;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: var(--accent-cyan-a10);
   border: 1px solid var(--accent-cyan-a30);
   border-radius: 999px;
@@ -6215,16 +6215,16 @@ async function importConfig() {
 }
 
 .preset-tag:hover {
-  border-color: var(--neon-cyan);
-  color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: var(--accent-cyan-a10);
   box-shadow: var(--glow-cyan);
 }
 
 .preset-tag.active {
   background: var(--accent-cyan-a15);
-  border-color: var(--neon-cyan);
-  color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   box-shadow: 0 0 12px var(--accent-cyan-a30);
 }
 
@@ -6263,11 +6263,11 @@ async function importConfig() {
 }
 
 .form-input :deep(.el-input__wrapper:hover) {
-  border-color: var(--neon-cyan) !important;
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff)) !important;
 }
 
 .form-input :deep(.el-input__wrapper.is-focus) {
-  border-color: var(--neon-cyan) !important;
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff)) !important;
   box-shadow: 0 0 12px var(--accent-cyan-a30) !important;
 }
 
@@ -6296,7 +6296,7 @@ async function importConfig() {
 .test-result.ok {
   background: linear-gradient(135deg, var(--accent-cyan-a12), var(--accent-cyan-a03));
   border: 1px solid var(--accent-cyan-a35);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .test-result.fail {
@@ -6368,7 +6368,7 @@ async function importConfig() {
   border: 1px solid var(--accent-cyan-a30);
   border-radius: 6px;
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* §5.2 联网搜索配置区块 */
@@ -6594,7 +6594,7 @@ async function importConfig() {
 .qq-section .section-tag {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   letter-spacing: 2px;
   display: block;
   margin-bottom: 4px;
@@ -6653,7 +6653,7 @@ async function importConfig() {
 .rule-label code {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: var(--accent-cyan-a10);
   padding: 2px 6px;
   border-radius: 4px;
@@ -6751,7 +6751,9 @@ async function importConfig() {
   font-weight: 700;
   font-family: var(--font-mono);
 }
-.pattern-status.valid { color: var(--neon-cyan); }
+.pattern-status.valid {
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+}
 .pattern-status.invalid { color: var(--neon-pink); }
 
 .pattern-input.pattern-valid :deep(.el-input__inner) {
@@ -6915,7 +6917,7 @@ async function importConfig() {
 }
 
 .test-running {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   padding: 8px;
 }
 
@@ -7007,7 +7009,7 @@ async function importConfig() {
 }
 
 .migrate-file-trigger:hover {
-  border-color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .migrate-file-name {
