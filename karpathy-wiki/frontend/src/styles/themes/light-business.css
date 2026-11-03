@@ -47,8 +47,9 @@
   --accent-readable: #1554d1;
   /* T04448 粉/紫前景压暗值：本主题 --accent-pink-base #d93636（危险红）在粉底上 4.01:1，
      向黑混合 10% 后 4.78:1；紫侧 base #1554d1 本身达标，直接锁定为前景值。 */
-  --pink-readable: #c33131;
+  --pink-readable: #b52e2e;
   --purple-readable: #1554d1;
+  --lime-readable: #258553;
   --warning-readable: #9e5d00;
 
   /* 语义状态色（T01728）：浅色主题覆盖 :root 暗色默认值 */

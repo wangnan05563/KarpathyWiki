@@ -218,3 +218,39 @@ export function findBareForegroundUses(
   }
   return violations;
 }
+
+/** 前景属性：含 border / outline 简写——简写里的颜色同样是看得见的前景 */
+export const FOREGROUND_PROPS = /^(?:color|border-color|border-(?:left|right|top|bottom)-color|outline-color|border|border-(?:left|right|top|bottom)|outline)$/;
+
+/**
+ * 精确口径扫描（比行锚定版更准，两者互补）：
+ * 逐个 var() 引用定位 → 回溯/前进得到它所在的声明 → 只在「前景属性 + 基色 token + 表达式内无 readable」时判违规。
+ * 这样能同时避开两类失真：
+ *   - `--accent-purple-a15` 这类 tint（按口径是装饰底色）不会被当成基色裸用；
+ *   - 单行规则 `.x { color: var(--neon-cyan); }` 与 `border: 1px solid var(--neon-cyan)` 简写不会漏报。
+ */
+export function findBareBaseForegroundUses(
+  src: string,
+  opts: { baseTokens: RegExp[]; readable?: RegExp },
+): string[] {
+  const readable = opts.readable ?? /--[\w-]+-readable/; // 任意 readable 家族都算包裹：家族配对对不对由数值清单负责，这里只判「有没有裸用基色」
+  const css = stripComments(src.slice(src.lastIndexOf('<style')));
+  const violations: string[] = [];
+  for (const m of css.matchAll(/var\(\s*(--[\w-]+)(?![\w-])/g)) {
+    const token = m[1];
+    const at = m.index ?? 0;
+    if (!opts.baseTokens.some((re) => re.test(token))) continue;
+    let s = at;
+    while (s > 0 && !/[;{}]/.test(css[s - 1])) s--;
+    let e = at;
+    while (e < css.length && !/[;{}]/.test(css[e])) e++;
+    const decl = css.slice(s, e).trim();
+    const colon = decl.indexOf(':');
+    if (colon < 0) continue;
+    const prop = decl.slice(0, colon).trim().replace(/\s+/g, ' ');
+    if (!FOREGROUND_PROPS.test(prop)) continue;
+    if (readable.test(decl.slice(colon + 1))) continue;
+    violations.push(`${prop} → ${decl.slice(colon + 1).replace(/\s+/g, ' ').slice(0, 110)}`);
+  }
+  return [...new Set(violations)];
+}

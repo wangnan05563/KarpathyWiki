@@ -1132,7 +1132,7 @@ onMounted(() => loadPages());
 
         <!-- ① 可删除冗余页面 -->
         <div v-if="aiResult.redundant.length" class="ai-sub">
-          <div class="ai-sub-title" style="color: var(--neon-magenta)">① 可安全删除的冗余页面</div>
+          <div class="ai-sub-title" style="color: var(--pink-readable, var(--accent-pink, #ff006e))">① 可安全删除的冗余页面</div>
           <div v-for="(item, idx) in aiResult.redundant" :key="'r' + idx" class="ai-item">
             <span class="ai-item-path">{{ item.path }}</span>
             <span class="ai-item-reason">{{ item.reason }}</span>
@@ -1141,7 +1141,7 @@ onMounted(() => loadPages());
 
         <!-- ② 可合并去重页面 -->
         <div v-if="aiResult.duplicates.length" class="ai-sub">
-          <div class="ai-sub-title" style="color: var(--neon-pink)">② 可合并去重的重复页面</div>
+          <div class="ai-sub-title" style="color: var(--pink-readable, var(--accent-pink, #ff6496))">② 可合并去重的重复页面</div>
           <div v-for="(g, idx) in aiResult.duplicates" :key="'d' + idx" class="ai-item ai-group">
             <div class="ai-item-reason">{{ g.reason }}</div>
             <ul class="ai-group-paths">
@@ -1155,7 +1155,7 @@ onMounted(() => loadPages());
 
         <!-- ③ 建议重命名页面 -->
         <div v-if="aiResult.renames.length" class="ai-sub">
-          <div class="ai-sub-title" style="color: var(--neon-cyan)">③ 建议重命名的页面</div>
+          <div class="ai-sub-title" style="color: var(--accent-readable, var(--neon-cyan, #00f5ff))">③ 建议重命名的页面</div>
           <div v-for="(item, idx) in aiResult.renames" :key="'n' + idx" class="ai-item">
             <span class="ai-item-path">{{ item.currentName }}</span>
             <el-icon class="ai-arrow"><Right /></el-icon>
@@ -1262,7 +1262,7 @@ onMounted(() => loadPages());
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.18em;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   text-transform: uppercase;
   margin-bottom: 2px;
 }
@@ -1321,14 +1321,14 @@ onMounted(() => loadPages());
 .sel-summary {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .perm-note {
   margin: 8px 0 0;
   padding: 8px 10px;
   background: var(--bg-scene);
-  border-left: 2px solid var(--neon-pink);
+  border-left: 2px solid var(--pink-readable, var(--accent-pink, #ff6496));
   border-radius: 6px;
   font-size: 12px;
   color: var(--text-soft);
@@ -1405,11 +1405,11 @@ onMounted(() => loadPages());
 .dc-th.is-center { justify-content: center; }
 .dc-th.is-right { justify-content: flex-end; }
 .dc-th.is-sortable { cursor: pointer; }
-.dc-th.is-sortable:hover { color: var(--neon-cyan); }
-.dc-th.is-sortable:focus-visible { outline: 1px solid var(--neon-cyan); outline-offset: -1px; }
+.dc-th.is-sortable:hover { color: var(--accent-readable, var(--neon-cyan, #00f5ff)); }
+.dc-th.is-sortable:focus-visible { outline: 1px solid var(--accent-readable, var(--neon-cyan, #00f5ff)); outline-offset: -1px; }
 
 .dc-sort-mark {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   font-size: 11px;
 }
 
@@ -1509,7 +1509,7 @@ onMounted(() => loadPages());
 }
 
 .issue-card:not(.is-clean) .status-value {
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--accent-pink, #ff6496));
   text-shadow: 0 0 12px var(--accent-pink-a10, rgba(255, 100, 180, 0.3));
 }
 
@@ -1519,7 +1519,7 @@ onMounted(() => loadPages());
 }
 
 .issue-card.is-active {
-  border-color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .issue-actions {
@@ -1669,7 +1669,7 @@ onMounted(() => loadPages());
   font-family: var(--font-display);
   font-size: 22px;
   font-weight: 900;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   text-shadow: 0 0 12px var(--accent-cyan-a30);
   margin-bottom: 6px;
 }
@@ -1701,7 +1701,7 @@ onMounted(() => loadPages());
 }
 
 .progress-bar.success {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* 疑似重复对区块：与系统清理页 cleanup-block 同款卡片 */
@@ -1730,7 +1730,7 @@ onMounted(() => loadPages());
 }
 
 .block-bracket {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   text-shadow: 0 0 8px var(--accent-cyan-a50);
 }
 
@@ -1768,12 +1768,12 @@ onMounted(() => loadPages());
 
 .dup-title-a {
   font-weight: 700;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .dup-title-b {
   font-weight: 700;
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--accent-pink, #ff6496));
 }
 
 .dup-vs {
@@ -1793,7 +1793,7 @@ onMounted(() => loadPages());
 }
 
 .dup-similarity {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .dup-reason {
@@ -1831,12 +1831,12 @@ onMounted(() => loadPages());
 }
 
 .group-index {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   font-weight: 700;
 }
 
 .group-size {
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--accent-pink, #ff6496));
 }
 
 .group-words {
@@ -1866,7 +1866,7 @@ onMounted(() => loadPages());
 
 .group-pages li.representative {
   background: var(--accent-cyan-a10, rgba(0, 255, 200, 0.1));
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .page-path {
@@ -1903,11 +1903,11 @@ onMounted(() => loadPages());
 }
 
 .diff-path-a {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .diff-path-b {
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--accent-pink, #ff6496));
 }
 
 .diff-lines {
@@ -1958,11 +1958,11 @@ onMounted(() => loadPages());
 }
 
 .diff-line-add .diff-line-marker {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .diff-line-add .diff-line-content {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .diff-line-del {
@@ -1970,30 +1970,30 @@ onMounted(() => loadPages());
 }
 
 .diff-line-del .diff-line-marker {
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--accent-pink, #ff6496));
 }
 
 .diff-line-del .diff-line-content {
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--accent-pink, #ff6496));
 }
 
 /* 评分色：用主题变量而非 Element Plus 默认硬编码，确保主题切换一致 */
 .score-excellent {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   font-weight: 700;
 }
 
 .score-good {
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--accent-purple, #8a5cf5));
 }
 
 .score-needs-work {
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--accent-pink, #ff6496));
 }
 
 .score-poor,
 .score-critical {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--accent-pink, #ff006e));
   font-weight: 700;
 }
 
@@ -2087,7 +2087,7 @@ onMounted(() => loadPages());
 }
 
 .ai-item-new {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   font-weight: 700;
   word-break: break-all;
 }
@@ -2099,7 +2099,7 @@ onMounted(() => loadPages());
 }
 
 .ai-arrow {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   font-size: 14px;
 }
 
@@ -2127,6 +2127,6 @@ onMounted(() => loadPages());
 
 .ai-group-paths li.rep {
   background: var(--accent-cyan-a10, rgba(0, 255, 200, 0.1));
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 </style>

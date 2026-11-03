@@ -56,8 +56,9 @@
   --accent-readable: #715d45;
   /* T04448 粉/紫前景压暗值：本主题粉=棕金 #8b7355（在淡粉底上 3.89:1），向黑混合 13% 后 4.81:1；
      紫侧 base 就是本主题的墨色 #1a1a1a，本身就达标，直接锁定。 */
-  --pink-readable: #7a654a;
+  --pink-readable: #735f46;
   --purple-readable: #1a1a1a;
+  --lime-readable: #827149;
   --warning-readable: #9e5d00;
 
   /* 语义状态色（T01728）：米金黑优雅适配 */

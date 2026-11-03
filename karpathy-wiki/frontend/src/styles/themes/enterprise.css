@@ -48,8 +48,9 @@
   --accent-readable: #046e80;
   /* T04448 粉/紫前景压暗值：本主题 base #3b82f6 / #2563eb 在白卡片 tint 面上为 3.28 / 4.50:1，
      同色相向黑混合 20% / 3% 后实测 4.79 / 4.66:1。 */
-  --pink-readable: #2f68c5;
+  --pink-readable: #2d63bb;
   --purple-readable: #2461e5;
+  --lime-readable: #0c855d;
   --warning-readable: #a05e00;
 
   /* 语义状态色（T01728）：蓝灰商务适配 */

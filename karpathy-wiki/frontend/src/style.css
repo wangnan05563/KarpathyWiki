@@ -85,8 +85,10 @@
    * --purple-readable 默认值取提亮紫，因为 --accent-purple-base #b026ff 即使在深底卡片上
    * 也只有 4.43:1；浅底主题各自覆盖为同色相压暗值（逐主题数值见各 themes/*.css）。
    * 判定同样由 test/qa-contrast-pairing.test.ts 按 WCAG AA 实算。 */
-  --pink-readable: var(--accent-pink, #ff6496);
+  --pink-readable: #ff338b;
   --purple-readable: #bc47ff;
+  /* T04449：成功绿的前景口径（图标/状态文字）。深底主题沿用霓虹绿，浅底主题一律压暗到 ≥4.6:1。 */
+  --lime-readable: var(--neon-lime, #c1ff3e);
 
   /* URL 探测状态三色（Ingest 代理探测标签） */
   --probe-ok: #4ade80;

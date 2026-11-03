@@ -318,15 +318,17 @@ describe('T04448 粉/紫前景口径守护（不得再裸用 --accent-pink / --a
       if ('stops' in r) throw new Error(`${token} 不该解析成渐变`);
       return rgbToHex(r.solid);
     };
+    // T04449 第三组：清洗/体检页把粉族文字落到 --accent-pink-a20/a05/a15 渐变面上，
+    // 旧值实测只有 4.11~4.44（< 4.5），故二次压暗/提亮到各自 ≥4.6；纯文本面不受影响。
     const EXPECT: Record<string, { pink: string; purple: string }> = {
-      'default(:root)': { pink: '#ff006e', purple: '#bc47ff' },
-      creative: { pink: '#ff006e', purple: '#bc47ff' },
-      ecommerce: { pink: '#b34b25', purple: '#6757db' },
-      enterprise: { pink: '#2f68c5', purple: '#2461e5' },
-      'light-business': { pink: '#c33131', purple: '#1554d1' },
+      'default(:root)': { pink: '#ff338b', purple: '#bc47ff' },
+      creative: { pink: '#ff338b', purple: '#bc47ff' },
+      ecommerce: { pink: '#ac4824', purple: '#6757db' },
+      enterprise: { pink: '#2d63bb', purple: '#2461e5' },
+      'light-business': { pink: '#b52e2e', purple: '#1554d1' },
       macaron: { pink: '#8c6273', purple: '#7d6591' },
-      portfolio: { pink: '#7a654a', purple: '#1a1a1a' },
-      product: { pink: '#ff0080', purple: '#bc47ff' },
+      portfolio: { pink: '#735f46', purple: '#1a1a1a' },
+      product: { pink: '#ff2994', purple: '#bc47ff' },
     };
     const LIGHT = ['ecommerce', 'enterprise', 'light-business', 'macaron', 'portfolio'];
     for (const [name, exp] of Object.entries(EXPECT)) {

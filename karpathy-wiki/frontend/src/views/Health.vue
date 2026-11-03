@@ -1035,11 +1035,11 @@ onMounted(() => {
 /* 批量修复按钮：品红渐变突出，区别于普通青蓝 neon-btn */
 .batch-btn {
   border-color: var(--accent-pink-a50) !important;
-  color: var(--neon-magenta) !important;
+  color: var(--pink-readable, var(--accent-pink, #ff006e)) !important;
 }
 
 .batch-btn:hover:not(.is-disabled) {
-  border-color: var(--neon-magenta) !important;
+  border-color: var(--pink-readable, var(--accent-pink, #ff006e)) !important;
   box-shadow: 0 0 16px var(--accent-pink-a40) !important;
 }
 
@@ -1078,9 +1078,9 @@ onMounted(() => {
 }
 
 .neon-btn:hover:not(.is-disabled) {
-  border-color: var(--neon-cyan) !important;
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff)) !important;
   box-shadow: var(--glow-cyan) !important;
-  color: var(--neon-cyan) !important;
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff)) !important;
 }
 
 /* 摘要徽章：健康=青蓝渐变，警告=品红渐变 */
@@ -1109,14 +1109,14 @@ onMounted(() => {
 .summary-item.healthy {
   background: linear-gradient(135deg, var(--accent-cyan-a20), var(--accent-cyan-a05));
   border-color: var(--accent-cyan-a50);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   box-shadow: 0 0 20px var(--accent-cyan-a30);
 }
 
 .summary-item.warning {
   background: linear-gradient(135deg, var(--accent-pink-a20), var(--accent-pink-a05));
   border-color: var(--accent-pink-a50);
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--accent-pink, #ff006e));
   box-shadow: 0 0 20px var(--accent-pink-a30);
 }
 
@@ -1144,7 +1144,7 @@ onMounted(() => {
 .search-hint {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .toolbar-spacer {
@@ -1158,7 +1158,7 @@ onMounted(() => {
 }
 
 .tool-btn:hover {
-  color: var(--neon-cyan) !important;
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff)) !important;
 }
 
 .selection-bar {
@@ -1178,7 +1178,7 @@ onMounted(() => {
 .selection-text {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* ===== 作业面板 ===== */
@@ -1211,7 +1211,7 @@ onMounted(() => {
 }
 
 .job-title {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--accent-pink, #ff006e));
   letter-spacing: 0.08em;
   flex-shrink: 0;
 }
@@ -1226,12 +1226,12 @@ onMounted(() => {
 
 .job-status.st-running {
   border-color: var(--accent-pink-a50);
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--accent-pink, #ff006e));
 }
 
 .job-status.st-completed {
   border-color: var(--accent-cyan-a50);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .job-current {
@@ -1258,7 +1258,7 @@ onMounted(() => {
 }
 
 .job-stat.ok {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* 未消解：流程没报错但问题还在，用琥珀色与「失败」区分开 */
@@ -1267,7 +1267,7 @@ onMounted(() => {
 }
 
 .job-stat.fail {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--accent-pink, #ff006e));
 }
 
 .job-actions {
@@ -1294,7 +1294,7 @@ onMounted(() => {
 }
 
 .failed-item code {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--accent-pink, #ff006e));
   flex-shrink: 0;
 }
 
@@ -1318,7 +1318,7 @@ onMounted(() => {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 13px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   letter-spacing: 0.1em;
 }
 
@@ -1368,11 +1368,11 @@ onMounted(() => {
   font-family: var(--font-mono);
 }
 
-.icon-orphan { color: var(--neon-magenta); text-shadow: 0 0 8px var(--neon-magenta); }
-.icon-broken { color: var(--neon-purple); text-shadow: 0 0 8px var(--neon-purple); }
-.icon-stale { color: var(--neon-cyan); text-shadow: 0 0 8px var(--neon-cyan); }
-.icon-fix { color: var(--neon-lime); text-shadow: 0 0 8px var(--neon-lime); }
-.icon-review { color: var(--neon-magenta); text-shadow: 0 0 8px var(--neon-magenta); }
+.icon-orphan { color: var(--pink-readable, var(--accent-pink, #ff006e)); text-shadow: 0 0 8px var(--neon-magenta); }
+.icon-broken { color: var(--purple-readable, var(--accent-purple, #8a5cf5)); text-shadow: 0 0 8px var(--neon-purple); }
+.icon-stale { color: var(--accent-readable, var(--neon-cyan, #00f5ff)); text-shadow: 0 0 8px var(--neon-cyan); }
+.icon-fix { color: var(--lime-readable, var(--neon-lime, #c1ff3e)); text-shadow: 0 0 8px var(--neon-lime); }
+.icon-review { color: var(--pink-readable, var(--accent-pink, #ff006e)); text-shadow: 0 0 8px var(--neon-magenta); }
 
 .section-title {
   font-family: var(--font-display);
@@ -1396,13 +1396,13 @@ onMounted(() => {
   font-weight: 700;
   background: var(--accent-cyan-a15);
   border: 1px solid var(--accent-cyan-a40);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .section-count.has-issue {
   background: var(--accent-pink-a15);
   border-color: var(--accent-pink-a50);
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--accent-pink, #ff006e));
   box-shadow: 0 0 12px var(--accent-pink-a40);
 }
 
@@ -1436,7 +1436,7 @@ onMounted(() => {
 }
 
 .dir-head code {
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--accent-purple, #8a5cf5));
 }
 
 .list-more {
@@ -1448,7 +1448,7 @@ onMounted(() => {
 .no-issue {
   font-family: var(--font-mono);
   font-size: 13px;
-  color: var(--neon-lime);
+  color: var(--lime-readable, var(--neon-lime, #c1ff3e));
   padding: 8px 0;
   letter-spacing: 0.03em;
 }
@@ -1566,7 +1566,7 @@ onMounted(() => {
   background: var(--accent-cyan-a10);
   border: 1px solid var(--accent-cyan-a25);
   border-radius: 6px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   font-size: 11px;
   flex-shrink: 0;
 }
@@ -1578,6 +1578,6 @@ onMounted(() => {
 }
 
 .clear-logs-btn:hover {
-  color: var(--neon-magenta) !important;
+  color: var(--pink-readable, var(--accent-pink, #ff006e)) !important;
 }
 </style>

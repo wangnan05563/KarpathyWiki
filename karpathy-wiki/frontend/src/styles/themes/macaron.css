@@ -49,6 +49,7 @@
      后实测 4.85 / 4.72:1——色相保留、饱和度下沉，视觉上仍是粉/紫。 */
   --pink-readable: #8c6273;
   --purple-readable: #7d6591;
+  --lime-readable: #6a7854;
   --warning-readable: #a36000;
 
   /* 语义状态色（T01728）：柔和粉嫩适配 */
