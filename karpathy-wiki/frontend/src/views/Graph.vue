@@ -1205,7 +1205,7 @@ watch(loading, () => {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.18em;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   text-transform: uppercase;
   margin-bottom: 2px;
 }
@@ -1278,9 +1278,9 @@ watch(loading, () => {
 }
 
 .neon-btn:hover {
-  border-color: var(--neon-cyan) !important;
+  border-color: var(--accent-readable, var(--neon-cyan)) !important;
   box-shadow: var(--glow-cyan) !important;
-  color: var(--neon-cyan) !important;
+  color: var(--accent-readable, var(--neon-cyan)) !important;
 }
 
 .legend-bar {
@@ -1360,7 +1360,7 @@ watch(loading, () => {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 13px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   letter-spacing: 0.1em;
 }
 
@@ -1450,7 +1450,7 @@ watch(loading, () => {
 .group-count {
   font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-cyan-a10);
   border: 1px solid var(--accent-cyan-a30);
   padding: 2px 10px;
@@ -1486,7 +1486,7 @@ watch(loading, () => {
 .page-links {
   font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 /* FR-16-1 右键上下文菜单：浮层 + 毛玻璃 */
@@ -1516,11 +1516,11 @@ watch(loading, () => {
 
 .ctx-item:hover {
   background: var(--accent-purple-a15);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .ctx-item.ctx-close:hover {
-  color: var(--neon-pink, var(--accent-pink-a70));
+  color: var(--pink-readable, var(--neon-pink, var(--accent-pink-a70)));
 }
 
 .ctx-icon {
@@ -1568,7 +1568,7 @@ watch(loading, () => {
 
 .recommend-icon {
   font-size: 15px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .recommend-close {
@@ -1587,8 +1587,8 @@ watch(loading, () => {
 }
 
 .recommend-close:hover {
-  border-color: var(--neon-pink, var(--accent-pink-a70));
-  color: var(--neon-pink, var(--accent-pink-a70));
+  border-color: var(--pink-readable, var(--neon-pink, var(--accent-pink-a70)));
+  color: var(--pink-readable, var(--neon-pink, var(--accent-pink-a70)));
   transform: rotate(90deg);
 }
 
@@ -1609,7 +1609,7 @@ watch(loading, () => {
 .source-path {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-cyan-a10);
   padding: 2px 6px;
   border-radius: 4px;
@@ -1646,7 +1646,7 @@ watch(loading, () => {
 }
 
 .recommend-card:hover {
-  border-color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan));
   box-shadow: var(--glow-cyan);
 }
 
@@ -1670,7 +1670,7 @@ watch(loading, () => {
 .rec-score {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-cyan-a10);
   border: 1px solid var(--accent-cyan-a30);
   padding: 2px 8px;
@@ -1721,8 +1721,8 @@ watch(loading, () => {
 
 /* 顶部按钮激活态：蓝色描边，提示面板已打开 */
 .gap-active {
-  border-color: var(--neon-cyan) !important;
-  color: var(--neon-cyan) !important;
+  border-color: var(--accent-readable, var(--neon-cyan)) !important;
+  color: var(--accent-readable, var(--neon-cyan)) !important;
   box-shadow: var(--glow-cyan) !important;
 }
 
@@ -1752,15 +1752,15 @@ watch(loading, () => {
 
 /* T00276：实体子图激活态——与缺口洞察 gap-active 同风格，主题高亮反馈 */
 .entity-active {
-  border-color: var(--neon-magenta) !important;
-  color: var(--neon-magenta) !important;
+  border-color: var(--pink-readable, var(--neon-magenta)) !important;
+  color: var(--pink-readable, var(--neon-magenta)) !important;
   box-shadow: var(--glow-magenta, 0 0 12px rgba(255, 64, 129, 0.35)) !important;
 }
 
 /* T02464（G1）：查看全图激活态——青色高亮，与实体子图呼应 */
 .all-active {
-  border-color: var(--neon-cyan, #00f5ff) !important;
-  color: var(--neon-cyan, #00f5ff) !important;
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff)) !important;
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff)) !important;
   box-shadow: var(--glow-cyan, 0 0 12px rgba(0, 245, 255, 0.35)) !important;
 }
 
@@ -1772,7 +1772,7 @@ watch(loading, () => {
   line-height: 1.4;
 }
 .graph-hint b {
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* 面板：右侧浮层，与推荐面板同风格的毛玻璃卡片 */
@@ -1815,7 +1815,7 @@ watch(loading, () => {
 
 .gap-title-icon {
   font-size: 15px;
-  color: var(--neon-magenta, var(--accent-magenta-a70));
+  color: var(--pink-readable, var(--neon-magenta, var(--accent-magenta-a70)));
 }
 
 .gap-close {
@@ -1834,8 +1834,8 @@ watch(loading, () => {
 }
 
 .gap-close:hover {
-  border-color: var(--neon-pink, var(--accent-pink-a70));
-  color: var(--neon-pink, var(--accent-pink-a70));
+  border-color: var(--pink-readable, var(--neon-pink, var(--accent-pink-a70)));
+  color: var(--pink-readable, var(--neon-pink, var(--accent-pink-a70)));
   transform: rotate(90deg);
 }
 
@@ -1924,7 +1924,7 @@ watch(loading, () => {
 
 .gap-count {
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-cyan-a10);
   border: 1px solid var(--accent-cyan-a30);
   padding: 2px 8px;
@@ -1954,8 +1954,8 @@ watch(loading, () => {
 }
 
 .gap-chip:hover {
-  border-color: var(--neon-pink, var(--accent-pink-a70));
-  color: var(--neon-pink, var(--accent-pink-a70));
+  border-color: var(--pink-readable, var(--neon-pink, var(--accent-pink-a70)));
+  color: var(--pink-readable, var(--neon-pink, var(--accent-pink-a70)));
   box-shadow: var(--glow-pink, 0 0 12px var(--accent-pink-a40));
 }
 
@@ -1977,7 +1977,7 @@ watch(loading, () => {
 .gap-card-meta {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .gap-tag {
@@ -1993,8 +1993,8 @@ watch(loading, () => {
 }
 
 .gap-tag:hover {
-  color: var(--neon-cyan);
-  border-color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
+  border-color: var(--accent-readable, var(--neon-cyan));
 }
 
 /* 定位按钮 */
@@ -2027,7 +2027,7 @@ watch(loading, () => {
 .gap-pair-tags {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-cyan-a10);
   border: 1px solid var(--accent-cyan-a30);
   padding: 2px 8px;
@@ -2059,7 +2059,7 @@ watch(loading, () => {
 }
 
 .seg-control button:hover:not(.active) {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .seg-control button.active {
@@ -2099,7 +2099,7 @@ watch(loading, () => {
 
 .tour-icon {
   font-size: 16px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   flex-shrink: 0;
 }
 
@@ -2108,7 +2108,7 @@ watch(loading, () => {
 }
 
 .tour-text b {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .tour-close {
@@ -2125,8 +2125,8 @@ watch(loading, () => {
 }
 
 .tour-close:hover {
-  border-color: var(--neon-cyan);
-  color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan));
+  color: var(--accent-readable, var(--neon-cyan));
   box-shadow: var(--glow-cyan);
 }
 

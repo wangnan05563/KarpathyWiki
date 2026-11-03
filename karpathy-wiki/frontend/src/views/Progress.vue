@@ -786,7 +786,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 .head-tag {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   letter-spacing: 2px;
   display: block;
   margin-bottom: 6px;
@@ -862,7 +862,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 .head-model code {
   font-size: 12px;
   font-family: var(--font-mono);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .timeline {
@@ -903,19 +903,19 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 
 .tl-status.done {
   background: var(--accent-cyan-a15, rgba(0, 245, 255, 0.15));
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   border: 1px solid var(--accent-cyan-a40, rgba(0, 245, 255, 0.4));
 }
 
 .tl-status.error {
   background: var(--accent-pink-a15, rgba(255, 0, 110, 0.15));
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   border: 1px solid var(--accent-pink-a40, rgba(255, 0, 110, 0.4));
 }
 
 .tl-status.running {
   background: var(--accent-pink-a15, rgba(255, 62, 201, 0.15));
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--neon-pink));
   border: 1px solid var(--accent-pink-a40, rgba(255, 62, 201, 0.4));
 }
 
@@ -943,7 +943,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 }
 
 .page-icon {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .tl-page code {
@@ -953,7 +953,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   border-radius: 6px;
   font-size: 12px;
   font-family: var(--font-mono);
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 /* §优化方案1：单文件模式容器，包裹进度条 + 时间线 */
@@ -988,7 +988,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   font-family: var(--font-display);
   font-weight: 700;
   margin-bottom: 12px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   letter-spacing: 1px;
   font-size: 14px;
 }
@@ -1011,7 +1011,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   border-radius: 6px;
   font-size: 12px;
   font-family: var(--font-mono);
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .result-meta {
@@ -1020,7 +1020,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 }
 
 .result-meta strong {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
 }
 
 .restart-bar {
@@ -1042,7 +1042,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 
 .current-model-bar code {
   font-family: var(--font-mono);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-cyan-a08, rgba(0, 245, 255, 0.08));
   padding: 2px 8px;
   border-radius: 4px;
@@ -1078,7 +1078,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
   border-radius: var(--radius-card);
   font-size: 14px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .cache-icon {
@@ -1112,7 +1112,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 }
 
 .title-bracket {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   font-weight: 400;
 }
 
@@ -1144,7 +1144,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 
 .run-item:hover {
   background: var(--accent-purple-a12, rgba(176, 38, 255, 0.12));
-  border-color: var(--neon-purple);
+  border-color: var(--purple-readable, var(--neon-purple));
 }
 
 .run-info {
@@ -1159,7 +1159,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 .run-id {
   font-family: var(--font-mono);
   font-weight: 700;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .run-meta {
@@ -1197,11 +1197,11 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 }
 
 .log-line.error {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
 }
 
 .log-line.done {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .log-ts {
@@ -1210,7 +1210,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 }
 
 .log-step {
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
   flex-shrink: 0;
   font-weight: 600;
 }
@@ -1220,7 +1220,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   background: var(--accent-purple-a15, rgba(176, 38, 255, 0.15));
   border-radius: 4px;
   flex-shrink: 0;
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .log-token {
@@ -1234,7 +1234,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 }
 
 .log-err {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   flex-shrink: 0;
 }
 
@@ -1264,7 +1264,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 
 .rejected-title {
   font-size: 13px;
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   margin-bottom: 8px;
   font-weight: 600;
 }
@@ -1291,7 +1291,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   border-radius: 4px;
   font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .rejected-reason {
@@ -1314,7 +1314,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 }
 
 .batch-group.running {
-  border-color: var(--neon-pink);
+  border-color: var(--pink-readable, var(--neon-pink));
 }
 
 .batch-group.done {
@@ -1336,7 +1336,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 .batch-group-idx {
   font-family: var(--font-mono);
   font-weight: 700;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   font-size: 12px;
 }
 
@@ -1361,17 +1361,17 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 
 .batch-group-status.running {
   background: var(--accent-pink-a15, rgba(255, 62, 201, 0.15));
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--neon-pink));
 }
 
 .batch-group-status.done {
   background: var(--accent-cyan-a15, rgba(0, 245, 255, 0.15));
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .batch-group-status.error {
   background: var(--accent-pink-a15, rgba(255, 0, 110, 0.15));
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
 }
 
 /* T03591：分组重试入口与尝试次数标记 */
@@ -1407,7 +1407,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 .batch-tl-step {
   flex-shrink: 0;
   font-family: var(--font-mono);
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
   font-weight: 600;
 }
 
@@ -1421,7 +1421,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   border-radius: 3px;
   font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .batch-group-error {
@@ -1429,7 +1429,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   padding: 8px 12px;
   background: var(--accent-pink-a08, rgba(255, 0, 110, 0.08));
   border-radius: 6px;
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   font-size: 12px;
 }
 
@@ -1454,6 +1454,6 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   border-radius: 4px;
   font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 </style>

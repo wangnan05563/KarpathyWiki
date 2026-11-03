@@ -48,7 +48,7 @@
      当前景在白卡片 tint 面上只有 1.58 / 2.00:1（最惨的一档），同色相向黑混合 45% / 38%
      后实测 4.85 / 4.72:1——色相保留、饱和度下沉，视觉上仍是粉/紫。 */
   --pink-readable: #8c6273;
-  --purple-readable: #7d6591;
+  --purple-readable: #7c6490;
   --lime-readable: #6a7854;
   --warning-readable: #a36000;
 

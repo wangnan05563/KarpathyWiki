@@ -229,12 +229,24 @@ export const FOREGROUND_PROPS = /^(?:color|border-color|border-(?:left|right|top
  *   - `--accent-purple-a15` 这类 tint（按口径是装饰底色）不会被当成基色裸用；
  *   - 单行规则 `.x { color: var(--neon-cyan); }` 与 `border: 1px solid var(--neon-cyan)` 简写不会漏报。
  */
+/**
+ * 取出 SFC 里**全部** `<style>` 块拼接（Browse.vue 有两个块：一个全局、一个 scoped）。
+ * 早期实现用 `lastIndexOf('<style')`，等于只看最后一个块——第一个块里的消费点会同时骗过
+ * token 级守卫与逐面清单，只有行级锁能兜住，这是口径扫描的真实盲区。
+ */
+export function styleText(src: string): string {
+  const blocks: string[] = [];
+  const re = /<style[^>]*>([\s\S]*?)<\/style>/g;
+  for (const m of src.matchAll(re)) blocks.push(m[1]);
+  return blocks.join('\n;\n');
+}
+
 export function findBareBaseForegroundUses(
   src: string,
   opts: { baseTokens: RegExp[]; readable?: RegExp },
 ): string[] {
   const readable = opts.readable ?? /--[\w-]+-readable/; // 任意 readable 家族都算包裹：家族配对对不对由数值清单负责，这里只判「有没有裸用基色」
-  const css = stripComments(src.slice(src.lastIndexOf('<style')));
+  const css = stripComments(styleText(src));
   const violations: string[] = [];
   for (const m of css.matchAll(/var\(\s*(--[\w-]+)(?![\w-])/g)) {
     const token = m[1];

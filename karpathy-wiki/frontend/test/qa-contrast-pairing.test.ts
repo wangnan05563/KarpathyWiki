@@ -111,7 +111,7 @@ describe('T04175 主题 token 解析', () => {
     expect(hexOf('macaron', '--accent-readable')).toBe('#2b7a6e');
     // portfolio 在 T04449 口径推广里再压暗一档：帮助页锚点 hover 的黑淡底
     // （--accent-purple-a12，本主题的「紫」即墨色）实测 4.36:1 → #715d45 后 4.81:1
-    expect(hexOf('portfolio', '--accent-readable')).toBe('#715d45');
+    expect(hexOf('portfolio', '--accent-readable')).toBe('#6f5b44');
     // readable 必须比原强调色更暗或相同（浅底主题只允许压暗，不允许提亮成霓虹）
     for (const name of ['ecommerce', 'enterprise', 'light-business', 'macaron', 'portfolio']) {
       const acc = resolve(`var(--accent-readable)`, themes.find((x) => x.name === name)!.decls);
@@ -320,15 +320,19 @@ describe('T04448 粉/紫前景口径守护（不得再裸用 --accent-pink / --a
     };
     // T04449 第三组：清洗/体检页把粉族文字落到 --accent-pink-a20/a05/a15 渐变面上，
     // 旧值实测只有 4.11~4.44（< 4.5），故二次压暗/提亮到各自 ≥4.6；纯文本面不受影响。
+    // 粉/紫 readable 的实测锁定值。两次收紧的成因：
+    //  · 粉族（T04449 第三组）——淡粉 tint 面上文字实测 4.11~4.44 < 4.5；
+    //  · 紫族（T04449 第四组）——`--accent-purple-a12/a15` 面上 4.34~4.37，6 个主题全中（含深底）；
+    //    product 的紫改不动 :root（深底要更亮才达标），故新增主题内覆盖。
     const EXPECT: Record<string, { pink: string; purple: string }> = {
-      'default(:root)': { pink: '#ff338b', purple: '#bc47ff' },
-      creative: { pink: '#ff338b', purple: '#bc47ff' },
-      ecommerce: { pink: '#ac4824', purple: '#6757db' },
-      enterprise: { pink: '#2d63bb', purple: '#2461e5' },
+      'default(:root)': { pink: '#ff338b', purple: '#bf4fff' },
+      creative: { pink: '#ff338b', purple: '#bf4fff' },
+      ecommerce: { pink: '#ac4824', purple: '#6354d3' },
+      enterprise: { pink: '#2d63bb', purple: '#235ddc' },
       'light-business': { pink: '#b52e2e', purple: '#1554d1' },
-      macaron: { pink: '#8c6273', purple: '#7d6591' },
+      macaron: { pink: '#8c6273', purple: '#7c6490' },
       portfolio: { pink: '#735f46', purple: '#1a1a1a' },
-      product: { pink: '#ff2994', purple: '#bc47ff' },
+      product: { pink: '#ff2994', purple: '#c051ff' },
     };
     const LIGHT = ['ecommerce', 'enterprise', 'light-business', 'macaron', 'portfolio'];
     for (const [name, exp] of Object.entries(EXPECT)) {

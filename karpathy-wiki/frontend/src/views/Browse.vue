@@ -2752,12 +2752,12 @@ onMounted(async () => {
 /* 悬浮反馈：仅背景色与文字色变化，无边框/光晕 */
 .head-collapse-btn:hover {
   background: var(--accent-purple-a15);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 /* 键盘可达：focus 有明确焦点环，满足 WCAG 焦点可见性 */
 .head-collapse-btn:focus-visible {
-  outline: 2px solid var(--neon-cyan);
+  outline: 2px solid var(--accent-readable, var(--neon-cyan));
   outline-offset: 1px;
 }
 
@@ -2785,13 +2785,13 @@ onMounted(async () => {
 }
 
 .head-expand-float:hover {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   border-color: var(--accent-cyan-a40);
 }
 
 /* 键盘可达：focus 有明确焦点环 */
 .head-expand-float:focus-visible {
-  outline: 2px solid var(--neon-cyan);
+  outline: 2px solid var(--accent-readable, var(--neon-cyan));
   outline-offset: 1px;
 }
 
@@ -2834,7 +2834,7 @@ onMounted(async () => {
 .head-tag {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   letter-spacing: 2px;
   display: block;
   margin-bottom: 2px;
@@ -2888,7 +2888,7 @@ onMounted(async () => {
 }
 
 .tree-collapse-btn:hover {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-purple-a12);
 }
 
@@ -2945,7 +2945,7 @@ onMounted(async () => {
 }
 
 .tree-expand-btn:hover {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 /* FR-11 看板/日历视图下放宽左侧面板，给多列/分组留出空间 */
@@ -2991,13 +2991,13 @@ onMounted(async () => {
 }
 
 .filter-more-btn:hover {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-purple-a12);
 }
 
 /* T02915：有生效筛选时按钮保持 active 态，让 popover 收起后状态仍可辨 */
 .filter-more-btn.is-active {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-purple-a12);
   border-color: var(--accent-cyan-a40);
 }
@@ -3066,7 +3066,7 @@ onMounted(async () => {
 }
 
 .filter-chip-value {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .filter-chip-clear {
@@ -3085,7 +3085,7 @@ onMounted(async () => {
 }
 
 .filter-chip-clear:hover {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-purple-a15);
 }
 
@@ -3104,7 +3104,7 @@ onMounted(async () => {
 }
 
 .filter-chip-clear-all:hover {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 /* FR-11 视图切换器 */
@@ -3154,7 +3154,7 @@ onMounted(async () => {
 }
 
 .kanban-icon {
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--neon-pink));
   font-size: 14px;
 }
 
@@ -3186,7 +3186,7 @@ onMounted(async () => {
 }
 
 .kanban-card.active {
-  border-color: var(--neon-pink);
+  border-color: var(--pink-readable, var(--neon-pink));
   background: var(--accent-pink-a10);
 }
 
@@ -3260,7 +3260,7 @@ onMounted(async () => {
 }
 
 .date-icon {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .date-text {
@@ -3291,7 +3291,7 @@ onMounted(async () => {
 }
 
 .calendar-card.active {
-  border-color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-cyan-a10);
 }
 
@@ -3367,12 +3367,12 @@ onMounted(async () => {
   color: var(--text-dim);
 }
 .search-mode.keyword-only {
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--neon-pink));
 }
 
 .search-count {
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   font-weight: 600;
   font-family: var(--font-mono);
   letter-spacing: 1px;
@@ -3389,7 +3389,7 @@ onMounted(async () => {
 
 .search-hit-item:hover {
   background: var(--accent-purple-a12);
-  border-color: var(--neon-purple);
+  border-color: var(--purple-readable, var(--neon-purple));
   transform: translateX(3px);
 }
 
@@ -3414,15 +3414,15 @@ onMounted(async () => {
   border: 1px solid currentColor;
 }
 .hit-source-badge.semantic {
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 .hit-source-badge.both {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .hit-path {
   font-size: 10px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   font-family: var(--font-mono);
   margin-bottom: 5px;
 }
@@ -3467,7 +3467,7 @@ onMounted(async () => {
 }
 
 .file-icon {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 /* T00299：章节视图——按文件分组的章节树列表 */
@@ -3532,7 +3532,7 @@ onMounted(async () => {
 }
 
 .locate-btn:hover {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   border-color: var(--accent-cyan-a40);
   background: var(--accent-cyan-a12);
 }
@@ -3540,7 +3540,7 @@ onMounted(async () => {
 /* 定位成功短暂反馈：霓虹青高亮，随 locateFlashTimer 消退 */
 .locate-btn.active {
   opacity: 1;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   border-color: var(--accent-cyan-a60);
   background: var(--accent-cyan-a20);
   box-shadow: 0 0 8px var(--accent-cyan-a40);
@@ -3586,7 +3586,7 @@ onMounted(async () => {
 }
 
 .fm-chip strong {
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--neon-pink));
 }
 
 /* 文档摘要条（T00257）：固定在浏览页底部，长条单行小字，横向滚动溢出，
@@ -3615,7 +3615,7 @@ onMounted(async () => {
 }
 
 .doc-summary-bar .fm-chip strong {
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--neon-pink));
   margin-right: 2px;
 }
 
@@ -3648,19 +3648,19 @@ onMounted(async () => {
 
 .markdown-body :deep(h1) {
   font-size: 24px;
-  border-bottom: 2px solid var(--neon-magenta);
+  border-bottom: 2px solid var(--pink-readable, var(--neon-magenta));
   padding-bottom: 8px;
   text-shadow: 0 0 16px var(--accent-pink-a30);
 }
 
 .markdown-body :deep(h2) {
   font-size: 20px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .markdown-body :deep(h3) {
   font-size: 17px;
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .markdown-body :deep(p) {
@@ -3683,7 +3683,7 @@ onMounted(async () => {
   border-radius: 6px;
   font-size: 12px;
   font-family: var(--font-mono);
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .markdown-body :deep(pre) {
@@ -3699,11 +3699,11 @@ onMounted(async () => {
   background: none;
   border: none;
   padding: 0;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .markdown-body :deep(.wikilink) {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   background: var(--accent-pink-a10);
   padding: 2px 8px;
   border-radius: 6px;
@@ -3761,7 +3761,7 @@ onMounted(async () => {
 
 .draft-count {
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   font-family: var(--font-mono);
   letter-spacing: 1px;
 }
@@ -3779,13 +3779,13 @@ onMounted(async () => {
 
 .draft-item:hover {
   background: var(--accent-purple-a12);
-  border-color: var(--neon-purple);
+  border-color: var(--purple-readable, var(--neon-purple));
   transform: translateX(3px);
 }
 
 .draft-item.active {
   background: var(--accent-cyan-a10);
-  border-color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan));
 }
 
 .draft-name {
@@ -3798,7 +3798,7 @@ onMounted(async () => {
 
 .draft-path {
   font-size: 10px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   font-family: var(--font-mono);
 }
 
@@ -3844,12 +3844,12 @@ onMounted(async () => {
 }
 
 .stat-success {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   font-weight: 700;
 }
 
 .stat-error {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   font-weight: 700;
 }
 
@@ -3876,15 +3876,15 @@ onMounted(async () => {
 }
 
 .batch-row.status-done {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .batch-row.status-error {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
 }
 
 .batch-row.status-running {
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .batch-index {
@@ -3906,7 +3906,7 @@ onMounted(async () => {
 }
 
 .batch-pages {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   font-size: 10px;
 }
 
@@ -3947,7 +3947,7 @@ onMounted(async () => {
   top: 8px;
   right: 8px;
   font-size: 10px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   font-family: var(--font-mono);
   padding: 2px 8px;
   background: var(--accent-cyan-a10);
@@ -4015,7 +4015,7 @@ onMounted(async () => {
 .tag-add-icon {
   margin-right: 4px;
   font-weight: 700;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 </style>
 
@@ -4104,19 +4104,19 @@ onMounted(async () => {
 
 .fullscreen-overlay .markdown-body h1 {
   font-size: 24px;
-  border-bottom: 2px solid var(--neon-magenta);
+  border-bottom: 2px solid var(--pink-readable, var(--neon-magenta));
   padding-bottom: 8px;
   text-shadow: 0 0 16px var(--accent-pink-a30);
 }
 
 .fullscreen-overlay .markdown-body h2 {
   font-size: 20px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .fullscreen-overlay .markdown-body h3 {
   font-size: 17px;
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .fullscreen-overlay .markdown-body p {
@@ -4139,7 +4139,7 @@ onMounted(async () => {
   border-radius: 6px;
   font-size: 12px;
   font-family: var(--font-mono);
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .fullscreen-overlay .markdown-body pre {
@@ -4155,7 +4155,7 @@ onMounted(async () => {
   background: none;
   border: none;
   padding: 0;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .fullscreen-overlay .markdown-body table {
