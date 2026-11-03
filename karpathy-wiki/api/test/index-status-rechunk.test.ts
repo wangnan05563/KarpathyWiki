@@ -177,6 +177,20 @@ describe('T04182 重切分必须把 status 退回 pending', () => {
     expect(listStaleModelPages(dataDir, MODEL), '重切页未进模型过期清单').toContain(p);
   });
 
+  it('存量脏行（status=indexed 而无向量）不靠本单改动收口：模型过期清单已能捞回补算', () => {
+    // 修复只约束「此后发生的重切」。库里已经存在的历史脏行——status 还是 indexed、向量却早被删空——
+    // 由 listStaleModelPages（LEFT JOIN 判「无向量」）交给懒索引补算，因此不需要额外的数据迁移。
+    // 这条是「存量自愈」的证据：没有它，本单的影响范围只能靠嘴说。
+    const p = 'concepts/legacy.md';
+    replacePageChunks(dataDir, p, chunk('正文'));
+    savePageVectors(dataDir, p, [fakeVec(1)], MODEL);
+    getIndexDb(dataDir).prepare('DELETE FROM chunk_vecs WHERE page_path = ?').run(p);
+    expect(stateOf(dataDir, p)?.status, '前置：模拟修复前留下的脏行').toBe('indexed');
+    expect(vecRows(dataDir, p)).toBe(0);
+
+    expect(listStaleModelPages(dataDir, MODEL), '无向量的历史页未进补算清单 → 存量不会自愈').toContain(p);
+  });
+
   it('updated_at 随重切前移：O1 增量同步不会把它当「已是最新」跳过', () => {
     const p = 'concepts/a.md';
     replacePageChunks(dataDir, p, chunk('正文'));
