@@ -1531,14 +1531,9 @@ onBeforeUnmount(() => {
               <!-- §X-1 步骤级追踪面板：答案完成后展示每步耗时分解（定位长耗时瓶颈） -->
               <QueryTracePanel v-if="msg.runId" :run-id="msg.runId" />
               </template>
-              <!-- T00265：AI 气泡右下角上下文占用徽章（圆环进度 + 动态数字 + 悬浮详情 + 压缩）
-                   数据来自 query store 的 SSE done 事件（governor.inputTokens + maxTokens） -->
-              <ContextUsageBadge
-                v-if="msg.role === 'assistant' && store.contextMaxTokens > 0"
-                :thread-id="(msg.threadId ?? msg.sessionId ?? null) as string | null"
-                :input-tokens="store.contextInputTokens"
-                :max-tokens="store.contextMaxTokens"
-              />
+              <!-- T04177：上下文占用徽章原先挂在这里（气泡内 absolute 右下角），
+                   既挡住气泡正文，又把「当前会话」的占用数画在每一条历史气泡上。
+                   现改挂到下方按钮行的发送按钮左侧，单实例、语义归位。 -->
             </div>
               <!-- F-3.7 / F-3.13 工具栏：气泡外部下方显示，hover 气泡时淡入，避免挡住气泡内文字
                    §归档按钮迁移：原气泡内 msg-actions 文字按钮已移除，统一收纳到下方悬停工具栏
@@ -1731,6 +1726,14 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <div class="right-buttons">
+            <!-- T04177：上下文占用徽章移到发送按钮左侧（原挂在每条 AI 气泡内右下角，absolute 压正文）。
+                 数据仍来自 query store 的 SSE done 事件（governor.inputTokens + maxTokens），
+                 按当前会话取数——单实例正好对上「本会话当前占用」这个语义 -->
+            <ContextUsageBadge
+              :thread-id="store.currentThreadId"
+              :input-tokens="store.contextInputTokens"
+              :max-tokens="store.contextMaxTokens"
+            />
             <!-- T02478（PRD X7 回归）：输入提交是本页主 CTA，规则要求「主 CTA 必须带文字，
                  纯图标仅限高频工具栏」。此前只有纸飞机图标 + tooltip，补「发送」文字（图标保留） -->
             <el-button

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-// T00265：消息气泡右下角上下文占用徽章 —— 圆形进度环 + 动态百分比 + 悬浮详情 + 压缩
+// T00265：上下文占用徽章（圆环进度 + 动态百分比 + 悬浮详情 + 压缩）
+// T04177：挂载位置由「AI 消息气泡右下角」改到「输入按钮行·发送按钮左侧」，见下方样式注释
 // 数据来源：SSE done 事件携带的 governor 统计（inputTokens = 当前上下文 token 数）
 //   与 maxTokens（上下文预算上限），父组件从 query store 读取后以 props 传入；
 //   压缩用 POST /api/threads/:id/compact（后端存储层折叠），成功后下次问答的 done
@@ -78,12 +79,16 @@ async function compactContext() {
 </template>
 
 <style scoped>
-/* 徽章定位在消息气泡右下角，不占文档流（absolute），不影响正文布局 */
+/* T04177：定位口径变更。
+   旧实现是「消息气泡右下角，absolute 脱离文档流」（right:8px / bottom:6px / z-index:3），
+   视觉上直接叠在气泡正文之上——长答案末尾那几行会被圆环盖住，即本单主诉。
+   新实现挂在输入按钮行 `.right-buttons` 里发送按钮的左侧，由父级 flex 排布：
+   不脱流、不与任何文字同层，也不会把「当前会话」的占用数画到每一条历史气泡上。
+   组件自身不再声明任何定位，宿主换到哪里都不需要改这里。 */
 .context-usage-badge {
-  position: absolute;
-  right: 8px;
-  bottom: 6px;
-  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
   cursor: pointer;
 }
 
