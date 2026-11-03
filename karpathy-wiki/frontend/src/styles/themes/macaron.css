@@ -39,6 +39,13 @@
   --text-soft: #8a7a96;
   --text-dim: #b5a8c0;
 
+  /* T04175 前景配对：薄荷强调色 #a8e0d8 在白卡片/气泡面 1.01–1.35:1（本主题最严重，
+     hover 高亮几乎不可见）→ 同色相压暗到 #2b7a6e，卡片面 5.10:1、最紧的 a25 淡底面 4.64:1；
+     警示提示文字 #ffb347 对淡琥珀底 1.71:1 → #a36000；逐面实算见
+     test/qa-contrast-pairing.test.ts。填充用途不变。 */
+  --accent-readable: #2b7a6e;
+  --warning-readable: #a36000;
+
   /* 语义状态色（T01728）：柔和粉嫩适配 */
   --success: #4d9e63;
   --danger: #e06c6c;

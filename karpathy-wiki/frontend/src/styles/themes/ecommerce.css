@@ -39,6 +39,14 @@
   --text-soft: #6b6b7d;
   --text-dim: #a8a8b8;
 
+  /* T04175 前景配对：本主题强调色 #00a8e8 在白卡片/气泡面上只有 1.05–2.14:1
+     （工具栏图标 hover、编辑态按钮描边即踩此），同色相压暗到 #006b93 → 卡片面 5.96:1、
+     最紧的 --accent-cyan-a25 淡色底面 4.62:1（文字须 ≥4.5，取余量防四舍五入）；
+     警示提示文字 #ffb347 对淡琥珀底 1.58:1 → #9e5d00；逐面实算见
+     test/qa-contrast-pairing.test.ts。填充用途不变。 */
+  --accent-readable: #006b93;
+  --warning-readable: #9e5d00;
+
   /* 语义状态色（T01728）：明亮扁平适配 */
   --success: #16a34a;
   --danger: #dc2626;

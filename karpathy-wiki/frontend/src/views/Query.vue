@@ -2043,7 +2043,7 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
   background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   cursor: pointer;
   font-size: 16px;
   backdrop-filter: var(--blur);
@@ -2051,7 +2051,7 @@ onBeforeUnmount(() => {
 }
 .sidebar-show-btn:hover {
   background: var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
-  border-color: var(--neon-cyan, #00f5ff);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .query-card {
@@ -2146,7 +2146,7 @@ onBeforeUnmount(() => {
 .suggestion-chip:hover {
   background: var(--accent-purple-a18, rgba(176, 38, 255, 0.18));
   border-color: var(--neon-purple);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   transform: translateY(-2px);
   box-shadow: var(--glow-purple);
 }
@@ -2219,7 +2219,7 @@ onBeforeUnmount(() => {
 }
 .timeout-resend-tip {
   font-size: 12px;
-  color: var(--warning-accent-hover, #ffb84d);
+  color: var(--warning-readable, var(--warning-accent-hover, #ffb84d));
   font-family: var(--font-mono, monospace);
 }
 .resend-btn {
@@ -2366,7 +2366,7 @@ onBeforeUnmount(() => {
   border-left: 2px solid var(--neon-cyan);
   border-radius: 0 4px 4px 0;
   font-size: 12px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   font-family: var(--font-mono);
 }
 
@@ -2420,7 +2420,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--accent-cyan-a25, rgba(0, 245, 255, 0.25));
   border-radius: var(--radius-pill);
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   font-family: var(--font-mono);
   cursor: pointer;
   transition: all 0.25s;
@@ -2428,7 +2428,7 @@ onBeforeUnmount(() => {
 
 .followup-chip:hover {
   background: var(--accent-cyan-a18, rgba(0, 245, 255, 0.18));
-  border-color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   transform: translateY(-1px);
 }
 
@@ -2472,6 +2472,16 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 8px;
+  /* T04175 根因修复：操作条此前直接坐在 .msg-bubble.user 的 --grad-fire 渐变面上，
+     而按钮取的是「页面底色」口径的 --text-soft + 淡青描边——两套口径叠在一起，
+     实测「确认发送」（即重新发送入口）在商务浅白 1.01:1、其余主题 1.30–2.52:1，
+     用户读作「按钮颜色与主题冲突，看不清」。
+     同组件的编辑框早已自带 --bg-input 不透明面，只有按钮漏了这一层。
+     补齐同口径的独立面后，主题文字/边框 token 回到它们被设计时的底色上。 */
+  background: var(--bg-card-solid, var(--bg-input, #fff));
+  border: 1px solid var(--border-color, rgba(128, 128, 128, 0.25));
+  border-radius: 8px;
+  padding: 6px 8px;
 }
 .edit-btn {
   padding: 5px 14px;
@@ -2482,24 +2492,29 @@ onBeforeUnmount(() => {
   transition: all 0.2s ease;
 }
 .edit-btn.confirm {
-  /* 与"取消"按钮保持一致的配色（幽灵按钮）：背景透明 + 柔和文字 + 淡青描边，
-     hover 时高亮青色，避免与取消按钮颜色不协调 */
+  /* T04175：主操作与次操作原本配色完全相同（同为 --text-soft 幽灵按钮），
+     即便换了面也仍分不出主次。主操作改用「前景可读强调色」——描边+文字同色、字重加一档，
+     色值由各主题的 --accent-readable 保证对所在面 ≥4.5:1（装饰性的淡底仍留给 hover）。 */
   background: transparent;
-  color: var(--text-soft, #888);
-  border-color: var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+  font-weight: 600;
 }
 .edit-btn.confirm:hover {
-  color: var(--neon-cyan, #00f5ff);
-  border-color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+  background: var(--accent-cyan-a12, rgba(0, 245, 255, 0.12));
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .edit-btn.cancel {
   background: transparent;
-  color: var(--text-soft, #888);
-  border-color: var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
+  color: var(--text-base, #555);
+  /* 描边就是按钮的可见轮廓：主题的淡边框色（light-business #e6e8ec）对白卡片只有 1.15:1，
+     等于没有边界；按 WCAG 1.4.11 非文本控件 3:1 改用 --text-soft（各主题 ≥3.8:1）。 */
+  border-color: var(--text-soft, #666);
 }
 .edit-btn.cancel:hover {
-  color: var(--neon-cyan, #00f5ff);
-  border-color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* T02463（Q9）：输入条上方常驻模型上下文——左对齐、轻量，与输入区同宽居中 */
@@ -2618,7 +2633,7 @@ onBeforeUnmount(() => {
   transition: all 0.15s ease;
 }
 .ib-settings-toggle:hover {
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
 }
 
@@ -2805,7 +2820,7 @@ onBeforeUnmount(() => {
   transition: all 0.2s;
 }
 .stream-mode-toggle:hover {
-  border-color: var(--neon-cyan, #00e5ff);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .stream-mode-label {
   font-size: 12px;
@@ -2850,15 +2865,17 @@ onBeforeUnmount(() => {
   height: 20px;
   font-size: 12px;
   line-height: 18px;
-  color: var(--text-soft, #888);
+  /* T04175 横向排查：排队取消是 12px 真文字，静息态原用 --text-soft——
+     在 macaron 对白卡片只有 3.87:1（低于正文 4.5:1）。改用 --text-base（各主题对卡片面均达标）。 */
+  color: var(--text-base, #555);
   background: transparent;
-  border: 1px solid var(--border-soft, #444);
+  border: 1px solid var(--border-color, rgba(128, 128, 128, 0.25));
   border-radius: 4px;
   cursor: pointer;
 }
 .queue-cancel:hover {
-  color: var(--neon-cyan, #00f5ff);
-  border-color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* 高级设置齿轮按钮：与工具栏按钮视觉对齐，点击时旋转 90° 反馈展开/收起状态
@@ -3007,7 +3024,7 @@ onBeforeUnmount(() => {
   padding: 2px 8px;
   font-size: 11px;
   font-family: var(--font-mono, monospace);
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: var(--accent-cyan-a12, rgba(0, 245, 255, 0.12));
   border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
   border-radius: 4px;
@@ -3072,7 +3089,7 @@ onBeforeUnmount(() => {
 }
 
 .markdown-body :deep(.code-copy-btn:hover) {
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   border-color: var(--accent-cyan-a50, rgba(0, 245, 255, 0.5));
 }
 
@@ -3083,7 +3100,7 @@ onBeforeUnmount(() => {
 
 /* F-3.8 [N] 引用编号锚点：内联显示，点击不跳转 URL 而是滚动到 ref 卡片 */
 .markdown-body :deep(.ref-anchor) {
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   text-decoration: none;
   cursor: pointer;
   font-family: var(--font-mono, monospace);

@@ -64,6 +64,21 @@
   --warning-accent-border: rgba(255, 159, 28, 0.35);
   --warning-accent-ink: #1a1205;
 
+  /* ============================================================
+   * T04175 前景可读色配对（知识问答页按钮/图标/提示文字）
+   * 规则：--neon-* / --warning-accent* 是「填充色」口径，浅底主题上它们本身就很亮，
+   *   直接当 color / border-color 用会贴着卡片面（实测 ecommerce 1.05:1、
+   *   light-business 提示文字 1.55:1）——用户读作「按钮颜色与主题冲突，看不清」。
+   *   凡作为**前景**（文字、图标、按钮描边）消费强调色/警示色的地方一律改用 *-readable；
+   *   背景、淡色 tint、发光等装饰用途继续用原色。
+   * 默认值跟随本主题强调色（深色霓虹主题本来就达标，无需逐主题重写）；
+   * 浅底主题（ecommerce / enterprise / light-business / macaron / portfolio）各自覆盖为
+   * 同色相压暗值。逐主题逐面的达标判定由 test/qa-contrast-pairing.test.ts 按 WCAG AA
+   * 实算（文本 4.5:1、图标与描边等控件 3:1），改色值即被门禁拦住。
+   * ============================================================ */
+  --accent-readable: var(--neon-cyan, #00f5ff);
+  --warning-readable: var(--warning-accent-hover, #ffb347);
+
   /* URL 探测状态三色（Ingest 代理探测标签） */
   --probe-ok: #4ade80;
   --probe-ok-bg: rgba(74, 222, 128, 0.15);

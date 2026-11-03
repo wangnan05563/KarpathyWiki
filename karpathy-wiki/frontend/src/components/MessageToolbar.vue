@@ -578,7 +578,7 @@ function handleFeedback(type: 'up' | 'down') {
 
 .toolbar-btn:hover {
   background: var(--accent-cyan-a18, rgba(0, 245, 255, 0.18));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* 删除按钮：hover 时使用主题粉色警示色，与其他操作按钮视觉区分 */
@@ -590,7 +590,7 @@ function handleFeedback(type: 'up' | 'down') {
 /* F-3.6 / F-3.13 激活态：高亮显示当前朗读/反馈状态 */
 .toolbar-btn.active {
   background: var(--accent-cyan-a25, rgba(0, 245, 255, 0.25));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   box-shadow: inset 0 0 0 1px var(--accent-cyan-a50, rgba(0, 245, 255, 0.5));
 }
 
@@ -669,8 +669,8 @@ function handleFeedback(type: 'up' | 'down') {
 }
 .rate-reset:hover {
   background: var(--accent-cyan-a15, rgba(0, 245, 255, 0.15));
-  color: var(--neon-cyan, #00f5ff);
-  border-color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* 音色/引擎选择浮窗：向上弹出（与语速浮窗一致），bottom:100% 让浮窗在按钮上方。
@@ -730,12 +730,12 @@ function handleFeedback(type: 'up' | 'down') {
 
 .voice-toggle-btn:hover {
   background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .voice-toggle-btn.active {
   background: var(--accent-cyan-a25, rgba(0, 245, 255, 0.25));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   border-color: var(--accent-cyan-a50, rgba(0, 245, 255, 0.5));
 }
 
@@ -759,12 +759,12 @@ function handleFeedback(type: 'up' | 'down') {
 
 .voice-item:hover {
   background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .voice-item.active {
   background: var(--accent-cyan-a25, rgba(0, 245, 255, 0.25));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   border-color: var(--accent-cyan-a50, rgba(0, 245, 255, 0.5));
 }
 

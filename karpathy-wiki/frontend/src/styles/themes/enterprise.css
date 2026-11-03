@@ -41,6 +41,13 @@
   --text-soft: #475569;
   --text-dim: #94a3b8;
 
+  /* T04175 前景配对：强调色 #06b6d4 在白卡片/气泡面 1.84–1.96:1 → 压暗到 #046e80，
+     卡片面 5.91:1、最紧的 a25 淡色底面 4.69:1；
+     警示提示文字 #ffb347 对淡琥珀底 1.60:1 → #a05e00；逐面实算见
+     test/qa-contrast-pairing.test.ts。填充用途不变。 */
+  --accent-readable: #046e80;
+  --warning-readable: #a05e00;
+
   /* 语义状态色（T01728）：蓝灰商务适配 */
   --success: #16a34a;
   --danger: #dc2626;

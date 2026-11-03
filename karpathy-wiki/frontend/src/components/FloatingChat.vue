@@ -888,7 +888,7 @@ onBeforeUnmount(() => {
 
 .panel-actions .el-button {
   --el-button-text-color: var(--text-soft);
-  --el-button-hover-text-color: var(--neon-cyan);
+  --el-button-hover-text-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   --el-button-hover-bg-color: var(--accent-cyan-a10);
 }
 
@@ -995,7 +995,7 @@ onBeforeUnmount(() => {
 }
 .timeout-resend-tip {
   font-size: 11px;
-  color: var(--warning-accent-hover, #ffb84d);
+  color: var(--warning-readable, var(--warning-accent-hover, #ffb84d));
   font-family: var(--font-mono, monospace);
 }
 .resend-btn {
@@ -1100,7 +1100,7 @@ onBeforeUnmount(() => {
   content: '▋';
   display: inline-block;
   margin-left: 2px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   animation: cursor-blink 1s steps(2) infinite;
 }
 
@@ -1177,14 +1177,14 @@ onBeforeUnmount(() => {
   border: 1px solid var(--accent-cyan-a30);
   border-radius: 16px;
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .followup-chip:hover {
   background: var(--accent-cyan-a20);
-  border-color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* hover 包装器（气泡+工具栏）时显现 MessageToolbar
