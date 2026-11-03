@@ -17,6 +17,7 @@ import {
   keywordRecall,
   vectorRecall,
   getIndexStatus,
+  listPageIndexStates,
   listPendingPages,
   listStaleModelPages,
   removePageIndex,
@@ -159,6 +160,49 @@ export async function rebuildIndex(dataDir: string, vault: VaultService, embeddi
     await indexPage(dataDir, vault, p, embedding);
   }
   return getIndexStatus(dataDir);
+}
+
+/** T04073 索引覆盖统计（设置页「向量覆盖 N/M 页」的数据源）。
+ *  分母取 vault 可检索页面清单：index_status 既不含「从未入索引」的页面，也会把已删除的页面留在里面，
+ *  拿它的行数当分母会同时算错分子与分母。
+ *  待补再拆两种来源——补算失败（attempts>0，多为 embedding 调用出错）与尚未尝试（没配 key 或还没轮到），
+ *  用户据此分辨「是坏了」还是「没配 embedding 模型」。 */
+export interface IndexCoverage {
+  totalPages: number;
+  coveredPages: number;
+  pendingPages: number;
+  failedPages: number;
+  unindexedPages: number;
+  /** 向量缺失或属于其它 embedding 模型的在库页面数；未提供 model 时为 null（无从判定） */
+  staleModelPages: number | null;
+}
+
+export async function getIndexCoverage(dataDir: string, vault: VaultService, model?: string): Promise<IndexCoverage> {
+  const pages = await listVaultPages(vault);
+  const states = listPageIndexStates(dataDir);
+  let coveredPages = 0;
+  let pendingPages = 0;
+  let failedPages = 0;
+  let unindexedPages = 0;
+  for (const p of pages) {
+    const s = states.get(p);
+    // index_status 只有 indexed（向量已算）/ pending（已切分待补）两种值，无行即从未入索引
+    if (!s) unindexedPages += 1;
+    else if (s.status === 'indexed') coveredPages += 1;
+    else {
+      pendingPages += 1;
+      if (s.attempts > 0) failedPages += 1;
+    }
+  }
+  const inVault = new Set(pages);
+  return {
+    totalPages: pages.length,
+    coveredPages,
+    pendingPages,
+    failedPages,
+    unindexedPages,
+    staleModelPages: model ? listStaleModelPages(dataDir, model).filter((p) => inVault.has(p)).length : null,
+  };
 }
 
 /** 懒索引：为待补页面补算向量（每次搜索限量，避免一次搜索触发海量 embedding 调用）

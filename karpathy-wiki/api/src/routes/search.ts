@@ -5,7 +5,7 @@ import type { IsolationGuards } from '../middleware/auth.js';
 import { searchPages } from '../search-util.js';
 import { createWebSearchTool } from '../tools/web-search.js';
 // FR-20 语义搜索：混合检索（FTS5 关键词 + BYOK 向量语义双路 RRF）与索引管理
-import { hybridSearch, rebuildIndex, listVaultPages, indexPage } from '../search/hybrid-search.js';
+import { hybridSearch, rebuildIndex, listVaultPages, indexPage, getIndexCoverage, type IndexCoverage } from '../search/hybrid-search.js';
 import { getIndexDb, getIndexStatus } from '../search/sqlite-index.js';
 // O1：/api/search 优先走 FTS5 索引（自动增量同步），不可用时回退 searchPages
 import { ensureIndexSynced, getIndexSyncInfo, searchPagesIndexed } from '../search/indexed-search.js';
@@ -16,10 +16,21 @@ import { getDerivedCacheStats } from '../utils/derived-cache.js';
 //   GET /api/search?q=关键词&source=&status=&type=  全文检索 + frontmatter 过滤
 //   POST /api/search/hybrid { query, embedding? }   FR-20 混合检索（BYOK embedding 随请求携带）
 //   POST /api/search/rebuild { embedding? }          重建索引（设置页入口，显示已索引/待补）
-//   GET  /api/search/status                          索引状态统计
+//   GET  /api/search/status                          索引状态统计（?model=<向量模型> 另给旧模型待补页数）
 //
 // source/status/type 按页面 frontmatter 字段过滤（AC-10 / FR-15-3），可与 q 组合使用。
 // 当仅提供 source/status/type 而无 q 时，返回所有匹配过滤条件的页面。
+//
+// T04073：索引未启用（无数据目录）时的覆盖统计零值——与启用分支同一批字段名，
+// 前端只需看 enabled 决定渲不渲染，不必再区分两种响应形状。
+const EMPTY_COVERAGE: IndexCoverage = {
+  totalPages: 0,
+  coveredPages: 0,
+  pendingPages: 0,
+  failedPages: 0,
+  unindexedPages: 0,
+  staleModelPages: null,
+};
 //
 // 安全（T01771 复核修复）：guards 未传（旧形态）或 auth 关闭（单租户）时行为零变化；
 // auth 启用时——chunks 是引用溯源数据源，匿名可读即泄露 vault 页面原文，要求登录；
@@ -49,7 +60,9 @@ export function registerSearchRoute(app: FastifyInstance, vault: VaultService, d
         status: query.status,
         type: query.type,
       });
-      reply.send({ hits, total: hits.length });
+      // T04073：本端点只做关键词召回，但必须如实回传 semanticEnabled=false——
+      // 前端用同一字段判定「检索模式」，缺字段会让搜索页把关键词结果显示成语义已启用。
+      reply.send({ hits, total: hits.length, semanticEnabled: false });
     } catch (err: unknown) {
       return void reply.code(500).send({
         error: err instanceof Error ? err.message : String(err),
@@ -106,13 +119,22 @@ export function registerSearchRoute(app: FastifyInstance, vault: VaultService, d
     }
   });
 
-  // ── FR-20 索引状态（设置页展示：已索引/待补页面数）──
-  app.get('/api/search/status', async (_request: FastifyRequest, reply: FastifyReply) => {
+  // ── FR-20 索引状态（设置页展示：向量覆盖 N/M 页 + 待补/未索引来源区分）──
+  // model 由前端按当前 embedding 配置携带（非密钥，仅用于判定「旧模型向量待补」）；缺省时该字段为 null。
+  app.get('/api/search/status', async (request: FastifyRequest, reply: FastifyReply) => {
     if (!dataDir) {
-      return reply.send({ enabled: false, indexedPages: 0, pendingPages: 0, totalChunks: 0, caches: getDerivedCacheStats() });
+      // 与启用分支同一批字段名（含 sync/caches）：前端只按 enabled 决定渲不渲染，不必再分辨两种响应形状
+      return reply.send({ enabled: false, totalChunks: 0, ...EMPTY_COVERAGE, sync: getIndexSyncInfo(), caches: getDerivedCacheStats() });
     }
-    const status = getIndexStatus(dataDir);
-    reply.send({ enabled: true, ...status, sync: getIndexSyncInfo(), caches: getDerivedCacheStats() });
+    const model = (request.query as { model?: string }).model?.trim();
+    const coverage = await getIndexCoverage(dataDir, vault, model || undefined);
+    reply.send({
+      enabled: true,
+      totalChunks: getIndexStatus(dataDir).totalChunks,
+      ...coverage,
+      sync: getIndexSyncInfo(),
+      caches: getDerivedCacheStats(),
+    });
   });
 
   // ── FR-21 引用溯源：读取某页面的全部 chunk（浮层展示 chunk 原文 + 定位）──

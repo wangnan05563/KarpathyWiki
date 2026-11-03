@@ -251,6 +251,14 @@ export function getIndexStatus(dataDir: string): IndexStatus {
   return { indexedPages: indexed, pendingPages: pending, totalChunks: chunks };
 }
 
+/** 逐页索引状态（T04073 覆盖统计的数据源）：页面路径 → 状态与重试次数。
+ *  只含 index_status 里有行的页面——「从未入索引」的页面在这里不存在，分母要由调用方按 vault 清单算。 */
+export function listPageIndexStates(dataDir: string): Map<string, { status: string; attempts: number }> {
+  const d = getIndexDb(dataDir);
+  const rows = d.prepare('SELECT page_path, status, attempts FROM index_status').all() as Array<{ page_path: string; status: string; attempts: number }>;
+  return new Map(rows.map((r) => [r.page_path, { status: r.status, attempts: r.attempts }]));
+}
+
 /** 模型过期页面清单（T04067）：chunk 已切分，但向量缺失或属于其它 embedding 模型。
  *  模型切换后这些页面的旧向量不可比——既不能参与召回，也要交给懒索引按新模型补算。
  *  判据按页聚合：只要有任一分块的向量不等于当前模型（含 LEFT JOIN 出的「无向量」NULL），该页即待补。 */

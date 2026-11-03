@@ -13,7 +13,9 @@ import TocTree from '../components/TocTree.vue';
 import type { TocNode } from '../components/TocTree.vue';
 // T02476（PRD X2/X8）：三态与空态统一走 StateBlock，空态主按钮经 gotoView 直达对应功能
 import StateBlock from '../components/StateBlock.vue';
-import { gotoView } from '../utils/nav';
+import { gotoView, openConfigTab } from '../utils/nav';
+// T04073：检索模式提示语里的配置页签实名取自 configTabs 单一来源（与帮助文档同一份 tab 清单）
+import { findTabMeta } from '../utils/configTabs';
 // FR-20 语义搜索：embedding BYOK 配置读取（随搜索请求下发，不落盘）
 import { loadEmbeddingConfigForSearch } from '../services/userConfig';
 import { useAuthStore } from '../stores/auth';
@@ -1105,7 +1107,48 @@ function buildSearchUrl(): string | null {
   return `${API_BASE}/search?${params.toString()}`;
 }
 
+// O8：搜索请求序号。快速输入时先后两次请求可能乱序返回，旧结果覆盖新结果会让
+// 用户看到与输入框不一致的命中；只接受最后一次发起的响应。
+let searchSeq = 0;
+
+type SearchResponse = { hits?: Array<SearchHit & { source?: string }>; semanticEnabled?: boolean };
+
+// T04073：检索模式常驻显示。未配 embedding 时语义路是静默关闭的（hybrid-search 里
+// embedding.apiKey 缺省即 semanticEnabled=false），用户看到的只是「有结果」，无从判断
+// 刚才那次是不是只有关键词在跑；一次性的轻提示几秒就消失，所以状态要落在结果面板上。
+// unknown 只用于带筛选条件的搜索：那条路径走 /api/search、本就不含语义路，
+// 在这里报「未配置 embedding 模型」会把没配的锅甩给筛选条件。
+type SearchMode = 'hybrid' | 'keyword-only' | 'unknown';
+const searchMode = ref<SearchMode>('unknown');
+// 提示语里的路径实名取自配置中心 tab 单一来源（术语表 §3：必须是「配置中心 → <tab 实名>」）
+const configTabLabel = findTabMeta('ai')?.label ?? 'AI 服务';
+
+// FR-20 混合检索：纯关键词搜索走双路召回（embedding 配置随请求携带，BYOK 不落盘）；
+// 配置了 embeddingModel 才启用语义路，未配置时后端自动仅关键词路（无报错无回落）。
+// 独立成函数：该分支自带配置装配 + 请求 + 语义降级提示三段职责，doSearch 只保留分发与乱序防护。
+async function runHybridSearch(q: string): Promise<SearchResponse> {
+  const authStore = useAuthStore();
+  const modelStore = useModelStore();
+  const emb = await loadEmbeddingConfigForSearch(
+    authStore.user?.id || 'guest',
+    modelStore.selectedPresetKey,
+  );
+  const res = await fetch(`${API_BASE}/search/hybrid`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: q, embedding: emb }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data: SearchResponse = await res.json();
+  if (!data.semanticEnabled && !semanticHintShown) {
+    semanticHintShown = true;
+    ElMessage.info('语义检索未启用（未配置 embedding 模型），当前仅关键词检索');
+  }
+  return data;
+}
+
 async function doSearch() {
+  const seq = ++searchSeq;
   const q = searchQuery.value.trim();
   const src = sourceFilter.value;
   const st = statusFilter.value;
@@ -1114,32 +1157,17 @@ async function doSearch() {
   if (!q && !hasFilter) {
     showSearchResults.value = false;
     searchHits.value = [];
+    searchMode.value = 'unknown';
     return;
   }
   searching.value = true;
   showSearchResults.value = true;
   try {
-    let data: { hits?: Array<SearchHit & { source?: string }>; semanticEnabled?: boolean };
+    let data: SearchResponse;
+    let viaHybrid = false;
     if (q && !hasFilter) {
-      // FR-20 混合检索：纯关键词搜索走双路召回（embedding 配置随请求携带，BYOK 不落盘）；
-      // 配置了 embeddingModel 才启用语义路，未配置时后端自动仅关键词路（无报错无回落）
-      const authStore = useAuthStore();
-      const modelStore = useModelStore();
-      const emb = await loadEmbeddingConfigForSearch(
-        authStore.user?.id || 'guest',
-        modelStore.selectedPresetKey,
-      );
-      const res = await fetch(`${API_BASE}/search/hybrid`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q, embedding: emb }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      data = await res.json();
-      if (!data.semanticEnabled && !semanticHintShown) {
-        semanticHintShown = true;
-        ElMessage.info('语义检索未启用（未配置 embedding 模型），当前仅关键词检索');
-      }
+      data = await runHybridSearch(q);
+      viaHybrid = true;
     } else {
       const url = buildSearchUrl();
       if (!url) throw new Error('无效搜索条件');
@@ -1147,12 +1175,17 @@ async function doSearch() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       data = await res.json();
     }
-    searchHits.value = data.hits ?? [];
+    if (seq === searchSeq) {
+      searchHits.value = data.hits ?? [];
+      searchMode.value = viaHybrid ? (data.semanticEnabled ? 'hybrid' : 'keyword-only') : 'unknown';
+    }
   } catch (err) {
-    ElMessage.error('搜索失败：' + (err as Error).message);
-    searchHits.value = [];
+    if (seq === searchSeq) {
+      ElMessage.error('搜索失败：' + (err as Error).message);
+      searchHits.value = [];
+    }
   } finally {
-    searching.value = false;
+    if (seq === searchSeq) searching.value = false;
   }
 }
 
@@ -1163,6 +1196,7 @@ function clearSearch() {
   searchQuery.value = '';
   searchHits.value = [];
   showSearchResults.value = false;
+  searchMode.value = 'unknown';
   // 同时清除过滤条件（AC-10）；T02915：typeFilter 此前漏清，「返回目录」后 chip 仍挂着造成状态不一致
   sourceFilter.value = '';
   statusFilter.value = '';
@@ -1172,6 +1206,15 @@ function clearSearch() {
 // 过滤条件变更时立即触发搜索（无防抖，因为是下拉选择）
 function handleFilterChange() {
   doSearch();
+}
+
+// 回车立即搜索：先清掉待触发的防抖定时器，否则「回车 + 400ms 后定时器」会发两次相同请求
+function handleSearchEnter() {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = null;
+  }
+  void doSearch();
 }
 
 async function handleSearchHit(hit: SearchHit) {
@@ -2117,7 +2160,7 @@ onMounted(async () => {
                 :prefix-icon="Search"
                 clearable
                 class="search-input"
-                @keyup.enter="doSearch"
+                @keyup.enter="handleSearchEnter"
                 @clear="clearSearch"
               />
               <el-popover placement="bottom-end" :width="230" trigger="click" popper-class="browse-filter-popper">
@@ -2234,6 +2277,24 @@ onMounted(async () => {
             <div class="search-header">
               <span class="search-count">{{ searchHits.length }} 条结果</span>
               <el-button size="small" text data-tip="清空搜索关键词，返回完整目录" @click="clearSearch">返回目录</el-button>
+            </div>
+            <!-- T04073：检索模式常驻在此，而不是只有一闪而过的轻提示。
+                 语义路未配置时后端静默关闭（semanticEnabled=false），命中项一律标 keyword，
+                 用户看不出「这次只有关键词在跑」，也就不会去配向量模型。
+                 单独一行而不是挤进 header：窄窗口下 header 是 space-between，长文案会把「返回目录」顶掉。 -->
+            <div v-if="searchMode !== 'unknown'" class="search-mode" :class="searchMode" data-testid="search-mode-badge">
+              <template v-if="searchMode === 'hybrid'">检索模式：关键词 + 语义</template>
+              <template v-else>
+                语义路：未启用（未配置 embedding 模型，当前仅关键词匹配）
+                <el-button
+                  size="small"
+                  text
+                  type="primary"
+                  :data-tip="`前往「${configTabLabel}」填写向量模型`"
+                  data-testid="search-mode-goto-config"
+                  @click="openConfigTab('ai')"
+                >前往 配置中心 → {{ configTabLabel }}</el-button>
+              </template>
             </div>
             <StateBlock v-if="searching" state="loading" compact loading-text="正在搜索…" />
             <StateBlock
@@ -3289,6 +3350,24 @@ onMounted(async () => {
   padding: 4px 0 10px;
   border-bottom: 1px dashed var(--accent-purple-a20);
   margin-bottom: 8px;
+}
+
+/* T04073：检索模式常驻行。未启用用强调色（这是需要用户去处理的事），
+   已启用只作弱确认——配色走主题 token，不写死色值，保证换主题仍有对比度 */
+.search-mode {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+.search-mode.hybrid {
+  color: var(--text-dim);
+}
+.search-mode.keyword-only {
+  color: var(--neon-pink);
 }
 
 .search-count {

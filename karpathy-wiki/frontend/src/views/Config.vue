@@ -48,7 +48,8 @@ import {
   type MediaUserConfig,
 } from '../services/mediaConfig';
 import type { MediaImagePreset, MediaVideoPreset, MediaImageUserConfig, MediaVideoUserConfig } from '../types/media';
-
+// T04073：/api/search/status 的前端契约类型（字段名单一来源，与后端 IndexCoverage 对齐）
+import { EMPTY_INDEX_STATUS, type SearchIndexStatus } from '../types/search';
 // T02467（PRD §10 C2/C3）：tab 清单、分组与「仅管理员」锁定判定收敛到 utils/configTabs.ts，
 // 视图只按它渲染；activeTab 的类型即那一份合法 tab 名，不再各写一遍字面量联合。
 import {
@@ -498,17 +499,37 @@ const { dirtyFields: aiFormDirtyFields } = useDirtyFields(
 );
 
 // ── FR-20 语义索引状态与重建（设置页入口，规格 4）──
-const indexStatus = ref({ indexedPages: 0, pendingPages: 0, totalChunks: 0 });
+// T04073：口径从「已索引 N 页」换成「向量覆盖 N/M 页」——旧写法拿 index_status 行数当全量，
+// 既看不见「从未入索引」的页面，也分不清「补算失败」与「压根没配向量模型」，用户据此无法判断该干什么。
+const indexStatus = ref<SearchIndexStatus>({ ...EMPTY_INDEX_STATUS });
 const rebuildingIndex = ref(false);
 
 async function refreshIndexStatus() {
   try {
-    const res = await fetch(`${API_BASE}/search/status`);
+    // 向量模型名随查询串携带（不是密钥，仅是模型标识）：后端据此另算「向量缺失或旧模型」页数，缺省则该口径为 null
+    const model = aiForm.value.embeddingModel?.trim();
+    const res = await fetch(`${API_BASE}/search/status${model ? `?model=${encodeURIComponent(model)}` : ''}`);
     if (res.ok) indexStatus.value = await res.json();
   } catch {
     /* 状态获取失败静默（旧后端无此端点时展示默认 0） */
   }
 }
+
+// 模型名是异步填进表单的（预设/本地配置载入），载入后补一次刷新，否则首屏永远拿不到旧模型口径
+watch(() => aiForm.value.embeddingModel, () => { void refreshIndexStatus(); });
+
+// 明细串在脚本里拼：三段来源任一缺项时模板里的分隔符会漂，拼串保证「未索引 · 待补 · 旧模型」读起来是一句话
+const indexStatusDetail = computed(() => {
+  const parts: string[] = [];
+  if (indexStatus.value.unindexedPages > 0) parts.push(`未索引 ${indexStatus.value.unindexedPages} 页`);
+  if (indexStatus.value.pendingPages > 0) {
+    parts.push(indexStatus.value.failedPages > 0
+      ? `向量待补 ${indexStatus.value.pendingPages} 页（补算失败 ${indexStatus.value.failedPages} 页）`
+      : `向量待补 ${indexStatus.value.pendingPages} 页`);
+  }
+  if (indexStatus.value.staleModelPages) parts.push(`向量缺失或属旧模型 ${indexStatus.value.staleModelPages} 页`);
+  return parts.join(' · ');
+});
 
 async function handleRebuildIndex() {
   rebuildingIndex.value = true;
@@ -524,8 +545,9 @@ async function handleRebuildIndex() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    indexStatus.value = data.status ?? indexStatus.value;
-    ElMessage.success(`索引重建完成：已索引 ${indexStatus.value.indexedPages} 页，待补 ${indexStatus.value.pendingPages} 页`);
+    // 重建响应只有索引侧计数（无分母），统一回读状态端点：展示口径与首屏同一条契约，不在此处拼第二份形状
+    await refreshIndexStatus();
+    ElMessage.success(`索引重建完成：向量覆盖 ${indexStatus.value.coveredPages}/${indexStatus.value.totalPages} 页，待补 ${indexStatus.value.pendingPages} 页`);
   } catch (err) {
     ElMessage.error(apiErrorMessage('索引重建失败', err));
   } finally {
@@ -3861,13 +3883,16 @@ async function importConfig() {
                 </div>
               </div>
 
-              <!-- FR-20 索引重建（语义搜索）：显示已索引/待补页面数，重建走 BYOK embedding -->
+              <!-- FR-20 索引重建（语义搜索）：T04073 展示「向量覆盖 N/M 页」与待补来源，重建走 BYOK embedding -->
               <div class="form-row">
                 <label class="form-label">语义索引</label>
                 <div class="model-input-row">
-                  <span class="index-status" data-testid="search-index-status">
-                    已索引 {{ indexStatus.indexedPages }} 页 / 待补 {{ indexStatus.pendingPages }} 页（{{ indexStatus.totalChunks }} 块）
-                  </span>
+                  <div class="index-status-col">
+                    <span class="index-status" data-testid="search-index-status">
+                      向量覆盖 {{ indexStatus.coveredPages }}/{{ indexStatus.totalPages }} 页（{{ indexStatus.totalChunks }} 块）
+                    </span>
+                    <span v-if="indexStatusDetail" class="form-hint" data-testid="search-index-detail">{{ indexStatusDetail }}</span>
+                  </div>
                   <el-button
                     class="neon-btn"
                     data-testid="rebuild-index-btn"
@@ -6114,6 +6139,12 @@ async function importConfig() {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+/* T04073：覆盖率主行 + 待补来源明细行上下排布，避免把三段计数塞进同一行挤掉重建按钮 */
+.index-status-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .model-input-row .form-input {
   flex: 1;
