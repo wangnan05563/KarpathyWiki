@@ -46,6 +46,10 @@
      警示提示文字 #ffb347 对淡琥珀底 1.60:1 → #a05e00；逐面实算见
      test/qa-contrast-pairing.test.ts。填充用途不变。 */
   --accent-readable: #046e80;
+  /* T04448 粉/紫前景压暗值：本主题 base #3b82f6 / #2563eb 在白卡片 tint 面上为 3.28 / 4.50:1，
+     同色相向黑混合 20% / 3% 后实测 4.79 / 4.66:1。 */
+  --pink-readable: #2f68c5;
+  --purple-readable: #2461e5;
   --warning-readable: #a05e00;
 
   /* 语义状态色（T01728）：蓝灰商务适配 */

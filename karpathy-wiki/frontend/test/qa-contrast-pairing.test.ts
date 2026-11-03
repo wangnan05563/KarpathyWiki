@@ -186,6 +186,19 @@ const AUDIT: Array<{ label: string; fg: string; bg: string; kind: 'text' | 'ui' 
   { label: '超时条·重发按钮 hover', fg: 'var(--warning-accent-ink)', bg: 'var(--warning-accent-hover)', kind: 'text' },
   // —— 编辑框自身（本来就有独立面，留作配对回归锁）——
   { label: '编辑态·输入框文字', fg: 'var(--text-bright)', bg: 'var(--bg-input)', kind: 'text' },
+  // —— T04448 粉/紫族：此前 --accent-pink / --accent-purple（裸名）从未定义，
+  //    这 9 处前景恒走十六进制 fallback，浅底主题普遍 1.58～4.26:1 ——
+  { label: '输入条·引用删除图标 hover', fg: 'var(--pink-readable)', bg: 'var(--bg-card-solid)', kind: 'ui' },
+  { label: '视频任务·错误提示文字', fg: 'var(--pink-readable)', bg: 'var(--accent-pink-a10)', kind: 'text' },
+  { label: '视频任务·下载链接文字', fg: 'var(--purple-readable)', bg: 'var(--bg-card-solid)', kind: 'text' },
+  { label: '多模态卡头·标题文字', fg: 'var(--purple-readable)', bg: 'var(--accent-purple-a10)', kind: 'text' },
+  { label: '多模态卡体·生成图链接', fg: 'var(--purple-readable)', bg: 'var(--accent-purple-a05)', kind: 'text' },
+  { label: 'PPT 下载按钮·描边', fg: 'var(--purple-readable)', bg: 'var(--bg-card-solid)', kind: 'ui' },
+  { label: 'PPT 下载按钮·文字(hover 淡底)', fg: 'var(--purple-readable)', bg: 'var(--accent-purple-a10)', kind: 'text' },
+  { label: '渲染错误卡·标题', fg: 'var(--pink-readable)', bg: 'var(--accent-pink-a10)', kind: 'text' },
+  { label: '渲染错误卡·详情正文', fg: 'var(--pink-readable)', bg: 'var(--accent-pink-a10)', kind: 'text' },
+  // T04448 收尾时同源扫到的第 10 处：技能页删除按钮 hover 走未定义的 --accent-pink-a80
+  { label: '技能页·删除按钮 hover 文字', fg: 'var(--pink-readable)', bg: 'var(--accent-pink-a10)', kind: 'text' },
 ];
 
 const THRESHOLD = { text: 4.5, ui: 3.0 };
@@ -210,7 +223,7 @@ describe('T04175 主题 token 解析', () => {
 
   it('每个主题的 --accent-readable / --warning-readable 都能解析成实色', () => {
     for (const t of themes) {
-      for (const token of ['--accent-readable', '--warning-readable']) {
+      for (const token of ['--accent-readable', '--warning-readable', '--pink-readable', '--purple-readable']) {
         const r = resolve(`var(${token})`, t.decls);
         if ('stops' in r) throw new Error(`${t.name} 的 ${token} 解析成了渐变`);
         expect(r.solid.a, `${t.name} ${token} 不得是半透明前景`).toBe(1);
@@ -316,4 +329,150 @@ describe('T04175 前景口径守护（问答页不得再把强调色直接当前
       expect(block).toMatch(new RegExp(`:\\s*var\\(\\s*${mustInclude.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`));
     });
   }
+});
+
+// ===========================================================================
+// T04448：粉/紫族「假 token」与前景口径
+// 缺陷本体：--accent-pink / --accent-purple（裸名）从未在任何主题里定义过，
+//   Query.vue + MultimodalOutputCard.vue 的 9 处前景 var() 恒等于走十六进制 fallback，
+//   于是「配了主题色」的写法实际渲染出一个固定色——浅底主题拿到深底霓虹的粉紫，
+//   实测 1.58~4.26:1（macaron 淡粉底上的错误文字最差）。修复分两层：补齐真 token
+//   （= 本主题 *-base）+ 建立 --pink-readable / --purple-readable 前景配对。
+// ===========================================================================
+describe('T04448 粉/紫真 token 已定义（假 token 不再骗过审查看板）', () => {
+  const definedProps = (() => {
+    const names = new Set<string>();
+    const files = [STYLE_CSS, ...readdirSync(THEMES_DIR).filter((f) => f.endsWith('.css')).map((f) => join(THEMES_DIR, f))];
+    for (const f of files) {
+      for (const m of stripComments(readFileSync(f, 'utf8')).matchAll(/(--[\w-]+)\s*:/g)) names.add(m[1]);
+    }
+    return names;
+  })();
+
+  it('--accent-pink / --accent-purple 裸名现在是真 token', () => {
+    for (const t of ['--accent-pink', '--accent-purple']) expect(definedProps, `${t} 未在任何主题中定义`).toContain(t);
+  });
+
+  it('--pink-readable / --purple-readable 在 :root 有定义', () => {
+    const rootDecl = parseDecls(stripComments(readFileSync(STYLE_CSS, 'utf8')).match(/:root\s*\{([\s\S]*?)\n\}/)![1]);
+    for (const t of ['--pink-readable', '--purple-readable']) expect(rootDecl.has(t), `${t} 缺少 :root 默认`).toBe(true);
+  });
+
+  it('本单族（粉/紫）不再有假 token；其余族的已知空挂冻结为基线，新增即红', () => {
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) return walk(p);
+        return /\.(vue|css)$/.test(e.name) ? [p] : [];
+      });
+    // 与本单同族但范围外的空挂 token（T04448 只负责粉/紫）。实测 41 处引用 / 19 个名字 /
+    // 14 个文件，已由 T04448 建派生单专项治理；此处冻结为基线——只拦「新增的假 token」，
+    // 存量清单被删干净时同样会红（防止基线悄悄失效）。
+    const FAKE_TOKEN_BASELINE = new Set([
+      '--text-secondary',
+      '--text-color',
+      '--text-faint',
+      '--bg-sidebar',
+      '--border-subtle',
+      '--neon-amber',
+      '--neon-',
+      '--accent-lime-a40',
+      '--accent-lime-a25',
+      '--accent-lime-a08',
+      '--accent-lime-a20',
+      '--accent-red-a08',
+      '--accent-red-a30',
+      '--accent-red-text',
+      '--accent-danger-a30',
+      '--accent-danger-a10',
+      '--accent-amber',
+            '--accent-blue-a35',
+    ]);
+    const GLOBAL_PREFIX = /^(--accent-|--neon-|--warning-|--text-|--bg-|--border-|--pink-|--purple-)/;
+    const ownFamily = /^(--accent-pink|--accent-purple|--pink-|--purple-)/;
+    const offenders: string[] = [];
+    const baselineHits = new Set<string>();
+    for (const file of walk(join(ROOT, 'src'))) {
+      const src = readFileSync(file, 'utf8');
+      // 组件内自行定义的局部变量不算空挂
+      const local = new Set([...src.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+      for (const m of src.matchAll(/var\((--[\w-]+)/g)) {
+        const name = m[1];
+        if (!GLOBAL_PREFIX.test(name)) continue;
+        if (definedProps.has(name) || local.has(name)) continue;
+        if (ownFamily.test(name)) offenders.push(`${file.replace(ROOT, '')} → ${name}`);
+        else if (FAKE_TOKEN_BASELINE.has(name)) baselineHits.add(name);
+        else offenders.push(`新增假 token ${file.replace(ROOT, '')} → ${name}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+    // 基线里的 --accent-pink-a80 / --accent-purple 族若被治理掉，也应显式更新本清单——
+    // 至少确认基线仍在覆盖空挂大户，避免「清单留着但已不命中」的空转
+    expect(baselineHits.size, '存量假 token 基线未被扫描命中（用例可能已空转）').toBeGreaterThan(10);
+  });
+});
+
+describe('T04448 粉/紫前景口径守护（不得再裸用 --accent-pink / --accent-purple）', () => {
+  const PP_FILES = ['src/views/Query.vue', 'src/components/MultimodalOutputCard.vue', 'src/views/Skill.vue'];
+  // color / border-color 与 border 简写都会把粉紫铺成可见前景；-aNN 淡色族是装饰用途，不受限
+  const fgDecl = /^\s*(?:color|border-color|border|outline-color)\s*:\s*(.+);$/gm;
+
+  for (const f of PP_FILES) {
+    it(`${f}：粉/紫当前景必须经 *-readable`, () => {
+      const src = readFileSync(join(ROOT, f), 'utf8');
+      const violations: string[] = [];
+      for (const m of src.matchAll(fgDecl)) {
+        const v = m[1];
+        const barePink = /var\(\s*--accent-pink\s*[,)]/.test(v) && !/--pink-readable/.test(v);
+        const barePurple = /var\(\s*--accent-purple\s*[,)]/.test(v) && !/--purple-readable/.test(v);
+        if (barePink || barePurple) violations.push(`${f} → ${v}`);
+      }
+      expect(violations).toEqual([]);
+    });
+  }
+
+  it('粉/紫 readable 消费点计数锁定（防止回退成裸色时扫描空转）', () => {
+    let pink = 0;
+    let purple = 0;
+    for (const f of PP_FILES) {
+      const src = readFileSync(join(ROOT, f), 'utf8');
+      pink += [...src.matchAll(fgDecl)].filter((m) => m[1].includes('--pink-readable')).length;
+      purple += [...src.matchAll(fgDecl)].filter((m) => m[1].includes('--purple-readable')).length;
+    }
+    expect(pink, '粉族 readable 消费点应 ≥5（.ib-qr-del:hover / .video-error-tip / .error-title / .error-detail / .delete-btn:hover）').toBeGreaterThanOrEqual(5);
+    expect(purple, '紫族 readable 消费点应 ≥5（卡头 / 图链 / PPT 描边 / PPT 文字 / 下载链接）').toBeGreaterThanOrEqual(5);
+  });
+
+  it('浅底主题的 pink/purple readable 锁为实测压暗值，且不得比本主题 base 更亮', () => {
+    const hexOf = (name: string, token: string) => {
+      const t = themes.find((x) => x.name === name)!;
+      const r = resolve(`var(${token})`, t.decls);
+      if ('stops' in r) throw new Error(`${token} 不该解析成渐变`);
+      return rgbToHex(r.solid);
+    };
+    const EXPECT: Record<string, { pink: string; purple: string }> = {
+      'default(:root)': { pink: '#ff006e', purple: '#bc47ff' },
+      creative: { pink: '#ff006e', purple: '#bc47ff' },
+      ecommerce: { pink: '#b34b25', purple: '#6757db' },
+      enterprise: { pink: '#2f68c5', purple: '#2461e5' },
+      'light-business': { pink: '#c33131', purple: '#1554d1' },
+      macaron: { pink: '#8c6273', purple: '#7d6591' },
+      portfolio: { pink: '#7a654a', purple: '#1a1a1a' },
+      product: { pink: '#ff0080', purple: '#bc47ff' },
+    };
+    const LIGHT = ['ecommerce', 'enterprise', 'light-business', 'macaron', 'portfolio'];
+    for (const [name, exp] of Object.entries(EXPECT)) {
+      expect(hexOf(name, '--pink-readable'), `${name} pink`).toBe(exp.pink);
+      expect(hexOf(name, '--purple-readable'), `${name} purple`).toBe(exp.purple);
+      if (LIGHT.includes(name)) {
+        // 浅底只允许压暗（提亮成霓虹 = 回到本缺陷）
+        for (const fam of ['pink', 'purple'] as const) {
+          const rd = resolve(`var(--${fam}-readable)`, themes.find((x) => x.name === name)!.decls);
+          const bs = resolve(`var(--accent-${fam}-base)`, themes.find((x) => x.name === name)!.decls);
+          if ('stops' in rd || 'stops' in bs) throw new Error('不该是渐变');
+          expect(luminance(rd.solid), `${name} ${fam}-readable 应 ≤ base 亮度`).toBeLessThanOrEqual(luminance(bs.solid) + 1e-6);
+        }
+      }
+    }
+  });
 });

@@ -44,6 +44,11 @@
      警示提示文字 #ffb347 对淡琥珀底 1.71:1 → #a36000；逐面实算见
      test/qa-contrast-pairing.test.ts。填充用途不变。 */
   --accent-readable: #2b7a6e;
+  /* T04448 粉/紫前景压暗值：本主题 base 是马卡龙淡粉 #ffb3d1 / 淡紫 #c8a2e8，
+     当前景在白卡片 tint 面上只有 1.58 / 2.00:1（最惨的一档），同色相向黑混合 45% / 38%
+     后实测 4.85 / 4.72:1——色相保留、饱和度下沉，视觉上仍是粉/紫。 */
+  --pink-readable: #8c6273;
+  --purple-readable: #7d6591;
   --warning-readable: #a36000;
 
   /* 语义状态色（T01728）：柔和粉嫩适配 */

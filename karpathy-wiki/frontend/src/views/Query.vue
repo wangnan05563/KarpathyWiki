@@ -2704,7 +2704,7 @@ onBeforeUnmount(() => {
   line-height: 1;
 }
 .ib-qr-del:hover {
-  color: var(--accent-pink, #ff006e);
+  color: var(--pink-readable, var(--accent-pink, #ff006e));
 }
 .ib-qr-empty {
   font-size: 12px;
@@ -3187,7 +3187,7 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   background: var(--accent-pink-a10, rgba(255, 100, 150, 0.1));
   border: 1px solid var(--accent-pink-a30, rgba(255, 100, 150, 0.3));
-  color: var(--accent-pink, #ff6496);
+  color: var(--pink-readable, var(--accent-pink, #ff6496));
   font-size: 13px;
 }
 .video-progress-section {
@@ -3227,7 +3227,7 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 .video-download-link {
-  color: var(--accent-purple, #8a5cf5);
+  color: var(--purple-readable, var(--accent-purple, #8a5cf5));
   text-decoration: none;
   font-size: 13px;
 }

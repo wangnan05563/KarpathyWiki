@@ -836,7 +836,7 @@ onMounted(() => {
 
 .delete-btn:hover {
   border-color: var(--accent-pink-a60);
-  color: var(--accent-pink-a80, #e85a71);
+  color: var(--pink-readable, var(--accent-pink, #e85a71));
   background: var(--accent-pink-a10);
 }
 

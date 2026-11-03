@@ -239,7 +239,7 @@ function cardLabel(type: MultimodalOutput['type']): string {
   border-bottom: 1px solid var(--accent-purple-a20, rgba(138, 92, 245, 0.2));
   font-size: 13px;
   font-weight: 500;
-  color: var(--accent-purple, #8a5cf5);
+  color: var(--purple-readable, var(--accent-purple, #8a5cf5));
 }
 .card-icon {
   font-size: 14px;
@@ -295,7 +295,7 @@ function cardLabel(type: MultimodalOutput['type']): string {
   font-size: 12px;
 }
 .image-link {
-  color: var(--accent-purple, #8a5cf5);
+  color: var(--purple-readable, var(--accent-purple, #8a5cf5));
   text-decoration: none;
 }
 .image-link:hover {
@@ -321,9 +321,9 @@ function cardLabel(type: MultimodalOutput['type']): string {
 .ppt-download-link {
   display: inline-block;
   padding: 6px 16px;
-  border: 1px solid var(--accent-purple, #8a5cf5);
+  border: 1px solid var(--purple-readable, var(--accent-purple, #8a5cf5));
   border-radius: 16px;
-  color: var(--accent-purple, #8a5cf5);
+  color: var(--purple-readable, var(--accent-purple, #8a5cf5));
   font-size: 13px;
   text-decoration: none;
   transition: background 0.2s;
@@ -351,12 +351,12 @@ function cardLabel(type: MultimodalOutput['type']): string {
 .error-title {
   font-weight: 500;
   margin-bottom: 4px;
-  color: var(--accent-pink, #ff6496);
+  color: var(--pink-readable, var(--accent-pink, #ff6496));
 }
 .error-detail {
   margin-bottom: 6px;
   font-size: 12px;
-  color: var(--accent-pink, #ff6496);
+  color: var(--pink-readable, var(--accent-pink, #ff6496));
   white-space: pre-wrap;
   word-break: break-word;
 }

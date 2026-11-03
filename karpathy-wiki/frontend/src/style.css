@@ -78,6 +78,15 @@
    * ============================================================ */
   --accent-readable: var(--neon-cyan, #00f5ff);
   --warning-readable: var(--warning-accent-hover, #ffb347);
+  /* T04448：粉/紫族同口径。历史上 --accent-pink / --accent-purple（无后缀）从未定义过，
+   * 9 处前景的 var() 恒等于走十六进制 fallback（工单按选择器合并统计为 8 处），完全不随主题变化——
+   * 浅底主题拿到深色霓虹主题设计的粉紫，实测跌破 4.5:1（最差 ecommerce 错误提示 2.52:1）。
+   * 现补齐真 token（= 本主题 *-base，随主题变化）+ 前景配对 readable：
+   * --purple-readable 默认值取提亮紫，因为 --accent-purple-base #b026ff 即使在深底卡片上
+   * 也只有 4.43:1；浅底主题各自覆盖为同色相压暗值（逐主题数值见各 themes/*.css）。
+   * 判定同样由 test/qa-contrast-pairing.test.ts 按 WCAG AA 实算。 */
+  --pink-readable: var(--accent-pink, #ff6496);
+  --purple-readable: #bc47ff;
 
   /* URL 探测状态三色（Ingest 代理探测标签） */
   --probe-ok: #4ade80;
@@ -121,6 +130,12 @@
   --accent-cyan-base: #00f5ff;
   --accent-pink-base: #ff006e;
   --accent-magenta-base: #ff3ec9;
+  /* T04448：裸名 token。上面注释里的 9 处前景引用它们，但只有 *-base / *-aNN 被定义过，
+   * 裸名一直是「假 token」。在此补齐为本族主色的别名，使其真正随主题变化；
+   * 注意：作为前景（文字/图标/描边）仍应使用 --pink-readable / --purple-readable，
+   * 这两个裸名只表达「本主题的粉/紫」，浅底主题下直接当前景依旧不达标。 */
+  --accent-purple: var(--accent-purple-base);
+  --accent-pink: var(--accent-pink-base);
   --accent-purple-a03: rgba(176, 38, 255, 0.03);
   --accent-cyan-a03: rgba(0, 245, 255, 0.03);
   --accent-pink-a03: rgba(255, 0, 110, 0.03);

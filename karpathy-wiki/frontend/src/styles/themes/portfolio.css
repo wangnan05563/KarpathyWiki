@@ -51,6 +51,10 @@
      #ffb347 对淡琥珀底 1.60:1 → #9e5d00。注意本主题 .msg-bubble.user 是黑→金渐变，
      白字靠渐变左半撑住，见下方既有 user bubble 修正。 */
   --accent-readable: #786349;
+  /* T04448 粉/紫前景压暗值：本主题粉=棕金 #8b7355（在淡粉底上 3.89:1），向黑混合 13% 后 4.81:1；
+     紫侧 base 就是本主题的墨色 #1a1a1a，本身就达标，直接锁定。 */
+  --pink-readable: #7a654a;
+  --purple-readable: #1a1a1a;
   --warning-readable: #9e5d00;
 
   /* 语义状态色（T01728）：米金黑优雅适配 */
