@@ -8,6 +8,8 @@ import { searchPages, type SearchHit } from '../search-util.js';
 import { expandNeighbors } from '../search/graph-expand.js';
 // T04066 问答接入混合检索：BYOK embedding 配置随问答请求携带，命中时改走 FR-20 双路召回（含懒索引）
 import { hybridSearch, type EmbeddingConfig } from '../search/hybrid-search.js';
+// T04100：与 /api/search 同源的 mtime 增量同步（不新建第二套同步/缓存口径）
+import { ensureIndexSynced } from '../search/indexed-search.js';
 // T02921：wikilink 抽取取自 link-parser 单一来源（拆别名/锚点，refs 才能解析到真实页面）
 import { extractWikilinkTargets } from '../vault/link-parser.js';
 import { createWebSearchTool } from '../tools/web-search.js';
@@ -46,6 +48,9 @@ function objSchema(properties: Record<string, unknown>, required: string[]) {
 // 为什么范围限定场景不放宽：hybridSearch 作用于全库 chunk 索引、没有 folder/tags 过滤能力，
 // 带 scopeFilter 的问答改走它会扩大可召回页面集（AI 伙伴预设的范围限定被绕过），故固定走关键词路。
 // 为什么零命中也退回：混合检索只覆盖已入索引页面，未索引/刚保存的页面仍需关键词兜底，保证不比现状差。
+// T04100：语义路取数前先做增量同步——问答与 /api/search 共用同一份索引 status（同一 ensureIndexSynced），
+//   否则「刚保存、还没被搜索页同步过」的新页面在问答里缺席（hybridSearch 的懒索引只补 pending 页，
+//   从未入过索引的页面不在补算清单里）。同步自带单飞 + 节流，常态只是一次 mtime 比对。
 export async function retrieveForQuery(
   vault: VaultService,
   keywords: string,
@@ -54,8 +59,14 @@ export async function retrieveForQuery(
 ): Promise<Array<SearchHit & { source: 'keyword' | 'semantic' | 'both' }>> {
   const limit = options.limit ?? 20;
   if (options.embedding?.apiKey && !scopeFilter) {
+    const dataDir = options.dataDir ?? getDataDir();
     try {
-      const { hits } = await hybridSearch(options.dataDir ?? getDataDir(), vault, {
+      await ensureIndexSynced(dataDir, vault);
+    } catch {
+      // 同步失败（索引库不可写 / vault 读取异常）不阻断问答：仍按现有索引召回，零命中再退回关键词
+    }
+    try {
+      const { hits } = await hybridSearch(dataDir, vault, {
         query: keywords,
         limit,
         embedding: options.embedding,
