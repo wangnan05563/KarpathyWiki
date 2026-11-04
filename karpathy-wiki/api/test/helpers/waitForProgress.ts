@@ -15,6 +15,14 @@
 //     判据是「超过契约下限 且 连续 idleMs 无进展」，两者缺一不可。
 //  2. contractSleep：终点**不可观测**（断言的是「没有发生」，或等的是真实时钟跨过某个刻度）→ 允许定时，
 //     但预算必须由被测代码里的契约常量推导，并把来源写进 reason。裸写经验数值一律不许（见守护用例）。
+//
+// T04473 补齐的第三层口径——**判据一律按「实算时间」而不是墙钟**（前端侧 T04461 已改，本侧当时漏了）：
+// api 全套 115 文件并行时，本工具自己的一轮 `setTimeout(0)` 会被同机其他 worker 的同步代码挤到事件循环
+// 后面，墙钟判据于是把「机器的负载」算成「应用的卡死」。做法与前端逐字一致：每轮节拍超出
+// HEALTHY_POLL_MS 的部分记为调度器欠账，floor/idle/cap 三条判据全部改用「墙钟 − 欠账」。
+// 这不是放大预算（CLEANUP_CHAIN / NO_TIMER_CHAIN 一个数字都没动），机器空闲时欠账为 0、行为与改造前
+// 逐毫秒一致；欠账再大也续不了命——实算时间仍要撞上 cap。由 api/test/wait-for-progress-starvation.test.ts
+// 的正反四组用例锁住。api 侧与被测对象有关的唯一差异仍是：不需要 flushPromises，让出一个宏任务即可。
 // ————————————————————————————————————————————————————————————
 
 // T02836：预算里唯一的产品侧契约常量，直接从被测模块导入而非抄数值——
@@ -30,12 +38,29 @@ export interface ProgressWaitOptions {
   idleMs?: number;
   /** 绝对上限（默认 = floorMs + idleMs + 一轮余量），到点无论有无进展都失败 */
   capMs?: number;
+  /**
+   * 时钟注入（默认 Date.now）。只为把「调度器欠账」做成可确定性复现的样本而留的口子：
+   * 单测里用合成时钟能瞬时造出被并行 worker 挤占事件循环的那种节拍，用真实 setTimeout 造就只能靠
+   * 把机器压满——那正是本单要消灭的偶发红，不能拿它当判据的证明手段。生产调用点一律不许传
+   * （由 api/test/wait-for-progress-starvation.test.ts 的注入面自指锁盯住）。
+   */
+  now?: () => number;
 }
+
+/**
+ * 健康轮询的单轮节拍上限，与前端版同一数值同一推导（T04461 / T04473）：
+ * 一次 `setTimeout(0)` 在没人抢占的机器上是亚毫秒级，25ms 已是十几倍余量；超出部分判为
+ * 「事件循环被外部占用」（并行 worker 的同步代码、GC、进程调度），不计进无进展/上限预算。
+ * 预算的放大量不是常量，而是逐轮实测出来的——这是它不等同于「把超时调大」的地方。
+ */
+export const HEALTHY_POLL_MS = 25;
 
 export interface WaitResult {
   /** 从调用到谓词成立实际等待的墙钟毫秒（供取证断言） */
   elapsedMs: number;
   rounds: number;
+  /** 墙钟里判给「调度器欠账」的毫秒数；> 0 说明这次等待被机器负载拖长过（T04473 取证用） */
+  starveMs: number;
 }
 
 /**
@@ -71,31 +96,50 @@ export async function waitForProgress(
   const floorMs = options.floorMs;
   const idleMs = options.idleMs ?? floorMs;
   const capMs = options.capMs ?? floorMs + idleMs + 1_000;
-  const startedAt = Date.now();
+  const nowFn = options.now ?? Date.now;
+  const startedAt = nowFn();
   let lastProgressAt = startedAt;
   let lastSignature = options.progress?.() ?? '-';
   let rounds = 0;
+  /** 累计调度器欠账（逐轮节拍超出 HEALTHY_POLL_MS 的部分） */
+  let starveMs = 0;
+  /** 上次进展时点的欠账快照：用它算「自上次进展以来」的欠账，而不是全程欠账 */
+  let starveAtProgress = 0;
+  let prevRoundAt = startedAt;
   for (;;) {
     rounds++;
     if (predicate()) {
-      return { elapsedMs: Date.now() - startedAt, rounds };
+      return { elapsedMs: nowFn() - startedAt, rounds, starveMs };
     }
-    const now = Date.now();
+    const now = nowFn();
+    const gap = now - prevRoundAt;
+    prevRoundAt = now;
+    if (gap > HEALTHY_POLL_MS) starveMs += gap - HEALTHY_POLL_MS;
     const elapsed = now - startedAt;
+    /** 实算时间 = 墙钟 − 欠账：三条判据一律以此为准（见文件头 T04473 说明） */
+    const ours = elapsed - starveMs;
     const signature = options.progress?.() ?? '-';
     if (signature !== lastSignature) {
       lastSignature = signature;
       lastProgressAt = now;
-    } else if (elapsed > floorMs && now - lastProgressAt > idleMs) {
+      starveAtProgress = starveMs;
+    } else if (ours > floorMs && elapsed - lastProgressAt - (starveMs - starveAtProgress) > idleMs) {
+      const idleOurs = elapsed - lastProgressAt - (starveMs - starveAtProgress);
       throw new Error(
-        `waitForProgress 超时（第 ${elapsed}ms 仍无进展，已连续 ${now - lastProgressAt}ms > ${idleMs}ms，` +
+        `waitForProgress 超时（第 ${elapsed}ms 仍无进展，其中调度器欠账 ${starveMs}ms，实算 ${ours}ms；` +
+          `无进展实算 ${idleOurs}ms > ${idleMs}ms（墙钟连续 ${elapsed - lastProgressAt}ms），` +
           `且超过契约下限 ${floorMs}ms）：${label}\n` +
           `  轮询 ${rounds} 次，最后进展于第 ${lastProgressAt - startedAt}ms\n` +
           `  最后一次进展签名：${lastSignature}`,
       );
-    } else if (elapsed > capMs) {
+    }
+    // 硬上限每轮都判，不看签名有没有变——与前端 T04461 同一处纠正：旧实现把它挂在 `签名未变` 分支的
+    // else if 上，于是「一直在动但永远不到终点」的链路只会靠用例自身超时兜底，与 capMs 的注释
+    // （「到点无论有无进展都失败」）不符。
+    if (ours > capMs) {
       throw new Error(
-        `waitForProgress 超时（总时长 ${elapsed}ms > 硬上限 ${capMs}ms）：${label}\n` +
+        `waitForProgress 超时（实算 ${ours}ms > 硬上限 ${capMs}ms；墙钟 ${elapsed}ms，` +
+          `其中调度器欠账 ${starveMs}ms）：${label}\n` +
           `  轮询 ${rounds} 次，最后进展于第 ${lastProgressAt - startedAt}ms\n` +
           `  最后一次进展签名：${lastSignature}`,
       );
@@ -108,6 +152,12 @@ export async function waitForProgress(
  * 轮询「读一个真实状态」直到判据成立，并把最后一次读到的值交回调用方做断言。
  * 为什么在 waitForProgress 之外还要这一个：api 侧多数断言形如「读作业记录 → 判它的状态字段」，
  * 终点值本身就是证据；只回布尔值的话调用方还得再读一次，两次读之间状态可能又变。
+ *
+ * T04473：判据与 `waitForProgress` 完全同口径（欠账记账 + 实算 floor/idle/cap），
+ * 只把「读到的值」额外作为证据带出去。一处与 `waitForProgress` 不同的节拍口径：
+ * 本函数的一轮 = `setTimeout(0)` + 一次 `read()`，所以欠账按「上一轮的让位 + 读」的总时长算
+ * （`prevRoundAt` 起点取在首读之前，且读后不复位）。这意味着一次确实很慢的 `read()` 会被记成欠账——
+ * 这是对的归因：慢的是取证据的机器负载，不是被测链路卡死；`ours` 仍要撞 cap，续不了命。
  */
 export async function pollUntil<T>(
   label: string,
@@ -115,28 +165,41 @@ export async function pollUntil<T>(
   predicate: (v: T) => boolean,
   options: ProgressWaitOptions,
 ): Promise<{ value: T; wait: WaitResult }> {
-  const startedAt = Date.now();
+  const nowFn = options.now ?? Date.now;
+  const startedAt = nowFn();
   let rounds = 0;
   let last = await read();
   const idleMs = options.idleMs ?? options.floorMs;
   const capMs = options.capMs ?? options.floorMs + idleMs + 1_000;
   let lastProgressAt = startedAt;
   let lastSignature = options.progress?.() ?? String(last);
+  let starveMs = 0;
+  let starveAtProgress = 0;
+  let prevRoundAt = startedAt;
   while (!predicate(last)) {
-    const now = Date.now();
+    const now = nowFn();
+    const gap = now - prevRoundAt;
+    prevRoundAt = now;
+    if (gap > HEALTHY_POLL_MS) starveMs += gap - HEALTHY_POLL_MS;
     const elapsed = now - startedAt;
+    const ours = elapsed - starveMs;
     const signature = options.progress?.() ?? String(last);
     if (signature !== lastSignature) {
       lastSignature = signature;
       lastProgressAt = now;
-    } else if (elapsed > options.floorMs && now - lastProgressAt > idleMs) {
+      starveAtProgress = starveMs;
+    } else if (ours > options.floorMs && elapsed - lastProgressAt - (starveMs - starveAtProgress) > idleMs) {
+      const idleOurs = elapsed - lastProgressAt - (starveMs - starveAtProgress);
       throw new Error(
-        `pollUntil 超时（第 ${elapsed}ms 仍无进展，已连续 ${now - lastProgressAt}ms > ${idleMs}ms）：${label}\n` +
+        `pollUntil 超时（第 ${elapsed}ms 仍无进展，其中调度器欠账 ${starveMs}ms，实算 ${ours}ms；` +
+          `无进展实算 ${idleOurs}ms > ${idleMs}ms（墙钟连续 ${elapsed - lastProgressAt}ms））：${label}\n` +
           `  轮询 ${rounds} 次，最后一次读到的值：${JSON.stringify(last)}`,
       );
-    } else if (elapsed > capMs) {
+    }
+    if (ours > capMs) {
       throw new Error(
-        `pollUntil 超时（总时长 ${elapsed}ms > 硬上限 ${capMs}ms）：${label}\n` +
+        `pollUntil 超时（实算 ${ours}ms > 硬上限 ${capMs}ms；墙钟 ${elapsed}ms，` +
+          `其中调度器欠账 ${starveMs}ms）：${label}\n` +
           `  最后一次读到的值：${JSON.stringify(last)}`,
       );
     }
@@ -144,7 +207,7 @@ export async function pollUntil<T>(
     rounds++;
     last = await read();
   }
-  return { value: last, wait: { elapsedMs: Date.now() - startedAt, rounds } };
+  return { value: last, wait: { elapsedMs: nowFn() - startedAt, rounds, starveMs } };
 }
 
 /**

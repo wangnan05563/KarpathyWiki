@@ -190,16 +190,41 @@ describe('T02836 api 侧固定时长等待防退化守护', () => {
     expect(scan([HELPER_PATH]).violations, 'helpers 内出现固定时长等待').toEqual([]);
   });
 
-  it('两侧口径锁：api helper 与 frontend helper 用同一条无进展判据', () => {
+  it('两侧口径锁：api helper 与 frontend helper 用同一条「墙钟 − 欠账」实算判据', () => {
     // 复制实现（见 helpers 头注）最怕的是「一份改了另一份没改」——判据本身比字符串，
     // 两侧任何一次调参没同步，这条用例就会红并把两边原文贴出来。
+    // T04473 把这条门改成「新串必须在、旧串必须不在」：
+    // 前端 T04461 改完判据后，旧的纯墙钟串在 frontend 侧已消失，本侧却照抄旧串继续全绿——
+    // 「同一条判据」当时只比 api 自己写的正则，等于没有门。现在两侧各查两遍，缺一边都红。
     expect(fs.existsSync(FRONTEND_HELPER), `找不到 frontend 版工具（${FRONTEND_HELPER}），口径锁失效`).toBe(true);
     const apiSrc = fs.readFileSync(HELPER_PATH, 'utf8');
     const feSrc = fs.readFileSync(FRONTEND_HELPER, 'utf8');
-    const IDLE_RULE = 'elapsed > floorMs && now - lastProgressAt > idleMs';
-    const IDLE_RULE_FE = /elapsed\s*>\s*floorMs\s*&&\s*now\s*-\s*lastProgressAt\s*>\s*idleMs/;
-    expect(IDLE_RULE_FE.test(apiSrc), `api helper 的判据不是「${IDLE_RULE}」`).toBe(true);
-    expect(IDLE_RULE_FE.test(feSrc), 'frontend helper 的判据已与 api 侧不一致').toBe(true);
+    const IDLE_RULE = 'ours > floorMs && elapsed - lastProgressAt - (starveMs - starveAtProgress) > idleMs';
+    const IDLE_RULE_FE =
+      /ours\s*>\s*floorMs\s*&&\s*elapsed\s*-\s*lastProgressAt\s*-\s*\(starveMs\s*-\s*starveAtProgress\)\s*>\s*idleMs/;
+    // 旧判据（把机器负载算成应用卡死的那条）：任何一侧残留都说明欠账口径没移植干净
+    const OLD_WALL_RULE_FE = /elapsed\s*>\s*floorMs\s*&&\s*now\s*-\s*lastProgressAt\s*>\s*idleMs/;
+    for (const [side, src] of [
+      ['api', apiSrc],
+      ['frontend', feSrc],
+    ] as const) {
+      expect(IDLE_RULE_FE.test(src), `${side} helper 的无进展判据不是「${IDLE_RULE}」`).toBe(true);
+      expect(OLD_WALL_RULE_FE.test(src), `${side} helper 仍留着旧的纯墙钟判据（T04473 没移植干净）`).toBe(false);
+      // 欠账口径的四件套：健康节拍、实算时间、每轮都判的硬上限、可注入时钟
+      for (const shared of [
+        'export const HEALTHY_POLL_MS = 25;',
+        'const ours = elapsed - starveMs;',
+        'if (ours > capMs)',
+        'options.now ?? Date.now',
+        'starveAtProgress = starveMs;',
+      ]) {
+        expect(src, `${side} helper 缺少同口径要素：${shared}`).toContain(shared);
+      }
+      // 契约预算一个数字都没动：T04473 的修法是记账，不是将超时放宽
+      expect(src, `${side} helper 的 NO_TIMER_CHAIN 已偏离契约数值`).toContain(
+        'NO_TIMER_CHAIN = { floorMs: 1_000, idleMs: 2_000, capMs: 3_000 }',
+      );
+    }
     // 同一组出口名（前端版没有 pollUntil 时也不许 api 侧静默分叉）
     for (const name of ['waitForProgress', 'contractSleep', 'ProgressWaitOptions']) {
       expect(feSrc.includes(name), `frontend helper 缺少 ${name}，两侧出口面已分叉`).toBe(true);
