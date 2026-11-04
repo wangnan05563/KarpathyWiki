@@ -264,7 +264,7 @@ function cardLabel(type: MultimodalOutput['type']): string {
 }
 .card-body :deep(.markdown-body code) {
   background: var(--accent-cyan-a12, rgba(21, 84, 209, 0.1));
-  color: var(--neon-purple, #1554d1);
+  color: var(--accent-readable, var(--neon-purple, #1554d1));
 }
 .mindmap-container {
   display: flex;

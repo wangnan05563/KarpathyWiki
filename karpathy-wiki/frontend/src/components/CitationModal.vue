@@ -128,7 +128,7 @@ function openPage() {
 }
 .citation-chunk-head {
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   font-weight: 600;
   margin-bottom: 4px;
 }

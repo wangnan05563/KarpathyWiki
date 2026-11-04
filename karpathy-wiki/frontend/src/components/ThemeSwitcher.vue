@@ -307,7 +307,7 @@ onBeforeUnmount(() => {
 }
 
 .theme-check {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   flex-shrink: 0;
   filter: drop-shadow(0 0 4px currentColor);
 }

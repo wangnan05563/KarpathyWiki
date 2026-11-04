@@ -217,7 +217,7 @@ watch(() => guide.visible, (v) => { if (!v) stopAutoPlay(); });
 /* 高亮框：主题色虚线边框 + 柔和光晕，突出目标元素 */
 .guide-box {
   position: fixed;
-  border: 2px dashed var(--neon-cyan, #00e5ff);
+  border: 2px dashed var(--accent-readable, var(--neon-cyan, #00e5ff));
   border-radius: 10px;
   box-shadow: 0 0 0 4px var(--accent-cyan-a20, rgba(0, 229, 255, 0.15));
   pointer-events: none;
@@ -263,7 +263,7 @@ watch(() => guide.visible, (v) => { if (!v) stopAutoPlay(); });
 .guide-step {
   font-size: 11px;
   font-family: var(--font-mono, monospace);
-  color: var(--neon-cyan, #00e5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00e5ff));
   letter-spacing: 1px;
 }
 

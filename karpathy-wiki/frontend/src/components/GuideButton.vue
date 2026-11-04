@@ -55,13 +55,13 @@ const tooltip = computed(() => (guide.visible ? '引导进行中' : '查看本�
 }
 
 .guide-entry-btn:hover {
-  color: var(--neon-cyan, #00e5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00e5ff));
   background: var(--accent-cyan-a12, rgba(0, 229, 255, 0.12));
   transform: translateY(-2px);
 }
 
 .guide-entry-btn:focus-visible {
-  outline: 2px solid var(--neon-cyan, #00e5ff);
+  outline: 2px solid var(--accent-readable, var(--neon-cyan, #00e5ff));
   outline-offset: 2px;
 }
 </style>

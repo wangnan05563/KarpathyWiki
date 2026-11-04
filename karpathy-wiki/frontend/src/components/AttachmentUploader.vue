@@ -210,7 +210,7 @@ function handleRemove(id: string) {
 }
 .upload-btn:hover {
   background: var(--accent-cyan-a12, rgba(0, 245, 255, 0.12));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 /* F-3.5 vision 能力缺失时灰显：opacity + cursor not-allowed */
 .upload-btn.disabled {
@@ -230,7 +230,7 @@ function handleRemove(id: string) {
 }
 .attachment-list.drag-over {
   background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
-  border: 1px dashed var(--neon-cyan, #00f5ff);
+  border: 1px dashed var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .attachment-item {
   position: relative;

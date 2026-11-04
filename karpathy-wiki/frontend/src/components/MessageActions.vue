@@ -103,10 +103,10 @@ function handleFeedback(type: 'up' | 'down') {
 }
 .action-btn:hover {
   background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .action-btn.active {
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .btn-label {
   font-size: 11px;

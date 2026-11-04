@@ -59,6 +59,20 @@ const WHITELIST = [
   'src/components/SessionStatusIcon.vue', // T04470 批次 B2
   'src/components/TocTree.vue', // T04470 批次 B2
   'src/components/TtsController.vue', // T04470 批次 B2
+  // ↓ 批次 C：长尾 13 个组件 21 处（每文件 1~2 处，散在 hover/focus/deep 选择器里）
+  'src/components/AttachmentUploader.vue', // T04470 批次 C
+  'src/components/CitationModal.vue', // T04470 批次 C
+  'src/components/CitationText.vue', // T04470 批次 C
+  'src/components/ContextUsageBadge.vue', // T04470 批次 C
+  'src/components/FloatingChat.vue', // T04470 批次 C
+  'src/components/FollowupsChips.vue', // T04470 批次 C
+  'src/components/GuideButton.vue', // T04470 批次 C
+  'src/components/GuideOverlay.vue', // T04470 批次 C
+  'src/components/MessageActions.vue', // T04470 批次 C
+  'src/components/MessageToolbar.vue', // T04470 批次 C
+  'src/components/MultimodalOutputCard.vue', // T04470 批次 C
+  'src/components/ThemeSwitcher.vue', // T04470 批次 C
+  'src/components/ThinkingBlock.vue', // T04470 批次 C
 ];
 
 /**
@@ -92,27 +106,35 @@ const WIRING_DONE: Record<string, number> = {
   'src/components/SessionStatusIcon.vue': 3, // T04470 批次 B2（三层嵌套：readable 插在内层，外层 --m-* 皮肤变量优先级不动）
   'src/components/TocTree.vue': 3, // T04470 批次 B2
   'src/components/TtsController.vue': 3, // T04470 批次 B2
+  // ↓ 批次 C：长尾 13 个文件 21 处，全部走 readable 包裹（本批无状态点光晕惯用法）。
+  //   其中 2 处（FloatingChat L942 / MessageToolbar L587）接完后在部分浅底主题上仍差 AA 一线
+  //   ——三个 readable 族在该面上的最低值都到不了 4.5，属「面取值」问题不是「族」问题，
+  //   实测值与换族反证锁在 contrast-sweep-components-c.test.ts 的 KNOWN_GAPS，已建派生单裁决。
+  'src/components/AttachmentUploader.vue': 2, // T04470 批次 C
+  'src/components/CitationModal.vue': 1, // T04470 批次 C
+  'src/components/CitationText.vue': 2, // T04470 批次 C
+  'src/components/ContextUsageBadge.vue': 1, // T04470 批次 C
+  'src/components/FloatingChat.vue': 2, // T04470 批次 C（含 1 处跨家族按面选族；另 1 处为已登记残差）
+  'src/components/FollowupsChips.vue': 2, // T04470 批次 C
+  'src/components/GuideButton.vue': 2, // T04470 批次 C
+  'src/components/GuideOverlay.vue': 2, // T04470 批次 C
+  'src/components/MessageActions.vue': 2, // T04470 批次 C
+  'src/components/MessageToolbar.vue': 1, // T04470 批次 C（已登记残差）
+  'src/components/MultimodalOutputCard.vue': 1, // T04470 批次 C
+  'src/components/ThemeSwitcher.vue': 1, // T04470 批次 C
+  'src/components/ThinkingBlock.vue': 2, // T04470 批次 C
 };
 
 /**
  * 未接入文件的基线（处数），冻结于 T04449 第五组收口时点：163 处 / 35 个文件。
  * 只允许下降——接入一处就把它调小，新增一处即红。接入完的文件请从这里移出并进 WHITELIST+DONE。
+ *
+ * T04470 批次 C 起本表为空：起算的 35 个文件 163 处已全部迁入 WHITELIST+WIRING_DONE。
+ * 空表不是「锁失效」——下方「白名单外只降不升」用 `BASELINE[f] ?? 0` 取预算，
+ * 于是它对**全站视图+组件的每一个非白名单文件**要求 0 处：任何一个 .vue 新写一处裸基色前景即红。
+ * 账本闭环用例继续钉住 163/35 这个起算点，防止有人靠删 DONE 条目把「已完成」抹小。
  */
-const BASELINE: Record<string, number> = {
-  'src/components/AttachmentUploader.vue': 2,
-  'src/components/CitationText.vue': 2,
-  'src/components/FloatingChat.vue': 2,
-  'src/components/FollowupsChips.vue': 2,
-  'src/components/GuideButton.vue': 2,
-  'src/components/GuideOverlay.vue': 2,
-  'src/components/MessageActions.vue': 2,
-  'src/components/ThinkingBlock.vue': 2,
-  'src/components/CitationModal.vue': 1,
-  'src/components/ContextUsageBadge.vue': 1,
-  'src/components/MessageToolbar.vue': 1,
-  'src/components/MultimodalOutputCard.vue': 1,
-  'src/components/ThemeSwitcher.vue': 1,
-};
+const BASELINE: Record<string, number> = {};
 
 /** 起算账本（T04449 第五组收口时点的全站清点），不得随进度改动 */
 const START_TOTAL = 163;

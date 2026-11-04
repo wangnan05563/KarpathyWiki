@@ -55,8 +55,8 @@ sup.cite-ref {
   font-weight: 600;
   line-height: 1;
   border-radius: 8px;
-  border: 1px solid var(--neon-cyan, #00f5ff);
-  color: var(--neon-cyan, #00f5ff);
+  border: 1px solid var(--accent-readable, var(--neon-cyan, #00f5ff));
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: transparent;
   cursor: pointer;
   vertical-align: super;

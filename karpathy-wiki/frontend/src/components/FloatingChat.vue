@@ -938,8 +938,8 @@ onBeforeUnmount(() => {
 
 .suggestion-chip:hover {
   background: var(--accent-purple-a25);
-  border-color: var(--neon-purple);
-  color: var(--neon-purple);
+  border-color: var(--purple-readable, var(--neon-purple));
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 /* 消息行 */

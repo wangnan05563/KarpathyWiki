@@ -82,13 +82,13 @@ function stepDuration(idx: number, ts?: string): string {
   margin: 6px 0;
   padding: 6px 10px;
   background: var(--accent-purple-a04, rgba(176, 38, 255, 0.04));
-  border-left: 2px solid var(--neon-purple, #b226ff);
+  border-left: 2px solid var(--purple-readable, var(--neon-purple, #b226ff));
   border-radius: 0 6px 6px 0;
 }
 /* 流式生成中：提亮背景 + 脉冲边框，让用户明确感知"正在思考" */
 .thinking-block.live {
   background: var(--accent-purple-a08, rgba(176, 38, 255, 0.08));
-  border-left-color: var(--neon-purple, #b226ff);
+  border-left-color: var(--purple-readable, var(--neon-purple, #b226ff));
 }
 .thinking-header {
   cursor: pointer;

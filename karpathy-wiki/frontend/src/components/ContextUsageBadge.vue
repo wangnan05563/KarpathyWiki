@@ -105,7 +105,7 @@ async function compactContext() {
 }
 
 .ctx-badge-inner:hover {
-  border-color: var(--neon-cyan, #00f5ff);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   box-shadow: 0 0 10px var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
 }
 

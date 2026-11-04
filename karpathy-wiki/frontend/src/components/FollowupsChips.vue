@@ -67,8 +67,8 @@ const emit = defineEmits<{ click: [question: string] }>();
 }
 .followup-chip:hover:not(:disabled) {
   background: var(--accent-cyan-a12, rgba(0, 245, 255, 0.12));
-  border-color: var(--neon-cyan, #00f5ff);
-  color: var(--neon-cyan, #00f5ff);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .followup-chip:disabled {
   cursor: not-allowed;

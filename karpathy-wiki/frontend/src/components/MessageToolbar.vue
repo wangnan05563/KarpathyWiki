@@ -584,7 +584,7 @@ function handleFeedback(type: 'up' | 'down') {
 /* 删除按钮：hover 时使用主题粉色警示色，与其他操作按钮视觉区分 */
 .toolbar-btn.danger-btn:hover {
   background: var(--accent-pink-a25, rgba(255, 0, 110, 0.25));
-  color: var(--neon-pink, #ff006e);
+  color: var(--pink-readable, var(--neon-pink, #ff006e));
 }
 
 /* F-3.6 / F-3.13 激活态：高亮显示当前朗读/反馈状态 */
