@@ -41,6 +41,8 @@ const WHITELIST = [
   'src/views/Register.vue', // T04470 批次 A1
   'src/views/Help.vue', // T04449 首组接入青族 7 处 + T04470 批次 A2 补 5 处
   'src/views/About.vue', // T04470 批次 A2
+  'src/views/Dashboard.vue', // T04470 批次 A3
+  'src/views/Users.vue', // T04470 批次 A3
 ];
 
 /**
@@ -53,6 +55,8 @@ const WIRING_DONE: Record<string, number> = {
   'src/views/Register.vue': 4, // T04470 批次 A1
   'src/views/Help.vue': 5, // T04470 批次 A2（首组已接入的 7 处青族不在此账内，那时它还没进基线表）
   'src/views/About.vue': 7, // T04470 批次 A2
+  'src/views/Dashboard.vue': 6, // T04470 批次 A3
+  'src/views/Users.vue': 6, // T04470 批次 A3
 };
 
 /**
@@ -67,8 +71,6 @@ const BASELINE: Record<string, number> = {
   'src/components/MarkdownRenderer.vue': 9,
   'src/views/Query.vue': 8,
   'src/components/RefsList.vue': 7,
-  'src/views/Dashboard.vue': 6,
-  'src/views/Users.vue': 6,
   'src/components/HealthIssueList.vue': 6,
   'src/components/ConversationSidebar.vue': 5,
   'src/components/DocumentTabs.vue': 5,

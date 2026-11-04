@@ -846,7 +846,7 @@ onMounted(loadUsers);
   font-family: var(--font-display);
   font-size: 22px;
   font-weight: 900;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   text-shadow: 0 0 12px var(--accent-cyan-a30);
   margin-bottom: 6px;
 }
@@ -862,7 +862,7 @@ onMounted(loadUsers);
   z-index: 1;
   padding: 10px 14px;
   font-size: 13px;
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   background: var(--accent-pink-a10);
   border-radius: 8px;
   border: 1px solid var(--accent-pink-a30);
@@ -974,7 +974,7 @@ onMounted(loadUsers);
 }
 
 .role-admin { color: var(--text-bright); background: var(--neon-magenta); }
-.role-user { color: var(--neon-cyan); background: var(--accent-cyan-a10); }
+.role-user { color: var(--accent-readable, var(--neon-cyan)); background: var(--accent-cyan-a10); }
 .role-guest { color: var(--text-dim); background: var(--accent-purple-a10); }
 
 .td-date {
@@ -1008,7 +1008,7 @@ onMounted(loadUsers);
 
 .field-error-text {
   font-size: 11px;
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
 }
 
 .field-error :deep(.el-input__wrapper) {
@@ -1065,8 +1065,8 @@ onMounted(loadUsers);
 }
 
 .neon-btn.secondary:hover {
-  color: var(--neon-cyan);
-  border-color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
+  border-color: var(--accent-readable, var(--neon-cyan));
 }
 
 @media (max-width: 768px) {

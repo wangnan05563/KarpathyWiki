@@ -361,7 +361,7 @@ onMounted(() => {
 .welcome-tag {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   letter-spacing: 2px;
   display: block;
   margin-bottom: 8px;
@@ -394,7 +394,7 @@ onMounted(() => {
 }
 
 .welcome-stats strong {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
 }
 
 /* 统计卡片：4 列网格 */
@@ -477,7 +477,7 @@ onMounted(() => {
 }
 
 .title-bracket {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   font-weight: 400;
 }
 
@@ -527,7 +527,7 @@ onMounted(() => {
   font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 700;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 /* 快捷入口网格 */
@@ -552,12 +552,12 @@ onMounted(() => {
 
 .shortcut-item:hover {
   background: var(--accent-purple-a12, rgba(176, 38, 255, 0.12));
-  border-color: var(--neon-purple);
+  border-color: var(--purple-readable, var(--neon-purple));
 }
 
 .shortcut-icon {
   font-size: 28px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   text-shadow: var(--glow-cyan);
   font-family: var(--font-display);
 }
