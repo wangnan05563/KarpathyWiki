@@ -5774,7 +5774,7 @@ async function importConfig() {
 .key-status.unset {
   background: var(--accent-pink-a15);
   border-color: var(--accent-pink-a50);
-  color: var(--neon-magenta);
+  color: var(--purple-readable, var(--neon-magenta));
   box-shadow: 0 0 10px var(--accent-pink-a30);
 }
 
@@ -5791,7 +5791,7 @@ async function importConfig() {
 .key-badge-private {
   background: var(--accent-purple-a15);
   border-color: var(--accent-purple-a40);
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .key-badge-shared {
@@ -5807,7 +5807,7 @@ async function importConfig() {
   border-radius: 6px;
   font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .key-warning {
@@ -5822,12 +5822,12 @@ async function importConfig() {
 
 .warning-icon {
   font-size: 26px;
-  color: var(--neon-magenta);
+  color: var(--purple-readable, var(--neon-magenta));
   text-shadow: 0 0 12px var(--neon-magenta);
 }
 
 .warning-text strong {
-  color: var(--neon-magenta);
+  color: var(--purple-readable, var(--neon-magenta));
   font-family: var(--font-mono);
   font-size: 14px;
   letter-spacing: 0.04em;
@@ -5898,7 +5898,7 @@ async function importConfig() {
   margin-top: 10px;
   font-size: 12px;
   font-family: var(--font-mono);
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
 }
 
 /* §6.X 版本历史与 diff */
@@ -5932,7 +5932,7 @@ async function importConfig() {
   border-radius: 6px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .history-empty {
@@ -6063,7 +6063,7 @@ async function importConfig() {
 }
 
 .diff-line.del .line-prefix {
-  color: var(--neon-magenta);
+  color: var(--purple-readable, var(--neon-magenta));
 }
 
 .line-content {
@@ -6302,7 +6302,7 @@ async function importConfig() {
 .test-result.fail {
   background: linear-gradient(135deg, var(--accent-pink-a12), var(--accent-pink-a03));
   border: 1px solid var(--accent-pink-a35);
-  color: var(--neon-magenta);
+  color: var(--purple-readable, var(--neon-magenta));
 }
 
 .result-icon {
@@ -6345,7 +6345,7 @@ async function importConfig() {
   border-radius: 6px;
   font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .key-hint {
@@ -6354,7 +6354,7 @@ async function importConfig() {
   gap: 8px;
   margin-top: 8px;
   font-size: 12px;
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   font-family: var(--font-mono);
 }
 
@@ -6404,8 +6404,8 @@ async function importConfig() {
 }
 
 .neon-btn-danger:hover:not(.is-disabled) {
-  border-color: var(--neon-magenta) !important;
-  color: var(--neon-magenta) !important;
+  border-color: var(--pink-readable, var(--neon-magenta)) !important;
+  color: var(--pink-readable, var(--neon-magenta)) !important;
 }
 
 /* 区块标题栏：标题 + 操作按钮横向排列 */
@@ -6461,7 +6461,7 @@ async function importConfig() {
   background: var(--accent-magenta-a10);
   border: 1px solid var(--accent-magenta-a30);
   border-radius: 6px;
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   font-size: 12px;
 }
 
@@ -6557,7 +6557,7 @@ async function importConfig() {
 }
 
 .cli-test-result .error-output {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
 }
 
 /* 禁用态：场景规则在非 keyword 模式下灰显 */
@@ -6734,7 +6734,7 @@ async function importConfig() {
 .dirty-indicator {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-magenta);
+  color: var(--purple-readable, var(--neon-magenta));
   padding: 4px 10px;
   background: var(--accent-pink-a10);
   border: 1px solid var(--accent-pink-a30);
@@ -6754,7 +6754,7 @@ async function importConfig() {
 .pattern-status.valid {
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
-.pattern-status.invalid { color: var(--neon-pink); }
+.pattern-status.invalid { color: var(--pink-readable, var(--neon-pink)); }
 
 .pattern-input.pattern-valid :deep(.el-input__inner) {
   border-color: var(--accent-cyan-a50) !important;
@@ -6910,7 +6910,7 @@ async function importConfig() {
 }
 
 .test-error {
-  color: var(--neon-pink);
+  color: var(--purple-readable, var(--neon-pink));
   padding: 8px;
   background: var(--accent-pink-a10);
   border-radius: var(--radius-input);

@@ -45,6 +45,7 @@ const WHITELIST = [
   'src/views/Users.vue', // T04470 批次 A3
   'src/views/Query.vue', // T04470 批次 A4（8 处裸基色；另回补 1 处 T04175 遗留的错族，不在本账内）
   'src/views/Cleanup.vue', // T04470 批次 A5（9 处粉/紫族；首组已接入的 7 处青族不在此账内）
+  'src/views/Config.vue', // T04470 批次 A6（18 处粉/紫族，批次 A 视图层收尾；首组已接入的 28 处青族不在此账内）
 ];
 
 /**
@@ -61,6 +62,7 @@ const WIRING_DONE: Record<string, number> = {
   'src/views/Users.vue': 6, // T04470 批次 A3
   'src/views/Query.vue': 8, // T04470 批次 A4
   'src/views/Cleanup.vue': 9, // T04470 批次 A5（基线冻结在首组之后，表里的 9 处就是首组青族 7 处之外的粉/紫族余量）
+  'src/views/Config.vue': 18, // T04470 批次 A6（同上：首组接入的青族不在基线表里，这 18 处是冻结时点剩下的粉/紫族）
 };
 
 /**
@@ -68,7 +70,6 @@ const WIRING_DONE: Record<string, number> = {
  * 只允许下降——接入一处就把它调小，新增一处即红。接入完的文件请从这里移出并进 WHITELIST+DONE。
  */
 const BASELINE: Record<string, number> = {
-  'src/views/Config.vue': 18,
   'src/components/BatchProgressBar.vue': 11,
   'src/components/SingleFileProgressBar.vue': 10,
   'src/components/MarkdownRenderer.vue': 9,

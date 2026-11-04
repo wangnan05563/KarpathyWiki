@@ -1,23 +1,276 @@
-// T04449 口径推广·第二组：配置中心（Config.vue）。
-// 与首组同一缺陷族：把主题强调色 `--neon-cyan` 裸写进前景。改造前由临时取证用例逐面实算
-// （解析每条裸前景声明所在规则、取该规则自己的 background 作面，未声明的按卡片面计）：
-//   macaron 最差 1.38:1、enterprise 2.11:1、ecommerce 2.32:1、portfolio 3.93:1，
-//   深色主题（default/creative/product）与 light-business 本来达标——所以判定必须逐主题，
-//   不能按「问答页修好了」推断。接入 --accent-readable 口径后 8 主题最差 4.82:1。
-// 本组还暴露并补掉一个守护盲区：`findBareForegroundUses` 的声明正则按行首属性名匹配，
-// 漏掉「单行规则」`{ color: var(--neon-cyan); }` 与 `border-left: 3px solid var(--neon-cyan)`
-// 简写里的颜色。因此本文件除口径守护外，另加一条「整文件不允许出现未包裹的 --neon-cyan 引用」
-// 的行级锁——它比逐属性正则更宽，专门兜住简写与单行写法。
+// T04470 口径推广·批次 A6：系统配置页（Config.vue 18 处，批次 A 收尾文件）。
+// 与前五批同一缺陷族：为深色霓虹底设计的强调色基名（--neon-magenta / --neon-purple / --neon-pink）
+// 被直接写进 color / border(-color)，在浅底主题跌破 AA。
+//
+// 本批四点新内容（逐主题实算见 D:/code/tmp/t04470/a6matrix.log、a6beforeafter.log）：
+// ① **所在面第一次由「容器底」而非元素自身决定**：本页的面板一律声明 `background: var(--bg-scene)`
+//    （.config-block / .history-section / .diff-result / .ai-status / .cli-test-result / .test-results），
+//    scene 在浅色主题是接近纯白的实底（macaron #fff5f0），比卡片页底更亮。
+//    所以 tint 面要按 tint → scene 合成，而不是 tint → 卡片页底；两者结论会反过来。
+// ② **粉族在本页大面积不够**：18 点里 11 点必须用 `--purple-readable`，其中 6 点坐在**粉 tint** 上
+//    （粉 a15 / 粉 a12 / 粉渐变 a18→a05 / 粉 a10）——这不是风格统一问题，是实算：同一面上
+//    `--pink-readable` 在 macaron / portfolio 最低只有 4.10~4.47，而 `--purple-readable` 4.58~4.74。
+//    「跨族按面选族」在本批从个案变成多数，故写成断言防止后来者按家族名改回粉族。
+// ③ **一处已知缺口（本批修不掉，另单裁决）**：`.key-badge-private`（紫 a15 × scene）接入紫族后
+//    macaron 实测 4.49 < 4.5，其余 7 主题 4.63~10.57。这是 macaron 的 `--purple-readable: #7a628d`
+//    本身偏浅所致，属 token 取值校准（T04468 口径），不在「接入既有 readable」授权范围内。
+//    本文件把这一格写成精确值留档锁，而不是把它塞进达标清单。
+// ④ **`.pattern-status.invalid` 的单行规则**：`color: var(--neon-pink)` 写在同一行的花括号里，
+//    行级口径扫描按分号切段也能抓到，故一并接入（该行涉及的假 token 属 T04460，不在本口径）。
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ROOT, auditThemes, findBareForegroundUses, formatFailures, loadThemes, type AuditRow } from './helpers/contrast';
+import {
+  ROOT,
+  THRESHOLD,
+  auditThemes,
+  findBareBaseForegroundUses,
+  formatFailures,
+  loadThemes,
+  pageOf,
+  resolve,
+  worstRatio,
+  type AuditFailure,
+  type AuditRow,
+  type RGB,
+  type ThemeTokens,
+} from './helpers/contrast';
 
 const FILE = 'src/views/Config.vue';
-const themes = loadThemes();
+const PAGE = '系统配置页';
 
-/** 消费点清单（28 行）：label 用选择器语义，bg 用该元素源码里自己声明的面 */
-const AUDIT: AuditRow[] = [
+const BASE_TOKENS = [
+  /^--neon-cyan$/,
+  /^--neon-pink$/,
+  /^--accent-pink$/,
+  /^--neon-magenta$/,
+  /^--neon-purple$/,
+  /^--accent-purple$/,
+];
+
+const SCENE = 'var(--bg-scene)';
+const CARD = 'var(--bg-card)';
+const GLASS = 'var(--bg-glass)';
+const PINK_A15 = 'var(--accent-pink-a15)';
+const PINK_A12 = 'var(--accent-pink-a12)';
+const PINK_A10 = 'var(--accent-pink-a10)';
+const PINK_GRAD_A18 = 'linear-gradient(135deg, var(--accent-pink-a18), var(--accent-pink-a05))';
+const PINK_GRAD_A12 = 'linear-gradient(135deg, var(--accent-pink-a12), var(--accent-pink-a03))';
+const PURPLE_A15 = 'var(--accent-purple-a15)';
+const PURPLE_A12 = 'var(--accent-purple-a12)';
+const MAGENTA_A10 = 'var(--accent-magenta-a10)';
+
+const PINK = 'var(--pink-readable)';
+const PURPLE = 'var(--purple-readable)';
+
+/**
+ * 本批 18 个真实消费点。`on` 是**权威叠底**：scene 系实底（面板自己声明的不透明底），
+ * 玻璃钮那条按 tint → scene 合成；card 变体另列一条下界清单。
+ */
+interface Point {
+  ln: number;
+  sel: string;
+  face: string;
+  fg: string;
+  bare: string;
+  kind: 'text' | 'ui';
+}
+const POINTS: Point[] = [
+  { ln: 5777, sel: '.key-status.unset', face: PINK_A15, fg: PURPLE, bare: 'var(--neon-magenta)', kind: 'text' },
+  { ln: 5794, sel: '.key-badge-private', face: PURPLE_A15, fg: PURPLE, bare: 'var(--neon-purple)', kind: 'text' },
+  { ln: 5810, sel: '.env-name', face: PURPLE_A12, fg: PURPLE, bare: 'var(--neon-purple)', kind: 'text' },
+  { ln: 5825, sel: '.warning-icon', face: PINK_GRAD_A18, fg: PURPLE, bare: 'var(--neon-magenta)', kind: 'text' },
+  { ln: 5830, sel: '.warning-text strong', face: PINK_GRAD_A18, fg: PURPLE, bare: 'var(--neon-magenta)', kind: 'text' },
+  { ln: 5901, sel: '.reload-warn', face: SCENE, fg: PINK, bare: 'var(--neon-magenta)', kind: 'text' },
+  { ln: 5935, sel: '.history-disabled code', face: PURPLE_A12, fg: PURPLE, bare: 'var(--neon-purple)', kind: 'text' },
+  { ln: 6066, sel: '.diff-line.del .line-prefix', face: PINK_A12, fg: PURPLE, bare: 'var(--neon-magenta)', kind: 'text' },
+  { ln: 6305, sel: '.test-result.fail', face: PINK_GRAD_A12, fg: PURPLE, bare: 'var(--neon-magenta)', kind: 'text' },
+  { ln: 6348, sel: '.masked-key', face: PURPLE_A12, fg: PURPLE, bare: 'var(--neon-purple)', kind: 'text' },
+  { ln: 6357, sel: '.key-hint', face: SCENE, fg: PINK, bare: 'var(--neon-magenta)', kind: 'text' },
+  { ln: 6407, sel: '.neon-btn-danger:hover border', face: GLASS, fg: PINK, bare: 'var(--neon-magenta)', kind: 'ui' },
+  { ln: 6408, sel: '.neon-btn-danger:hover color', face: GLASS, fg: PINK, bare: 'var(--neon-magenta)', kind: 'text' },
+  { ln: 6464, sel: '.mcp-json-error', face: MAGENTA_A10, fg: PINK, bare: 'var(--neon-magenta)', kind: 'text' },
+  { ln: 6560, sel: '.cli-test-result .error-output', face: SCENE, fg: PINK, bare: 'var(--neon-magenta)', kind: 'text' },
+  { ln: 6737, sel: '.dirty-indicator', face: PINK_A10, fg: PURPLE, bare: 'var(--neon-magenta)', kind: 'text' },
+  { ln: 6757, sel: '.pattern-status.invalid', face: SCENE, fg: PINK, bare: 'var(--neon-pink)', kind: 'text' },
+  { ln: 6913, sel: '.test-error', face: PINK_A10, fg: PURPLE, bare: 'var(--neon-pink)', kind: 'text' },
+];
+
+/**
+ * 本页的叠底链与其余页不同：tint 坐在容器声明的 --bg-scene（实底）上，
+ * 而 auditThemes 的 page 固定是卡片页底，故此处自带一份按面选底的算法。
+ */
+const sceneRgb = (decls: Map<string, string>): RGB => {
+  const r = resolve(SCENE, decls);
+  if ('stops' in r) throw new Error(`${FILE} 的 --bg-scene 不该是渐变`);
+  return r.solid;
+};
+const pageFor = (face: string, decls: Map<string, string>, base: 'scene' | 'card'): RGB =>
+  // scene 是实底：直接当可见底；card 走既有卡片页底口径
+  base === 'scene' ? sceneRgb(decls) : pageOf(decls);
+
+const ratio = (p: { face: string; fg: string; kind: 'text' | 'ui' }, t: ThemeTokens, base: 'scene' | 'card') =>
+  worstRatio(p.fg, p.face, t.decls, pageFor(p.face, t.decls, base));
+
+const audit = (base: 'scene' | 'card', themes: ThemeTokens[]): AuditFailure[] => {
+  const out: AuditFailure[] = [];
+  for (const t of themes) {
+    for (const p of POINTS) {
+      const r = ratio(p, t, base);
+      if (r < THRESHOLD[p.kind]) out.push({ theme: t.name, label: `${p.sel} [L${p.ln}]`, ratio: r, threshold: THRESHOLD[p.kind] });
+    }
+  }
+  return out;
+};
+
+/** 唯一已知缺口：macaron 的 --purple-readable 偏浅，需 token 取值校准（T04468），不在本批授权内 */
+const KNOWN_GAP = { theme: 'macaron', label: '.key-badge-private [L5794]' };
+
+/** 达标清单（既有 auditThemes 通道）：卡片实底 + 无自身底的三处，作为第二重下界 */
+const CARD_BOUND: AuditRow[] = POINTS.map((p) => ({
+  label: `${PAGE}·${p.sel} [card 下界]`,
+  fg: p.fg,
+  bg: p.face === SCENE || p.face === GLASS ? CARD : p.face,
+  kind: p.kind,
+}));
+
+/** 接入前的裸基色事实（18 个点 × 各自面 / 各自口径）：证明本批不是「顺手活」 */
+const BEFORE: Array<{ face: string; fg: string; kind: 'text' | 'ui' }> = POINTS.map((p) => ({
+  face: p.face,
+  fg: p.bare,
+  kind: p.kind,
+}));
+const BEFORE_FAILURES = 88;
+
+/** 本批接入后的源码原文（逐条点名；任何一条被回退即红） */
+const WRAPPED_LINES: Array<{ line: string; count: number }> = [
+  { line: '  color: var(--purple-readable, var(--neon-purple));', count: 4 },
+  { line: '  color: var(--purple-readable, var(--neon-magenta));', count: 6 },
+  { line: '  color: var(--purple-readable, var(--neon-pink));', count: 1 },
+  { line: '  color: var(--pink-readable, var(--neon-magenta));', count: 4 },
+  { line: '  border-color: var(--pink-readable, var(--neon-magenta)) !important;', count: 1 },
+  { line: '  color: var(--pink-readable, var(--neon-magenta)) !important;', count: 1 },
+  { line: '.pattern-status.invalid { color: var(--pink-readable, var(--neon-pink)); }', count: 1 },
+];
+
+/** 首组已接入青族 28 处，粉/紫全部来自本批（11 紫 / 7 粉） */
+const FAMILY_COUNTS: Record<string, number> = { accent: 28, purple: 11, pink: 7 };
+/** 装饰性 tint 前景基线（只降不升；是否纳入口径属 T04468） */
+const TINT_BASELINE = 55;
+
+const famCount = (src: string, fam: string) => (src.match(new RegExp(`--${fam}-readable`, 'g')) || []).length;
+const srcOf = () => readFileSync(join(ROOT, FILE), 'utf8');
+
+describe('T04470 批次 A6：逐主题达标（权威叠底 = 面板实底 --bg-scene）', () => {
+  it(`8 主题 × ${POINTS.length} 面接入后只剩 1 处已知缺口（L5794 × macaron）`, () => {
+    const failures = audit('scene', loadThemes());
+    expect(failures.map((f) => `${f.theme}·${f.label}`), formatFailures(failures)).toEqual([
+      `${KNOWN_GAP.theme}·${KNOWN_GAP.label}`,
+    ]);
+  });
+
+  it('卡片页底下界同样成立（叠底猜错也不会翻案，18 面 8 主题全过）', () => {
+    const failures = audit('card', loadThemes());
+    expect(failures, formatFailures(failures)).toEqual([]);
+  });
+
+  it('既有 auditThemes 通道复查：把 tint 面按卡片底合成仍全过', () => {
+    const failures = auditThemes(CARD_BOUND, loadThemes());
+    expect(failures, formatFailures(failures)).toEqual([]);
+  });
+
+  it(`接入前确有 ${BEFORE_FAILURES} 个未达标组合（本批不是顺手活）`, () => {
+    const themes = loadThemes();
+    const bare = BEFORE.reduce(
+      (acc, b) =>
+        acc +
+        themes.filter(
+          (t) => worstRatio(b.fg, b.face, t.decls, pageFor(b.face, t.decls, 'scene')) < THRESHOLD[b.kind],
+        ).length,
+      0,
+    );
+    expect(bare, `BEFORE 实测 ${bare}（18 点 × 8 主题）`).toBe(BEFORE_FAILURES);
+  });
+
+  it('跨族是按面实算的结果、不是风格选择：11 个紫族点若按粉族接必有点跌破 4.5', () => {
+    const themes = loadThemes();
+    const purplePoints = POINTS.filter((p) => p.fg === PURPLE);
+    expect(purplePoints.length).toBe(11);
+    const pinkWouldFail = purplePoints.filter(
+      (p) => Math.min(...themes.map((t) => worstRatio(PINK, p.face, t.decls, sceneRgb(t.decls)))) < THRESHOLD.text,
+    );
+    // 除 L5794（粉族 3.69 更差）外每个紫族点按粉族都有主题跌破 4.5——即全部 11 个
+    expect(pinkWouldFail.length, pinkWouldFail.map((p) => `L${p.ln} ${p.sel}`).join(' ')).toBe(purplePoints.length);
+  });
+
+  it('清单规模与本批实现严格对齐（18 个真实点），接入原文逐条点名', () => {
+    expect(POINTS.length).toBe(18);
+    const src = srcOf();
+    for (const { line, count } of WRAPPED_LINES) {
+      const hits = src.split(/\r?\n/).filter((l) => l === line).length;
+      expect(hits, `${JSON.stringify(line)} 应 ${count} 条，实测 ${hits} 条`).toBe(count);
+    }
+  });
+
+  it('逐族消费点数与账一致（接错家族或漏接会被点名）', () => {
+    const src = srcOf();
+    for (const [fam, n] of Object.entries(FAMILY_COUNTS)) {
+      expect(famCount(src, fam), `${FILE} · --${fam}-readable 应有 ${n} 处`).toBe(n);
+    }
+  });
+
+  it('青族数值表长度与源码声明数交叉锁（防止后续批次重写本文件时丢掉第二组覆盖）', () => {
+    // 28 面里有 1 面是 border-left 简写，不落在按行首属性名的计数正则里，故 27
+    expect(CYAN_AUDIT.length - 1, '青族清单与源码 --accent-readable 声明数不再对齐').toBe(cyanDeclCount(srcOf()));
+  });
+
+  it('包裹表达式括号平衡且行尾未丢（防止接入器吃掉字符）', () => {
+    const src = srcOf();
+    const isDecl = (l: string) => /^\s*(?:color|border|outline|--[\w-]+)[\w-]*\s*:/.test(l) || /^\s*\.[\w-]+[^{]*\{.*-readable.*\}$/.test(l);
+    const bad = src
+      .split(/\r?\n/)
+      .filter((l) => isDecl(l) && /-readable/.test(l) && (l.match(/\(/g) || []).length !== (l.match(/\)/g) || []).length);
+    expect(bad, `${FILE} 有 ${bad.length} 行括号不平衡：${bad.slice(0, 3).join(' | ')}`).toEqual([]);
+    const noTail = src
+      .split(/\r?\n/)
+      .filter((l) => isDecl(l) && /-readable/.test(l) && !/[;}]$/.test(l.replace(/\s*!important\s*$/, '').trimEnd()));
+    expect(noTail, `${FILE} 有 ${noTail.length} 行 readable 声明丢了行尾：${noTail.slice(0, 3).join(' | ')}`).toEqual([]);
+  });
+});
+
+describe('T04470 批次 A6：口径守护（基色不得再裸写进前景）', () => {
+  it(`${FILE}：基色 token 只允许作为 *-readable 的 fallback 出现`, () => {
+    expect(findBareBaseForegroundUses(srcOf(), { baseTokens: BASE_TOKENS }), `${FILE} 存在裸用基色的前景声明`).toEqual([]);
+  });
+
+  it(`${FILE}：行级兜底锁——按声明判定，前景属性引用基色却无 readable 即红`, () => {
+    const bad = srcOf()
+      .split(/\r?\n/)
+      .flatMap((l) => l.split(';'))
+      .map((seg) => seg.replace(/^[^{]*\{/, '').trim())
+      .filter(
+        (seg) =>
+          /^(?:color|border(?:-color)?|outline(?:-color)?)\s*:/.test(seg) &&
+          /var\(--(?:neon-cyan|neon-pink|neon-magenta|neon-purple|accent-pink|accent-purple)\b(?![\w-])/.test(seg) &&
+          !/-readable/.test(seg),
+      );
+    expect(bad, `${FILE} 有裸用基色的声明：${bad.slice(0, 3).join(' | ')}`).toEqual([]);
+  });
+
+  it(`${FILE}：装饰性 tint 前景停在基线，新增即红（改它需 T04468 裁决）`, () => {
+    let n = 0;
+    for (const l of srcOf().split(/\r?\n/)) {
+      const m = /^\s*(?:color|border-color|border(?:-(?:left|right|top|bottom))?|outline(?:-color)?)\s*:\s*([^;]*)/.exec(l);
+      if (m && /var\(--accent-[\w-]+-a\d\d/.test(m[1]) && !/-readable/.test(m[1])) n++;
+    }
+    expect(n, `${FILE} 装饰 tint 前景应从基线 ${TINT_BASELINE} 只降不升`).toBeLessThanOrEqual(TINT_BASELINE);
+  });
+});
+
+// 第二组（T04449）青族 28 面原样保留：本批只动粉/紫，但接入器曾整文件重写本测试，
+// 若删掉这段则「青族 28 面达标」只剩族计数锁，数值覆盖会静默回退。
+/** 第二组消费点清单（28 行）：label 用选择器语义，bg 用该元素源码里自己声明的面 */
+const CYAN_AUDIT: AuditRow[] = [
   { label: '配置页·头部等宽小标签', fg: 'var(--accent-readable)', bg: 'var(--bg-card-solid)', kind: 'text' },
   { label: '配置页·区块小标签', fg: 'var(--accent-readable)', bg: 'var(--bg-card-solid)', kind: 'text' },
   { label: '配置页·QQ 区块小标签', fg: 'var(--accent-readable)', bg: 'var(--bg-card-solid)', kind: 'text' },
@@ -48,24 +301,22 @@ const AUDIT: AuditRow[] = [
   { label: '配置页·迁移文件选择 hover 描边', fg: 'var(--accent-readable)', bg: 'var(--bg-card-solid)', kind: 'ui' },
 ];
 
-const declCount = (src: string) => [...src.matchAll(/^[ \t]*(?:color|border-color|border-left-color|outline-color)[ \t]*:[ \t]*[^;]*--accent-readable/gm)].length;
+/** 第二组声明级计数：27 个标准前景声明（border-left 简写那行不落在行首属性名正则里） */
+const cyanDeclCount = (src: string) => [...src.matchAll(/^[ \t]*(?:color|border-color|border-left-color|outline-color)[ \t]*:[ \t]*[^;]*--accent-readable/gm)].length;
 
-describe('T04449 推广第二组：配置中心前景逐主题达标', () => {
+describe('T04449 推广第二组：配置中心青族 28 面（本批未动，原样复守）', () => {
   it('8 主题 × 28 面全部达 AA（文本 4.5 / 非文本 3.0）', () => {
-    const failures = auditThemes(AUDIT, themes);
+    const failures = auditThemes(CYAN_AUDIT, loadThemes());
     expect(failures, formatFailures(failures)).toEqual([]);
   });
 
   it('清单与源码逐属性消费点对齐（27 个标准前景声明 + 1 个 border-left 简写）', () => {
-    const src = readFileSync(join(ROOT, FILE), 'utf8');
-    // 简写行 `border-left: 3px solid …` 不落在按行首属性名的计数正则里，故 28 面里只有 27 可数。
-    expect(declCount(src)).toBe(27);
-    expect(AUDIT.length).toBe(28);
+    expect(cyanDeclCount(srcOf())).toBe(27);
+    expect(CYAN_AUDIT.length).toBe(28);
   });
 
   it('整文件不存在未包裹的 --neon-cyan 引用（行级锁，兜住单行规则与简写）', () => {
-    const src = readFileSync(join(ROOT, FILE), 'utf8');
-    const unwrapped = src
+    const unwrapped = srcOf()
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter((l) => l.includes('--neon-cyan') && !l.includes('--accent-readable') && !/^(\/\*|\*|\/\/)/.test(l));
@@ -73,18 +324,18 @@ describe('T04449 推广第二组：配置中心前景逐主题达标', () => {
   });
 });
 
-describe('T04449 推广第二组：口径守护（不得再把 --neon-cyan 裸写进前景）', () => {
-  it(`${FILE}：--neon-cyan 只允许作为 --accent-readable 的 fallback 出现`, () => {
-    const src = readFileSync(join(ROOT, FILE), 'utf8');
-    const violations = findBareForegroundUses(src, {
-      tokens: /var\(\s*--neon-cyan\b/,
-      readableWrappers: [/--accent-readable/],
-    });
-    expect(violations, `${FILE} 存在裸用强调色的前景表达式`).toEqual([]);
-  });
-
-  it('配置页至少接入 25 处 readable 前景（计数锁）', () => {
-    const src = readFileSync(join(ROOT, FILE), 'utf8');
-    expect(declCount(src), `${FILE} 的 readable 前景消费点数量异常，疑似清单与实现同时走样`).toBeGreaterThanOrEqual(25);
+// 事实留档（不是质量门）：本批唯一修不掉的格子。
+// L5794 `.key-badge-private` 接入紫族后仍有 macaron 4.49 < 4.5，根因是 macaron 的
+// `--purple-readable: #7a628d` 取值偏浅（其余 7 主题 4.63~10.57），属 token 取值校准而非接入。
+// ⚠ 若这条将来变红且缺口消失，说明 readable 已被校准——把 L5794 挪进上面的达标清单并删掉本用例。
+describe('T04470 批次 A6：已知缺口留档', () => {
+  it('L5794 缺口精确到主题与数值：只此一格、且源码确已接入紫族', () => {
+    const themes = loadThemes();
+    const p = POINTS.find((x) => x.ln === 5794)!;
+    const vals = themes.map((t) => ({ th: t.name, v: ratio(p, t, 'scene') }));
+    const bad = vals.filter((c) => c.v < THRESHOLD.text);
+    expect(bad.map((b) => `${b.th}=${b.v.toFixed(2)}`)).toEqual(['macaron=4.49']);
+    expect(Math.max(...vals.map((c) => c.v))).toBeGreaterThan(10);
+    expect(srcOf()).toMatch(/\.key-badge-private \{\s*\r?\n\s*background: var\(--accent-purple-a15\);\s*\r?\n\s*border-color: var\(--accent-purple-a40\);\s*\r?\n\s*color: var\(--purple-readable, var\(--neon-purple\)\);/);
   });
 });
