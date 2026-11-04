@@ -97,7 +97,7 @@ function selectRecommended() {
   height: 22px;
   border-radius: 50%;
   background: var(--accent-purple-a12, rgba(176, 38, 255, 0.12));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   font-size: 13px;
 }
 .clarify-title {
@@ -141,10 +141,10 @@ function selectRecommended() {
 }
 .clarify-option:hover:not(:disabled) {
   background: var(--accent-purple-a08, rgba(176, 38, 255, 0.08));
-  border-color: var(--neon-purple, #b026ff);
+  border-color: var(--purple-readable, var(--neon-purple, #b026ff));
 }
 .clarify-option.recommended {
-  border-color: var(--neon-cyan, #00f5ff);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .clarify-option:disabled {
   cursor: not-allowed;
@@ -161,7 +161,7 @@ function selectRecommended() {
 .recommend-tag {
   font-size: 11px;
   font-weight: 400;
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   border: 1px solid var(--accent-cyan-a35, rgba(0, 245, 255, 0.35));
   border-radius: 8px;
   padding: 0 6px;

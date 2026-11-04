@@ -78,7 +78,7 @@ onBeforeUnmount(() => {
   margin: 1.2em 0 0.6em;
   font-weight: 700;
   line-height: 1.4;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .md-body :deep(h1) { font-size: 1.45em; }
@@ -121,7 +121,7 @@ onBeforeUnmount(() => {
   background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
   border: 1px solid var(--accent-cyan-a18, rgba(0, 245, 255, 0.18));
   border-radius: 4px;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   word-break: break-all;
 }
 
@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
 .md-body :deep(blockquote) {
   margin: 0.75em 0;
   padding: 0.5em 1em;
-  border-left: 3px solid var(--neon-purple);
+  border-left: 3px solid var(--purple-readable, var(--neon-purple));
   background: var(--accent-purple-a06, rgba(176, 38, 255, 0.06));
   color: var(--text-soft);
   border-radius: 0 8px 8px 0;
@@ -181,7 +181,7 @@ onBeforeUnmount(() => {
 .md-body :deep(th) {
   background: var(--accent-cyan-a08, rgba(0, 245, 255, 0.08));
   font-weight: 700;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .md-body :deep(tr:nth-child(2n) td) {
@@ -190,15 +190,15 @@ onBeforeUnmount(() => {
 
 /* 链接：发光高亮 */
 .md-body :deep(a) {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   text-decoration: none;
   border-bottom: 1px dashed var(--accent-cyan-a40, rgba(0, 245, 255, 0.4));
   transition: all 0.2s ease;
 }
 
 .md-body :deep(a:hover) {
-  color: var(--neon-purple);
-  border-bottom-color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
+  border-bottom-color: var(--purple-readable, var(--neon-purple));
   text-shadow: 0 0 6px var(--accent-purple-a60, rgba(176, 38, 255, 0.6));
 }
 
@@ -225,12 +225,12 @@ onBeforeUnmount(() => {
 /* 强调 */
 .md-body :deep(strong) {
   font-weight: 700;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .md-body :deep(em) {
   font-style: italic;
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 /* 删除线 */

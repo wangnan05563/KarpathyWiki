@@ -292,31 +292,31 @@ const hasTotalElapsed = computed(() => store.totalElapsedMs > 0);
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--neon-purple);
-  color: var(--neon-purple);
-  box-shadow: 0 0 8px currentColor;
-  transition: background 0.3s ease, color 0.3s ease;
+  --dot-glow: var(--neon-purple);
+  box-shadow: 0 0 8px var(--dot-glow);
+  transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
 /* 运行中状态点带呼吸动画：通过 scale + opacity 模拟心跳节奏 */
 .progress-status-dot.running {
   background: var(--neon-pink);
-  color: var(--neon-pink);
+  --dot-glow: var(--neon-pink);
   animation: dot-pulse 1.4s ease-in-out infinite;
 }
 
 .progress-status-dot.done {
   background: var(--neon-cyan);
-  color: var(--neon-cyan);
+  --dot-glow: var(--neon-cyan);
 }
 
 .progress-status-dot.error {
   background: var(--neon-magenta);
-  color: var(--neon-magenta);
+  --dot-glow: var(--neon-magenta);
 }
 
 .progress-status-dot.cancelled {
   background: var(--neon-pink);
-  color: var(--neon-pink);
+  --dot-glow: var(--neon-pink);
 }
 
 @keyframes dot-pulse {
@@ -346,7 +346,7 @@ const hasTotalElapsed = computed(() => store.totalElapsedMs > 0);
   font-family: var(--font-mono);
   font-size: 15px;
   font-weight: 700;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   letter-spacing: 1px;
   flex-shrink: 0;
 }
@@ -414,7 +414,7 @@ const hasTotalElapsed = computed(() => store.totalElapsedMs > 0);
 
 .success-banner {
   background: var(--accent-cyan-a08);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .success-banner::before {
@@ -423,7 +423,7 @@ const hasTotalElapsed = computed(() => store.totalElapsedMs > 0);
 
 .error-banner {
   background: var(--accent-pink-a08);
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
 }
 
 .error-banner::before {
@@ -432,7 +432,7 @@ const hasTotalElapsed = computed(() => store.totalElapsedMs > 0);
 
 .cancelled-banner {
   background: var(--accent-pink-a08);
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--neon-pink));
 }
 
 .cancelled-banner::before {
@@ -528,7 +528,7 @@ const hasTotalElapsed = computed(() => store.totalElapsedMs > 0);
   text-align: right;
   font-family: var(--font-mono);
   font-weight: 600;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 /* 响应式：窄屏下调整布局与字号 */

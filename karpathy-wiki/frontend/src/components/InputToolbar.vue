@@ -174,18 +174,18 @@ function toolTip(tool: Tool): string {
 }
 .tool-chip:hover:not(.disabled) {
   background: var(--accent-cyan-a12, rgba(0, 245, 255, 0.12));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   /* F-3.4 验收：hover 有动效（玻璃光泽滑动） */
   transform: translateY(-1px);
 }
 .tool-chip:focus-visible {
   /* F-3.4 验收：键盘可达 */
-  outline: 2px solid var(--neon-cyan, #00f5ff);
+  outline: 2px solid var(--accent-readable, var(--neon-cyan, #00f5ff));
   outline-offset: 2px;
 }
 .tool-chip.active {
   background: var(--accent-cyan-a18, rgba(0, 245, 255, 0.18));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .tool-chip.disabled {
   opacity: 0.4;

@@ -58,14 +58,14 @@ const emit = defineEmits<{
 
 .toc-row:hover {
   background: var(--accent-cyan-a12);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 /* 当前定位章节高亮：表达「正在看这里」 */
 .toc-row.active {
   background: var(--accent-cyan-a20);
-  color: var(--neon-cyan);
-  border-left: 2px solid var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
+  border-left: 2px solid var(--accent-readable, var(--neon-cyan));
 }
 
 .toc-text-btn {

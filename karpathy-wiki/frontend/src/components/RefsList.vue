@@ -154,7 +154,7 @@ function sigStaleTip(status: RefSignals['knowledgeStatus'] | undefined): string 
   margin: 8px 0;
   padding: 8px 12px;
   background: var(--accent-cyan-a04, rgba(0, 245, 255, 0.04));
-  border-left: 3px solid var(--neon-cyan, #00f5ff);
+  border-left: 3px solid var(--accent-readable, var(--neon-cyan, #00f5ff));
   border-radius: 0 8px 8px 0;
 }
 .refs-header {
@@ -189,7 +189,7 @@ function sigStaleTip(status: RefSignals['knowledgeStatus'] | undefined): string 
 }
 .source-stat.vault {
   background: var(--accent-cyan-a15, rgba(0, 245, 255, 0.15));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .source-stat.web {
   background: var(--accent-purple-a15, rgba(99, 102, 241, 0.15));
@@ -215,7 +215,7 @@ function sigStaleTip(status: RefSignals['knowledgeStatus'] | undefined): string 
   transform: translateX(2px);
 }
 .ref-item.vault {
-  border-left-color: var(--neon-cyan, #00f5ff);
+  border-left-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .ref-item.web {
   border-left-color: var(--accent-purple-base, #6366f1);
@@ -254,7 +254,7 @@ function sigStaleTip(status: RefSignals['knowledgeStatus'] | undefined): string 
 }
 .source-badge.vault {
   background: var(--accent-cyan-a18, rgba(0, 245, 255, 0.18));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
 }
 .source-badge.web {
@@ -277,7 +277,7 @@ function sigStaleTip(status: RefSignals['knowledgeStatus'] | undefined): string 
   line-height: 1;
 }
 .sig.on {
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .sig.off {
   color: var(--text-dim, #666);
@@ -324,7 +324,7 @@ function sigStaleTip(status: RefSignals['knowledgeStatus'] | undefined): string 
 }
 .show-more-btn:hover {
   background: var(--accent-cyan-a06, rgba(0, 245, 255, 0.06));
-  border-color: var(--neon-cyan, #00f5ff);
-  color: var(--neon-cyan, #00f5ff);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 </style>

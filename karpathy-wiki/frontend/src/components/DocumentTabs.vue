@@ -203,25 +203,25 @@ onBeforeUnmount(() => {
 
 .doc-tab:hover {
   background: var(--accent-purple-a12);
-  border-color: var(--neon-purple);
+  border-color: var(--purple-readable, var(--neon-purple));
 }
 
 /* 激活态：主题高亮 */
 .doc-tab.active {
   background: var(--accent-cyan-a15);
-  border-color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan));
   color: var(--text-bright);
   font-weight: 600;
 }
 
 /* 固定态：左侧别针图标强调 */
 .tab-pin {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
 }
 
 /* T00270：拖拽目标高亮——被拖拽 tab 悬停其上时给出放置反馈 */
 .doc-tab.drag-over {
-  border-color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-cyan-a18);
   box-shadow: 0 0 0 2px var(--accent-cyan-a15);
 }
@@ -240,7 +240,7 @@ onBeforeUnmount(() => {
   padding: 1px;
 }
 .tab-close:hover {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   background: var(--accent-pink-a20);
 }
 

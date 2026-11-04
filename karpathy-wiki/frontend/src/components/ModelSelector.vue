@@ -411,8 +411,8 @@ async function onKeydown(e: KeyboardEvent) {
   border: 1px solid transparent;
 }
 .ms-source.personal {
-  color: var(--neon-cyan, #00f5ff);
-  border-color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: rgba(0, 245, 255, 0.08);
 }
 .ms-source.shared {
@@ -472,7 +472,7 @@ async function onKeydown(e: KeyboardEvent) {
   background: rgba(0, 245, 255, 0.12);
 }
 .model-selector-item.selected .ms-item-model {
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* 分组分隔线 + 分组标题（预设模型 / 服务商真实模型） */
@@ -496,7 +496,7 @@ async function onKeydown(e: KeyboardEvent) {
 }
 .ms-loading {
   font-size: 10px;
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .ms-empty {
   padding: 6px 8px;
@@ -508,7 +508,7 @@ async function onKeydown(e: KeyboardEvent) {
 }
 /* T02461（PRD Q8）：引导文案中的菜单路径做成可点击直达，避免「按提示找不到入口」 */
 .ms-link {
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;

@@ -65,7 +65,7 @@ const iconComp = computed(() => {
 
 /* 运行中：旋转脉冲（青/主色） */
 .ss-running {
-  color: var(--m-primary, var(--neon-cyan, #00f5ff));
+  color: var(--m-primary, var(--accent-readable, var(--neon-cyan, #00f5ff)));
   filter: drop-shadow(0 0 3px currentColor);
 }
 .ss-running :deep(svg) {
@@ -74,14 +74,14 @@ const iconComp = computed(() => {
 
 /* 异常中断：警告脉冲（洋红/危险色） */
 .ss-error {
-  color: var(--m-danger, var(--neon-magenta, #ff006e));
+  color: var(--m-danger, var(--pink-readable, var(--neon-magenta, #ff006e)));
   filter: drop-shadow(0 0 3px currentColor);
   animation: ss-pulse-danger 1.2s ease-in-out infinite;
 }
 
 /* 已完成未读：高亮脉冲（紫/主色） */
 .ss-unread {
-  color: var(--m-primary, var(--neon-purple, #b026ff));
+  color: var(--m-primary, var(--purple-readable, var(--neon-purple, #b026ff)));
   filter: drop-shadow(0 0 3px currentColor);
   animation: ss-pulse-primary 1.4s ease-in-out infinite;
 }

@@ -410,7 +410,7 @@ onBeforeUnmount(() => {
   outline: none;
 }
 .search-input:focus {
-  border-color: var(--neon-cyan, #00f5ff);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .conversation-list {
   flex: 1;
@@ -433,7 +433,7 @@ onBeforeUnmount(() => {
 }
 .conversation-item.active {
   background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
-  border-left: 2px solid var(--neon-cyan, #00f5ff);
+  border-left: 2px solid var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 /* F-3.3 操作按钮容器：默认隐藏，hover conversation-item 时显现
@@ -471,7 +471,7 @@ onBeforeUnmount(() => {
 }
 .conv-action-btn:hover {
   background: var(--accent-cyan-a25, rgba(0, 245, 255, 0.25));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .delete-btn:hover {
   background: rgba(255, 80, 80, 0.3);
@@ -482,7 +482,7 @@ onBeforeUnmount(() => {
 /* 置顶按钮激活态：与 hover 高亮一致，表示会话已固定（与左侧 pin-icon 状态呼应） */
 .pin-btn.pin-active {
   background: var(--accent-cyan-a25, rgba(0, 245, 255, 0.25));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 /* 置顶大头针旋转动画：
    - 默认（未置顶）：针头朝上（rotate 180°），表示"可置顶/已拔出"
@@ -536,7 +536,7 @@ onBeforeUnmount(() => {
 }
 .conv-menu-item:hover {
   background: var(--accent-cyan-a25, rgba(0, 245, 255, 0.25));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .conv-menu-item .el-icon {
   font-size: 15px;

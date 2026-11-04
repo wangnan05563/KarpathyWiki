@@ -252,7 +252,7 @@ watch(
   border-radius: 6px;
   font-size: 12px;
   font-family: var(--font-mono);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .issue-item.broken .arrow {
@@ -261,7 +261,7 @@ watch(
 }
 
 .broken-target {
-  color: var(--neon-magenta) !important;
+  color: var(--pink-readable, var(--neon-magenta)) !important;
   border-color: var(--accent-pink-a40) !important;
   background: var(--accent-pink-a10) !important;
   font-weight: 600;
@@ -311,9 +311,9 @@ watch(
 }
 
 .neon-btn:hover:not(.is-disabled) {
-  border-color: var(--neon-cyan) !important;
+  border-color: var(--accent-readable, var(--neon-cyan)) !important;
   box-shadow: var(--glow-cyan) !important;
-  color: var(--neon-cyan) !important;
+  color: var(--accent-readable, var(--neon-cyan)) !important;
 }
 
 /* 作业态高亮：成功=青蓝，失败=品红（口径与作业快照一致） */
@@ -337,7 +337,7 @@ watch(
 }
 
 .row-badge.done {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   border-color: var(--accent-cyan-a50);
 }
 
@@ -347,7 +347,7 @@ watch(
 }
 
 .row-badge.failed {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   border-color: var(--accent-pink-a50);
 }
 </style>

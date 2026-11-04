@@ -28,7 +28,7 @@ const BASE_TOKENS = [
   /^--accent-purple$/,
 ];
 
-/** 已完成接入、必须保持 0 裸用的文件（第一~五组累计 + T04470 批次 A 已收文件） */
+/** 已完成接入、必须保持 0 裸用的文件（第一~五组累计 + T04470 批次 A 视图层 + 批次 B 组件层） */
 const WHITELIST = [
   'src/views/Browse.vue', // T04449 第四组
   'src/views/Graph.vue', // T04449 第四组
@@ -46,6 +46,19 @@ const WHITELIST = [
   'src/views/Query.vue', // T04470 批次 A4（8 处裸基色；另回补 1 处 T04175 遗留的错族，不在本账内）
   'src/views/Cleanup.vue', // T04470 批次 A5（9 处粉/紫族；首组已接入的 7 处青族不在此账内）
   'src/views/Config.vue', // T04470 批次 A6（18 处粉/紫族，批次 A 视图层收尾；首组已接入的 28 处青族不在此账内）
+  'src/components/BatchProgressBar.vue', // T04470 批次 B1
+  'src/components/SingleFileProgressBar.vue', // T04470 批次 B1
+  'src/components/MarkdownRenderer.vue', // T04470 批次 B1
+  'src/components/RefsList.vue', // T04470 批次 B1
+  'src/components/HealthIssueList.vue', // T04470 批次 B2
+  'src/components/ConversationSidebar.vue', // T04470 批次 B2
+  'src/components/DocumentTabs.vue', // T04470 批次 B2
+  'src/components/ModelSelector.vue', // T04470 批次 B2
+  'src/components/ClarifyCard.vue', // T04470 批次 B2
+  'src/components/InputToolbar.vue', // T04470 批次 B2
+  'src/components/SessionStatusIcon.vue', // T04470 批次 B2
+  'src/components/TocTree.vue', // T04470 批次 B2
+  'src/components/TtsController.vue', // T04470 批次 B2
 ];
 
 /**
@@ -63,6 +76,22 @@ const WIRING_DONE: Record<string, number> = {
   'src/views/Query.vue': 8, // T04470 批次 A4
   'src/views/Cleanup.vue': 9, // T04470 批次 A5（基线冻结在首组之后，表里的 9 处就是首组青族 7 处之外的粉/紫族余量）
   'src/views/Config.vue': 18, // T04470 批次 A6（同上：首组接入的青族不在基线表里，这 18 处是冻结时点剩下的粉/紫族）
+  // ↓ 批次 B：组件层 13 个文件 74 处。其中 10 处是状态点的「非文本前景」——那里 color 只喂
+  //   box-shadow:0 0 8px currentColor 的光晕，不是可读文字。这 10 处按口径把光晕色改成显式的
+  //   --dot-glow（值仍是原基色），既归零裸基色前景、又不改变观感；其余 64 处走 readable 包裹。
+  'src/components/BatchProgressBar.vue': 11, // T04470 批次 B1（含 5 处状态点）
+  'src/components/SingleFileProgressBar.vue': 10, // T04470 批次 B1（含 5 处状态点）
+  'src/components/MarkdownRenderer.vue': 9, // T04470 批次 B1
+  'src/components/RefsList.vue': 7, // T04470 批次 B1
+  'src/components/HealthIssueList.vue': 6, // T04470 批次 B2
+  'src/components/ConversationSidebar.vue': 5, // T04470 批次 B2
+  'src/components/DocumentTabs.vue': 5, // T04470 批次 B2
+  'src/components/ModelSelector.vue': 5, // T04470 批次 B2
+  'src/components/ClarifyCard.vue': 4, // T04470 批次 B2
+  'src/components/InputToolbar.vue': 3, // T04470 批次 B2
+  'src/components/SessionStatusIcon.vue': 3, // T04470 批次 B2（三层嵌套：readable 插在内层，外层 --m-* 皮肤变量优先级不动）
+  'src/components/TocTree.vue': 3, // T04470 批次 B2
+  'src/components/TtsController.vue': 3, // T04470 批次 B2
 };
 
 /**
@@ -70,19 +99,6 @@ const WIRING_DONE: Record<string, number> = {
  * 只允许下降——接入一处就把它调小，新增一处即红。接入完的文件请从这里移出并进 WHITELIST+DONE。
  */
 const BASELINE: Record<string, number> = {
-  'src/components/BatchProgressBar.vue': 11,
-  'src/components/SingleFileProgressBar.vue': 10,
-  'src/components/MarkdownRenderer.vue': 9,
-  'src/components/RefsList.vue': 7,
-  'src/components/HealthIssueList.vue': 6,
-  'src/components/ConversationSidebar.vue': 5,
-  'src/components/DocumentTabs.vue': 5,
-  'src/components/ModelSelector.vue': 5,
-  'src/components/ClarifyCard.vue': 4,
-  'src/components/InputToolbar.vue': 3,
-  'src/components/SessionStatusIcon.vue': 3,
-  'src/components/TocTree.vue': 3,
-  'src/components/TtsController.vue': 3,
   'src/components/AttachmentUploader.vue': 2,
   'src/components/CitationText.vue': 2,
   'src/components/FloatingChat.vue': 2,

@@ -67,7 +67,7 @@ function handleStop() {
   font-size: 14px;
 }
 .tts-status {
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   font-size: 12px;
 }
 .tts-controls {
@@ -80,14 +80,14 @@ function handleStop() {
   border-radius: 50%;
   border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
   background: var(--accent-cyan-a08, rgba(0, 245, 255, 0.08));
-  color: var(--neon-cyan, #00f5ff);
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   cursor: pointer;
   font-size: 12px;
   transition: all 0.2s;
 }
 .ctrl-btn:hover {
   background: var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
-  border-color: var(--neon-cyan, #00f5ff);
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .slide-up-enter-active,

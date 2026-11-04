@@ -325,8 +325,8 @@ function handleCancel() {
 
 .batch-progress-container.interrupted .progress-status-dot {
   background: var(--neon-amber);
-  color: var(--neon-amber);
-  box-shadow: 0 0 8px currentColor;
+  --dot-glow: var(--neon-amber);
+  box-shadow: 0 0 8px var(--dot-glow);
 }
 
 .progress-header {
@@ -353,31 +353,31 @@ function handleCancel() {
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--neon-purple);
-  color: var(--neon-purple);
-  box-shadow: 0 0 8px currentColor;
-  transition: background 0.3s ease, color 0.3s ease;
+  --dot-glow: var(--neon-purple);
+  box-shadow: 0 0 8px var(--dot-glow);
+  transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
 /* 运行中状态点带呼吸动画：通过 scale + opacity 模拟心跳节奏 */
 .progress-status-dot.running {
   background: var(--neon-pink);
-  color: var(--neon-pink);
+  --dot-glow: var(--neon-pink);
   animation: dot-pulse 1.4s ease-in-out infinite;
 }
 
 .progress-status-dot.done {
   background: var(--neon-cyan);
-  color: var(--neon-cyan);
+  --dot-glow: var(--neon-cyan);
 }
 
 .progress-status-dot.error {
   background: var(--neon-magenta);
-  color: var(--neon-magenta);
+  --dot-glow: var(--neon-magenta);
 }
 
 .progress-status-dot.cancelled {
   background: var(--neon-pink);
-  color: var(--neon-pink);
+  --dot-glow: var(--neon-pink);
 }
 
 @keyframes dot-pulse {
@@ -402,7 +402,7 @@ function handleCancel() {
   font-family: var(--font-mono);
   font-size: 15px;
   font-weight: 700;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   letter-spacing: 1px;
   flex-shrink: 0;
 }
@@ -447,7 +447,7 @@ function handleCancel() {
   height: 16px;
   border-radius: 50%;
   border: 2px solid var(--accent-pink-a35);
-  border-top-color: var(--neon-pink);
+  border-top-color: var(--pink-readable, var(--neon-pink));
   animation: awaiting-spin 0.9s linear infinite;
   flex-shrink: 0;
 }
@@ -455,7 +455,7 @@ function handleCancel() {
 .awaiting-elapsed {
   font-family: var(--font-mono);
   font-size: 13px;
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--neon-pink));
   letter-spacing: 0.5px;
 }
 
@@ -485,7 +485,7 @@ function handleCancel() {
 
 .success-banner {
   background: var(--accent-cyan-a08);
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .success-banner::before {
@@ -494,7 +494,7 @@ function handleCancel() {
 
 .error-banner {
   background: var(--accent-pink-a08);
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
 }
 
 .error-banner::before {
@@ -503,7 +503,7 @@ function handleCancel() {
 
 .cancelled-banner {
   background: var(--accent-pink-a08);
-  color: var(--neon-pink);
+  color: var(--pink-readable, var(--neon-pink));
 }
 
 .cancelled-banner::before {
