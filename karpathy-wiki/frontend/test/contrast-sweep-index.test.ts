@@ -44,6 +44,7 @@ const WHITELIST = [
   'src/views/Dashboard.vue', // T04470 批次 A3
   'src/views/Users.vue', // T04470 批次 A3
   'src/views/Query.vue', // T04470 批次 A4（8 处裸基色；另回补 1 处 T04175 遗留的错族，不在本账内）
+  'src/views/Cleanup.vue', // T04470 批次 A5（9 处粉/紫族；首组已接入的 7 处青族不在此账内）
 ];
 
 /**
@@ -59,6 +60,7 @@ const WIRING_DONE: Record<string, number> = {
   'src/views/Dashboard.vue': 6, // T04470 批次 A3
   'src/views/Users.vue': 6, // T04470 批次 A3
   'src/views/Query.vue': 8, // T04470 批次 A4
+  'src/views/Cleanup.vue': 9, // T04470 批次 A5（基线冻结在首组之后，表里的 9 处就是首组青族 7 处之外的粉/紫族余量）
 };
 
 /**
@@ -69,7 +71,6 @@ const BASELINE: Record<string, number> = {
   'src/views/Config.vue': 18,
   'src/components/BatchProgressBar.vue': 11,
   'src/components/SingleFileProgressBar.vue': 10,
-  'src/views/Cleanup.vue': 9,
   'src/components/MarkdownRenderer.vue': 9,
   'src/components/RefsList.vue': 7,
   'src/components/HealthIssueList.vue': 6,

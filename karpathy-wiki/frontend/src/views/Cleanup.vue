@@ -633,7 +633,7 @@ onMounted(() => {
 .advanced-toggle {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
   text-decoration: none;
   background: none;
   border: none;
@@ -659,7 +659,7 @@ onMounted(() => {
   background: var(--accent-pink-a15);
   border: 1px solid var(--accent-pink-a50);
   border-radius: var(--radius-card);
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   font-size: 13px;
   line-height: 1.6;
   box-shadow: 0 0 14px var(--accent-pink-a30);
@@ -668,9 +668,9 @@ onMounted(() => {
 .banner-undo {
   padding: 4px 12px;
   background: transparent;
-  border: 1px solid var(--neon-magenta);
+  border: 1px solid var(--pink-readable, var(--neon-magenta));
   border-radius: var(--radius-pill);
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   font-family: var(--font-mono);
   font-size: 12px;
   cursor: pointer;
@@ -713,7 +713,7 @@ onMounted(() => {
 .advanced-path {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
   word-break: break-all;
 }
 
@@ -765,7 +765,7 @@ onMounted(() => {
 .dir-legacy {
   background: var(--accent-pink-a15);
   border-color: var(--accent-pink-a50);
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
 }
 
 .switch-label {
@@ -796,7 +796,7 @@ onMounted(() => {
 .block-mode.mode-danger {
   background: var(--accent-pink-a15);
   border-color: var(--accent-pink-a50);
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   box-shadow: 0 0 10px var(--accent-pink-a30);
 }
 
@@ -819,7 +819,7 @@ onMounted(() => {
 /* 危险按钮：非预览模式变红 */
 .cleanup-btn.danger {
   background: linear-gradient(135deg, var(--accent-pink-a30), var(--accent-pink-a15)) !important;
-  border-color: var(--neon-magenta) !important;
+  border-color: var(--pink-readable, var(--neon-magenta)) !important;
   color: #fff !important;
   box-shadow: 0 0 16px var(--accent-pink-a40) !important;
 }
@@ -856,7 +856,7 @@ onMounted(() => {
 }
 
 .result-errors {
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
 }
 
 .error-item {
