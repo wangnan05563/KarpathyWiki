@@ -12,7 +12,10 @@
 //
 // 基线口径 = listBareBaseForegroundUses（逐处计数，不去重）：`.a{color:var(--neon-cyan)}` 与
 // `.b{color:var(--neon-cyan)}` 是两个消费点；tint（--accent-*-aNN）与 --*-base 派生不算违规。
-// 剩余 163 处的接入清单见 T04470；装饰性 tint 前景是否要一并纳入口径见 T04468（待裁决）。
+//
+// T04470 收口件（批次 A/B/C 全部接完，commit f71a37b 起 BASELINE 为空）：口径已从「按文件冻结预算」
+// 升级为「全站所有 .vue 一律 0 裸基色前景」——见文件末尾的收口锁。WHITELIST / WIRING_DONE 两表
+// 从此只作历史台账（哪个文件哪一批接了几处），不再承载任何预算；装饰性 tint 前景是否纳入口径仍归 T04468。
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -208,5 +211,42 @@ describe('T04449 全站索引锁：白名单外只降不升', () => {
     const allowed = Object.values(BASELINE).reduce((s, n) => s + n, 0);
     const total = SCANNED.reduce((s, f) => s + (WHITELIST.includes(f) ? 0 : hitsOf(f).length), 0);
     expect(total, `基线剩余 ${allowed} 处，实测 ${total} 处`).toBeLessThanOrEqual(allowed);
+  });
+});
+
+// T04470 收口件：BASELINE 已清空，口径从「按文件留预算」正式改成「全站所有 .vue 必须 0 裸基色前景」。
+// 上面两条用例用的是同一把尺（`BASELINE[f] ?? 0`），这条把它说成明文——以后谁想「先记进基线表再说」，
+// 会发现表里已经没有预算可分了。
+describe('T04470 收口件：全站所有 .vue 一律 0 裸基色前景', () => {
+  it('视图 + 组件逐个点名，白名单内外同一口径', () => {
+    const offenders: string[] = [];
+    for (const f of SCANNED) {
+      const hits = hitsOf(f);
+      if (hits.length) offenders.push(`${f}：${hits.length} 处 → ${hits.slice(0, 3).join(' / ')}`);
+    }
+    expect(offenders, `以下文件仍在裸用基色当文字/描边，须接 *-readable：\n${offenders.join('\n')}`).toEqual([]);
+  });
+
+  it('基线表必须保持为空（一旦有人往里加条目，就是在给全站开口子）', () => {
+    expect(BASELINE, `BASELINE 不该再有预算：${JSON.stringify(BASELINE)}`).toEqual({});
+  });
+
+  it('台账仍在：35 个文件 163 处全部可追溯到 DONE 表（历史账不许被悄悄抹掉）', () => {
+    expect(Object.keys(WIRING_DONE).length).toBe(START_FILES);
+    expect(Object.values(WIRING_DONE).reduce((s, n) => s + n, 0)).toBe(START_TOTAL);
+    // 白名单比 DONE 多出的 7 个文件，是在本账起算（第五组收口）之前就由前四组接完的，
+    // 它们从没进过 BASELINE，所以只在 WHITELIST 里出现——这两个集合的差集必须恰好是这 7 个。
+    expect(WHITELIST.length).toBe(START_FILES + 7);
+    expect(WHITELIST.filter((f) => !(f in WIRING_DONE)).sort()).toEqual(
+      [
+        'src/views/Browse.vue',
+        'src/views/DataClean.vue',
+        'src/views/Graph.vue',
+        'src/views/Health.vue',
+        'src/views/Ingest.vue',
+        'src/views/Progress.vue',
+        'src/views/Tunnel.vue',
+      ].sort(),
+    );
   });
 });
