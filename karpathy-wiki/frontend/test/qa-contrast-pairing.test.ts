@@ -79,6 +79,8 @@ const AUDIT: Array<{ label: string; fg: string; bg: string; kind: 'text' | 'ui' 
   { label: '渲染错误卡·详情正文', fg: 'var(--pink-readable)', bg: 'var(--accent-pink-a10)', kind: 'text' },
   // T04448 收尾时同源扫到的第 10 处：技能页删除按钮 hover 走未定义的 --accent-pink-a80
   { label: '技能页·删除按钮 hover 文字', fg: 'var(--pink-readable)', bg: 'var(--accent-pink-a10)', kind: 'text' },
+  // —— T04447 主诉：用户气泡正文压在渐变底上（修复前 8 主题里 7 个不达 4.5:1，最差 macaron 1.49）——
+  { label: '用户气泡·正文（气泡专用配对）', fg: 'var(--bubble-user-fg)', bg: 'var(--bubble-user-bg)', kind: 'text' },
 ];
 
 describe('T04175 主题 token 解析', () => {
@@ -197,6 +199,100 @@ describe('T04175 前景口径守护（问答页不得再把强调色直接当前
       expect(block).toMatch(new RegExp(`:\\s*var\\(\\s*${mustInclude.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`));
     });
   }
+});
+
+// ===========================================================================
+// T04447：问答页「用户气泡正文 × 气泡底」逐主题配对锁。
+// 缺陷本体：.msg-bubble.user 的底是 --grad-fire 渐变，而前景口径是「硬写 #fff + 深色 text-shadow」，
+//   注释还写着「确保任意主题下用户文字清晰可读」。逐主题按两端点实算（渐变取最差端）后：
+//   8 个主题里 7 个不达 AA 4.5:1 —— macaron 1.49 / portfolio 2.25 / ecommerce 2.31 /
+//   product 3.77 / default 3.83 / creative 3.83 / enterprise 4.47，只有 light-business 6.52 自己过了。
+//   text-shadow 不参与 WCAG 实算，它只是观感补偿，不能作为达标依据。
+// 修复路线（定调）：沿用 T01630 的先例——需要时只给这一面单独压深一档底，不动 --grad-fire 的
+//   其它消费点；浅底族（ecommerce / macaron）反过来把前景换成该主题深墨 --text-bright。
+//   portfolio 两个方向都被堵死（黑端压不住深墨、金端压不住白字），故把气泡底右端由金改深棕。
+// 本 describe 锁三件事：① 逐主题最差值 ≥ 登记档位（数值漂移即红）；
+//   ② 逐主题前景/背景端点 hex 锁（防止「换个色照样达标」把设计定调悄悄改掉，与 readable 锁同口径）；
+//   ③ 消费点必须走 --bubble-user-* token，两个问答入口与 portfolio 主题里不得残留硬写 #fff。
+// ===========================================================================
+describe('T04447 用户气泡正文配对（逐主题最差值 + 色值锁）', () => {
+  interface BubbleLock {
+    fg: string;
+    stops: string[];
+    worstAtLeast: number;
+  }
+  // worstAtLeast 取「实测值 − 余量」，既卡住漂移又不因浮点末位误红；产品硬线仍是 4.5:1。
+  const LOCKS: Record<string, BubbleLock> = {
+    'default(:root)': { fg: '#ffffff', stops: ['#d10059', '#8c1fd0'], worstAtLeast: 5.3 },
+    creative: { fg: '#ffffff', stops: ['#d10059', '#8c1fd0'], worstAtLeast: 5.3 },
+    ecommerce: { fg: '#1a1a2e', stops: ['#ff6b35', '#ff8c42'], worstAtLeast: 5.85 },
+    enterprise: { fg: '#ffffff', stops: ['#2563eb', '#4f46e5'], worstAtLeast: 5.0 },
+    'light-business': { fg: '#ffffff', stops: ['#1554d1', '#0f3f9e'], worstAtLeast: 6.35 },
+    macaron: { fg: '#4a3a52', stops: ['#ffb3d1', '#ffc4d6'], worstAtLeast: 6.1 },
+    portfolio: { fg: '#ffffff', stops: ['#1a1a1a', '#4a3a1c'], worstAtLeast: 10.8 },
+    product: { fg: '#ffffff', stops: ['#d10069', '#4a4fd0'], worstAtLeast: 5.2 },
+  };
+
+  it('八个主题全部登记在锁表内（新增主题不许漏审气泡这一面）', () => {
+    expect(themes.map((t) => t.name).sort()).toEqual(Object.keys(LOCKS).sort());
+  });
+
+  for (const t of themes) {
+    it(`${t.name}：气泡前景是实心色、压渐变两端达 AA，且色值未被悄悄改掉`, () => {
+      const lock = LOCKS[t.name];
+      const fg = resolve('var(--bubble-user-fg)', t.decls);
+      if ('stops' in fg) throw new Error(`${t.name} 的气泡前景解析成了渐变（前景必须是实色）`);
+      expect(fg.solid.a, `${t.name} 气泡前景不得半透明`).toBe(1);
+      expect(rgbToHex(fg.solid), `${t.name} 气泡前景 hex 锁`).toBe(lock.fg);
+
+      const bg = resolve('var(--bubble-user-bg)', t.decls);
+      if (!('stops' in bg)) throw new Error(`${t.name} 的气泡底不是渐变，与本单口径不符`);
+      expect(bg.stops.map(rgbToHex), `${t.name} 气泡底端点锁`).toEqual(lock.stops);
+
+      const ratio = worstRatio('var(--bubble-user-fg)', 'var(--bubble-user-bg)', t.decls, pageOf(t.decls));
+      expect(ratio, `${t.name} 气泡正文最差值`).toBeGreaterThanOrEqual(THRESHOLD.text);
+      expect(ratio, `${t.name} 气泡正文最差值（低于登记档位说明配色被改动，请重测并同步锁表）`).toBeGreaterThanOrEqual(
+        lock.worstAtLeast,
+      );
+    });
+  }
+
+  it('两个问答入口的气泡规则块走 token，不留硬写白字', () => {
+    for (const f of [QA_FILES[0], QA_FILES[2]]) {
+      const css = readFileSync(join(ROOT, f), 'utf8');
+      // 前面有换行才算规则块起点：Query.vue 里还有一条 .msg-content-wrapper.editing .msg-bubble.user，
+      // 直接 indexOf('.msg-bubble.user {') 会命中那条的子串。
+      const start = css.indexOf('\n.msg-bubble.user {');
+      expect(start, `${f} 缺少 .msg-bubble.user 规则块`).toBeGreaterThanOrEqual(0);
+      const block = css.slice(start, css.indexOf('\n}', start));
+      expect(block).toMatch(/background:\s*var\(--bubble-user-bg\b/);
+      expect(block).toMatch(/color:\s*var\(--bubble-user-fg\b/);
+      expect(block).toMatch(/text-shadow:\s*var\(--bubble-user-text-shadow\b/);
+      expect(block, `${f} 气泡规则块残留硬写白色`).not.toMatch(/color:\s*#/i);
+    }
+  });
+
+  it('portfolio 主题的气泡覆盖链也只走 token（历史上这里硬写 #fff + 阴影）', () => {
+    // 必须先剥注释、且选择器段不许跨行：portfolio.css 第 51 行的注释里也写着 .msg-bubble.user，
+    // 用宽松正则会从注释一路吞到下一条真实规则（曾把页面 radial-gradient 背景误捕成气泡块）。
+    const css = stripComments(readFileSync(join(THEMES_DIR, 'portfolio.css'), 'utf8'));
+    expect(css, 'portfolio 主题必须声明自己的 --bubble-user-bg').toMatch(/--bubble-user-bg\s*:/);
+    const blocks = [...css.matchAll(/\.msg-bubble\.user[^\n{]*\{([^}]*)\}/g)];
+    expect(blocks.length, '未扫到 portfolio 的气泡规则块（守护不得空转）').toBeGreaterThan(0);
+    for (const b of blocks) {
+      expect(b[1], 'portfolio 气泡块残留硬写 #fff').not.toMatch(/color:\s*#/i);
+      expect(b[1]).toMatch(/var\(--bubble-user-fg\b/);
+    }
+  });
+
+  it('全站 --grad-fire 的其它消费点未被误改（本单只给气泡这一面单开一档底）', () => {
+    // 定调的关键约束：压深的是 --bubble-user-bg，不是 --grad-fire 本身——
+    // 渐变在侧栏激活位、卡片头、按钮等处仍应保持原霓虹观感。
+    for (const f of [QA_FILES[0], QA_FILES[2]]) {
+      const css = readFileSync(join(ROOT, f), 'utf8');
+      expect(css, `${f} 的气泡底不得退回 --grad-fire`).not.toMatch(/\.msg-bubble\.user\s*\{[^}]*background:\s*var\(--grad-fire/);
+    }
+  });
 });
 
 // ===========================================================================

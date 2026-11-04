@@ -92,6 +92,22 @@
   --purple-readable: #c258ff;
   /* T04449：成功绿的前景口径（图标/状态文字）。深底主题沿用霓虹绿，浅底主题一律压暗到 ≥4.6:1。 */
   --lime-readable: var(--neon-lime, #c1ff3e);
+  /* ============================================================
+   * T04447：问答页「用户气泡」专用配对（.msg-bubble.user 的底、前景、文字阴影）
+   * 为什么要单开一组：气泡底是渐变（--grad-fire），而「白字压强调底」这条既有口径
+   * 在浅底主题上根本不成立——逐主题实算 8 个主题里 7 个不达 AA 4.5:1
+   * （macaron 1.49 / portfolio 2.25 / ecommerce 2.31 / product 3.77 / default+creative 3.83 /
+   * enterprise 4.47，只有 light-business 6.52 自己过了）。text-shadow 也救不了：
+   * WCAG 实算不看阴影，它只是观感补偿。
+   * 取值原则沿用 T01630 的先例：需要时**只给这一面单独压深一档底**，不动 --grad-fire
+   * 的其它消费点（全站 20+ 处填充位仍保持原霓虹观感）；浅底族（ecommerce / macaron）
+   * 反过来把前景换成该主题的深墨 --text-bright 并取消深色阴影。
+   * 默认值即「default（霓虹）」主题自己的取值（:root 就是该主题），各主题按需覆盖。
+   * 逐主题逐面达标判定由 test/qa-contrast-pairing.test.ts 按 WCAG AA 实算，改色值即被拦住。
+   * ============================================================ */
+  --bubble-user-fg: #ffffff;
+  --bubble-user-bg: linear-gradient(135deg, #d10059 0%, #8c1fd0 100%);
+  --bubble-user-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 
   /* URL 探测状态三色（Ingest 代理探测标签） */
   --probe-ok: #4ade80;

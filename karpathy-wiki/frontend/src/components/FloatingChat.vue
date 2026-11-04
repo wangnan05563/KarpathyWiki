@@ -1061,11 +1061,11 @@ onBeforeUnmount(() => {
 }
 
 .msg-bubble.user {
-  background: var(--grad-fire);
+  background: var(--bubble-user-bg);
   border-top-right-radius: 4px;
-  /* 跨主题可读：强制白色 + 强阴影确保任意主题下用户文字清晰可读 */
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  /* T04447：与 Query.vue 同一套气泡专用 token（旧注释「强制白色确保任意主题可读」实测 7/8 主题不达 4.5:1） */
+  color: var(--bubble-user-fg);
+  text-shadow: var(--bubble-user-text-shadow);
   /* §高度收窄：与 Query.vue 保持一致，减小 line-height 让多行问题更贴文字 */
   padding: 2px 12px;
   line-height: 1.1;
@@ -1075,8 +1075,8 @@ onBeforeUnmount(() => {
 .msg-bubble.user :deep(.markdown-body),
 .msg-bubble.user :deep(.markdown-body p),
 .msg-bubble.user :deep(.markdown-body strong) {
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  color: var(--bubble-user-fg);
+  text-shadow: var(--bubble-user-text-shadow);
 }
 
 .msg-bubble.streaming {

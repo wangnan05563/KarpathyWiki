@@ -2318,12 +2318,13 @@ onBeforeUnmount(() => {
 }
 
 .msg-bubble.user {
-  background: var(--grad-fire);
+  background: var(--bubble-user-bg);
   border-top-right-radius: 4px;
-  /* 跨主题可读：--text-bright 在 portfolio 等深色渐变主题下是 #1a1a1a，与渐变背景严重冲突
-     强制白色 + 强阴影确保任意主题下用户文字清晰可读，覆盖主题级与 scoped 属性的差异 */
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  /* T04447：底 / 前景 / 阴影一律走气泡专用 token。
+     旧注释「强制白色 + 强阴影确保任意主题可读」经实测不成立——白字压 --grad-fire 在 8 主题里
+     7 个不达 AA 4.5:1（最差 macaron 1.49），实算不看 text-shadow。取值口径见 style.css。 */
+  color: var(--bubble-user-fg);
+  text-shadow: var(--bubble-user-text-shadow);
   box-shadow: 0 4px 20px var(--accent-pink-a30, rgba(255, 0, 110, 0.3));
   /* §高度收窄（续）：头像收到 30px 后，气泡自身再收紧行高 1.2→1.1，
      多行用户问题（用户常输入多行）每行再省约 1.3px，单行气泡更贴文字 */
@@ -2334,14 +2335,14 @@ onBeforeUnmount(() => {
 
 /* §修复：用户气泡内的 .msg-content.markdown-body 会被全局 style.css 中
    .markdown-body { color: var(--text-base) } 覆盖（特异性 0,1,0 vs 颜色继承优先级），
-   必须在 .msg-bubble.user 下用 :deep 提高特异性，强制白色覆盖主题文字色。
+   必须在 .msg-bubble.user 下用 :deep 提高特异性，强制气泡前景 token 覆盖主题文字色。
    为什么不用 !important：scoped + :deep 已经把特异性提升到 0,3,0 足以压过全局规则 */
 .msg-bubble.user :deep(.msg-content),
 .msg-bubble.user :deep(.markdown-body),
 .msg-bubble.user :deep(.markdown-body p),
 .msg-bubble.user :deep(.markdown-body strong) {
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  color: var(--bubble-user-fg);
+  text-shadow: var(--bubble-user-text-shadow);
 }
 
 /* 流式输出时的脉动效果 */

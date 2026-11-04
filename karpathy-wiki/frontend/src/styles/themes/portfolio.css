@@ -77,6 +77,11 @@
   /* 优雅渐变（金+黑） */
   --grad-neon: linear-gradient(135deg, #1a1a1a 0%, #c9a961 50%, #8b7355 100%);
   --grad-fire: linear-gradient(135deg, #1a1a1a 0%, #c9a961 100%);
+  /* T04447：本主题的「黑→金」渐变右端是金色 #c9a961，白字只有 2.25:1，而左端是墨色 #1a1a1a，
+     换深墨前景又会让左半彻底看不见（1.00:1）—— 两个方向都被这一个渐变堵死。
+     故只把气泡这一面的右端由「金」改成「深棕 #4a3a1c」：保住 portfolio 的暖色语义，
+     白字两端最差 10.98:1。--grad-fire 本身与金色高亮（#c9a961）在别处的观感不受影响。 */
+  --bubble-user-bg: linear-gradient(135deg, #1a1a1a 0%, #4a3a1c 100%);
   --grad-cool: linear-gradient(135deg, #c9a961 0%, #8b7355 100%);
   --grad-aurora: linear-gradient(120deg, #c9a961 0%, #1a1a1a 40%, #8b7355 80%, #d4b572 100%);
 
@@ -387,16 +392,17 @@
   color: var(--text-bright);
 }
 
-/* User bubble contrast fix: portfolio 主题的 --grad-fire 是 #1a1a1a → #c9a961
-   深黑到金色的渐变，而 --text-bright 也是 #1a1a1a 深色，会导致深色文字
-   叠加深色渐变左半部分完全看不清。强制白色 + 阴影确保可读性
-   必须同时覆盖 .msg-bubble 内的 .markdown-body 文本（全局 style.css 强制 color: var(--text-base)
-   会覆盖 .msg-bubble 自身的 color 继承），所以选择器链必须深入到 .markdown-body p */
+/* T04447 用户气泡配对：本主题 --grad-fire 是 #1a1a1a → #c9a961（黑→金），
+   白字压金色右端只有 2.25:1，而 --text-bright 的墨色压左端黑只有 1.00:1，
+   两个方向都被这一个渐变堵死 —— 故给气泡这一面单开 --bubble-user-bg（黑→深棕，见本主题上方），
+   前景仍走白字 token。保留下面这条选择器链的原因：全局 style.css 的
+   .markdown-body { color: var(--text-base) } 会覆盖 .msg-bubble 自身的 color 继承，
+   所以选择器必须深入到 .markdown-body p；色值一律取 token，不再硬写 #fff。 */
 [data-theme="portfolio"] .msg-bubble.user,
 [data-theme="portfolio"] .msg-bubble.user .markdown-body,
 [data-theme="portfolio"] .msg-bubble.user .markdown-body p,
 [data-theme="portfolio"] .msg-bubble.user .markdown-body strong,
 [data-theme="portfolio"] .msg-bubble.user .msg-content {
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  color: var(--bubble-user-fg);
+  text-shadow: var(--bubble-user-text-shadow);
 }

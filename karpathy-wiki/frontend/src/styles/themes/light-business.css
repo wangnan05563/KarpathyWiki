@@ -74,6 +74,9 @@
   /* 渐变：弱对比商务蓝（仅用于激活态/主按钮，整体仍偏实色） */
   --grad-neon: linear-gradient(135deg, #1554d1 0%, #2f7de0 100%);
   --grad-fire: linear-gradient(135deg, #1554d1 0%, #0f3f9e 100%);
+  /* T04447：8 主题里唯一本来就过的（白字最差 6.52:1）。这里必须显式声明，
+     否则会继承 :root 给 default（霓虹）主题定的压深档。 */
+  --bubble-user-bg: var(--grad-fire);
   --grad-cool: linear-gradient(135deg, #2f7de0 0%, #1554d1 100%);
   --grad-aurora: linear-gradient(120deg, #2f7de0 0%, #1554d1 40%, #3b6fd4 80%, #0f3f9e 100%);
 
