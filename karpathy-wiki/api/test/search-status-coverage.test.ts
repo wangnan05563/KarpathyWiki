@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { registerSearchRoute } from '../src/routes/search.js';
-import { getIndexCoverage } from '../src/search/hybrid-search.js';
+import { getIndexCoverage, type IndexCoverage } from '../src/search/hybrid-search.js';
 import {
   closeIndexDb,
   getIndexStatus,
@@ -29,8 +29,23 @@ import {
 } from '../src/search/sqlite-index.js';
 import type { VaultService } from '../src/vault/vault-service.js';
 
-/** 覆盖统计里来自 IndexCoverage 的字段（前端 types/search.ts 里另有 enabled/totalChunks 两个包装字段） */
-const COVERAGE_FIELDS = ['totalPages', 'coveredPages', 'pendingPages', 'failedPages', 'unindexedPages', 'staleModelPages'];
+/**
+ * 覆盖统计里来自 IndexCoverage 的字段（前端 types/search.ts 里另有 enabled/totalChunks 两个包装字段）。
+ * `satisfies readonly (keyof IndexCoverage)[]` 让这份名单在**编译期**就绑死在接口上：接口改名/加名而这里没跟上，
+ * typecheck:test 直接红（原先名单是 string[]，只能在下面 C) 那条源码文本比对里才发现，且动态取字段要报 TS7053）。
+ * 名单要当集合用（含非本接口字段，如 feFields 里的 enabled/totalChunks），所以另开一个 string 视图 `COVERAGE_FIELD_NAMES`。
+ */
+const COVERAGE_FIELDS = [
+  'totalPages',
+  'coveredPages',
+  'pendingPages',
+  'failedPages',
+  'unindexedPages',
+  'staleModelPages',
+] as const satisfies readonly (keyof IndexCoverage)[];
+
+/** 与上同源的 string 视图，供 `includes`/差集这类宽口径比较使用 */
+const COVERAGE_FIELD_NAMES: string[] = [...COVERAGE_FIELDS];
 
 /**
  * 只读页面目录 + readFile 的最小 vault。
@@ -173,10 +188,10 @@ describe('T04073 检索模式与索引覆盖契约', () => {
     await app.ready();
     const body = await json(await app.inject({ method: 'GET', url: '/api/search/status' }));
     expect(body.enabled).toBe(false);
-    expect(Object.keys(body).sort()).toEqual(
-      ['enabled', 'totalChunks', 'sync', 'caches', ...COVERAGE_FIELDS].sort(),
+    expect(
+      Object.keys(body).sort(),
       '未启用分支的字段名与启用分支不一致：前端需要按形状分支，正是本单要消除的歧义',
-    );
+    ).toEqual(['enabled', 'totalChunks', 'sync', 'caches', ...COVERAGE_FIELDS].sort());
     for (const field of COVERAGE_FIELDS) {
       expect(body[field], `${field} 未置零`).toBe(field === 'staleModelPages' ? null : 0);
     }
@@ -232,9 +247,9 @@ describe('T04073 检索模式与索引覆盖契约', () => {
     const feFile = path.resolve(__dirname, '../../frontend/src/types/search.ts');
     const apiFields = interfaceFields(apiFile, 'IndexCoverage');
     const feFields = interfaceFields(feFile, 'SearchIndexStatus');
-    expect(apiFields.slice().sort()).toEqual(COVERAGE_FIELDS.slice().sort(), `api 侧字段变化：${apiFile}`);
+    expect(apiFields.slice().sort(), `api 侧字段变化：${apiFile}`).toEqual([...COVERAGE_FIELDS].sort());
     // 前端可以多出接口包装字段，但只能是需要后端一起锁住的这两个
-    const extra = feFields.filter((f) => !COVERAGE_FIELDS.includes(f));
+    const extra = feFields.filter((f) => !COVERAGE_FIELD_NAMES.includes(f));
     expect(extra.slice().sort()).toEqual(['enabled', 'totalChunks']);
     for (const field of COVERAGE_FIELDS) expect(feFields, `前端缺字段 ${field}（跨服务错配）`).toContain(field);
   });
