@@ -408,7 +408,7 @@ onBeforeUnmount(() => {
 
 .anchor-item.active {
   background: var(--accent-purple-a20);
-  color: var(--neon-magenta);
+  color: var(--purple-readable, var(--neon-magenta));
   text-shadow: 0 0 8px var(--accent-pink-a40);
 }
 
@@ -621,7 +621,7 @@ onBeforeUnmount(() => {
 
 .note-text.note-warning {
   background: var(--accent-pink-a08);
-  border-left-color: var(--neon-magenta);
+  border-left-color: var(--pink-readable, var(--neon-magenta));
 }
 
 /* T02455：steps 块改为「列表 + 可选直达按钮」包装结构，列表样式下沉到 .block-steps-list */
@@ -743,7 +743,7 @@ onBeforeUnmount(() => {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.04em;
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
   text-transform: uppercase;
 }
 
@@ -769,7 +769,7 @@ onBeforeUnmount(() => {
 }
 
 .cell-example {
-  color: var(--neon-purple) !important;
+  color: var(--purple-readable, var(--neon-purple)) !important;
 }
 
 .cell-desc {
@@ -785,7 +785,7 @@ onBeforeUnmount(() => {
 
 /* 本地数据保护卡片（T02482 后只承载说明与直达，表单样式随组件迁至 LocalDataBackupPanel.vue） */
 .local-data-card {
-  border-left: 3px solid var(--neon-cyan);
+  border-left: 3px solid var(--accent-readable, var(--neon-cyan));
 }
 
 /* 底部 */

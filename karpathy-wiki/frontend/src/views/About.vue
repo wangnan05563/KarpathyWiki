@@ -572,7 +572,7 @@ onBeforeUnmount(() => {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.18em;
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   text-transform: uppercase;
   margin-bottom: 2px;
 }
@@ -677,8 +677,8 @@ onBeforeUnmount(() => {
 }
 
 .icon-btn:hover {
-  border-color: var(--neon-cyan);
-  color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan));
+  color: var(--accent-readable, var(--neon-cyan));
   box-shadow: var(--glow-cyan);
 }
 
@@ -694,7 +694,7 @@ onBeforeUnmount(() => {
 
 .meta-sha {
   font-family: var(--font-mono);
-  color: var(--neon-purple);
+  color: var(--purple-readable, var(--neon-purple));
 }
 
 .meta-dim {
@@ -716,7 +716,7 @@ onBeforeUnmount(() => {
 }
 
 .downloading-icon {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   transform: rotate(45deg);
 }
 
@@ -778,7 +778,7 @@ onBeforeUnmount(() => {
 }
 
 .menu-item:hover .menu-arrow {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 /* 底部版权 */
@@ -835,7 +835,7 @@ onBeforeUnmount(() => {
 }
 
 .license-name:hover {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .license-version {
