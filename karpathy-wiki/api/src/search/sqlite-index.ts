@@ -116,9 +116,13 @@ export function replacePageChunks(dataDir: string, pagePath: string, chunks: Arr
   const d = getIndexDb(dataDir);
   const now = new Date().toISOString();
   const tx = d;
+  let vecRowsTouched = 0;
   tx.exec('BEGIN');
   try {
-    tx.prepare('DELETE FROM chunk_vecs WHERE page_path = ?').run(pagePath);
+    const delVecs = tx.prepare('DELETE FROM chunk_vecs WHERE page_path = ?').run(pagePath);
+    // T04186 记账：删掉的每一行都会被触发器推一次代号，提交后据此登记「这页的向量变了」
+    // （changes 的类型含 bigint 档，记账只按行数走，取 Number）
+    vecRowsTouched = Number(delVecs.changes);
     tx.prepare('DELETE FROM chunks WHERE page_path = ?').run(pagePath);
     const ins = tx.prepare('INSERT INTO chunks (page_path, chunk_index, content, heading, updated_at) VALUES (?, ?, ?, ?, ?)');
     chunks.forEach((c, i) => ins.run(pagePath, i, c.content, c.heading, now));
@@ -130,6 +134,7 @@ export function replacePageChunks(dataDir: string, pagePath: string, chunks: Arr
     tx.prepare(`INSERT INTO index_status (page_path, status, attempts, updated_at) VALUES (?, 'pending', 0, ?)
                 ON CONFLICT(page_path) DO UPDATE SET status = 'pending', attempts = 0, updated_at = excluded.updated_at`).run(pagePath, now);
     tx.exec('COMMIT');
+    noteVecPageMutation(dataDir, pagePath, vecRowsTouched);
   } catch (err) {
     tx.exec('ROLLBACK');
     throw err;
@@ -148,16 +153,18 @@ export function savePageVectors(
   d.exec('BEGIN');
   try {
     const del = d.prepare('DELETE FROM chunk_vecs WHERE page_path = ?');
-    del.run(pagePath);
+    const delCount = Number(del.run(pagePath).changes);
     const ins = d.prepare('INSERT INTO chunk_vecs (page_path, chunk_index, vec, dim, model) VALUES (?, ?, ?, ?, ?)');
     vectors.forEach((v, i) => {
       // Float32Array → BLOB：固定 4 字节小端，查询端同构反序列化
       ins.run(pagePath, i, Buffer.from(v.buffer, v.byteOffset, v.byteLength), v.length, model);
     });
+    const vecRowsTouched = delCount + vectors.length;
     d.prepare(`INSERT INTO index_status (page_path, status, attempts, updated_at) VALUES (?, 'indexed', 0, ?)
                ON CONFLICT(page_path) DO UPDATE SET status = 'indexed', attempts = 0, updated_at = excluded.updated_at`)
       .run(pagePath, now);
     d.exec('COMMIT');
+    noteVecPageMutation(dataDir, pagePath, vecRowsTouched);
   } catch (err) {
     d.exec('ROLLBACK');
     throw err;
@@ -177,8 +184,9 @@ export function markIndexFailed(dataDir: string, pagePath: string): void {
 export function removePageIndex(dataDir: string, pagePath: string): void {
   const d = getIndexDb(dataDir);
   d.prepare('DELETE FROM chunks WHERE page_path = ?').run(pagePath);
-  d.prepare('DELETE FROM chunk_vecs WHERE page_path = ?').run(pagePath);
+  const vecCount = Number(d.prepare('DELETE FROM chunk_vecs WHERE page_path = ?').run(pagePath).changes);
   d.prepare('DELETE FROM index_status WHERE page_path = ?').run(pagePath);
+  noteVecPageMutation(dataDir, pagePath, vecCount);
 }
 
 /** FTS5 关键词路召回：BM25 排序 top-N。
@@ -253,6 +261,10 @@ export function vectorRecall(
 //      （万级 chunk 单次查询十几 MB 的临时大对象，且落在 Fastify 请求线程上），
 //      现在只对最终 top-N 回表取正文。
 // 一致性口径：缓存是否过期只认库内的 vec_gen 代号（见 getIndexDb 的触发器），本模块不自建脏标记。
+// T04186 补算期增量：代号仍是唯一判据，只是「代号变了」之后的动作分两档——
+// 本进程记得住是哪些页面改动过（savePageVectors/replacePageChunks/removePageIndex 的记账），
+// 就只摘掉这些页面的槽位并按 rowid 追加其现存行；记不住（旁路裸 SQL、批量超过账本上限）
+// 仍走原来的整目录重建。增量不是第二套失效判据，只是重建的等价快路径。
 // 近似性：仍是精确余弦（不做 ANN 截断），与暴力扫描的结果逐条一致——T04069 验收要求
 // top-10 重合率 ≥90%，实测为 100%（见 bench 用例）。
 // 规模上界：缓存总量受 WIKI_VECTOR_CACHE_MAX_MB（默认 128MB）约束，超预算的这一次不缓存、
@@ -293,12 +305,21 @@ interface DirVectorCache {
   bytes: number;
   /** key = `${model ?? ''}\0${dim}`：不同模型/不同维度是不可比的两套向量空间 */
   matrices: Map<string, VectorMatrix>;
+  /** T04186：自 gen 之后本进程改动过向量的页面（集合即可，追加次序由 rowid 决定）。
+   *  null = 账本已满、放弃增量，下一次代号变化直接整目录重建。 */
+  pendingPages: Set<string> | null;
+  /** 记账口径下这些改动应当把代号推进到的值（chunk_vecs 每行增删改由触发器推 1） */
+  expectGen: number;
 }
+
+/** 单次增量同步的页面数上限：超过即放弃记账退回全量重建（补算期一次查几百页已足够，
+ *  再大说明写入远快于查询，全量重建本来就是更省的做法） */
+const MAX_PENDING_VEC_PAGES = 400;
 
 const DEFAULT_VECTOR_CACHE_MB = 128;
 const vectorCaches = new Map<string, DirVectorCache>();
 let cachedVectorBytes = 0;
-const vectorCacheCounters = { hits: 0, rebuilds: 0, oversizeScans: 0 };
+const vectorCacheCounters = { hits: 0, rebuilds: 0, oversizeScans: 0, incrementalPages: 0 };
 
 function vectorCacheEnabled(): boolean {
   // 关掉缓存即可与改造前逐行对照（单改动 A/B 归因用），不改变结果只改变快慢
@@ -327,6 +348,7 @@ export function resetVectorCache(): void {
   vectorCacheCounters.hits = 0;
   vectorCacheCounters.rebuilds = 0;
   vectorCacheCounters.oversizeScans = 0;
+  vectorCacheCounters.incrementalPages = 0;
 }
 
 /** 向量缓存观测读数（诊断与性能用例用；不暴露到任何用户界面） */
@@ -339,6 +361,7 @@ export function getVectorCacheStats(): {
   hits: number;
   rebuilds: number;
   oversizeScans: number;
+  incrementalPages: number;
 } {
   let matrices = 0;
   let vectors = 0;
@@ -355,6 +378,8 @@ export function getVectorCacheStats(): {
     hits: vectorCacheCounters.hits,
     rebuilds: vectorCacheCounters.rebuilds,
     oversizeScans: vectorCacheCounters.oversizeScans,
+    // 增量同步消化掉的页面数（T04186：验收用例用它确认「快」来自增量而非重建）
+    incrementalPages: vectorCacheCounters.incrementalPages,
   };
 }
 
@@ -362,6 +387,56 @@ export function getVectorCacheStats(): {
 function readVecGen(d: SyncDb): number {
   const row = d.prepare('SELECT gen FROM vec_gen WHERE id = 1').get() as { gen: number | null } | undefined;
   return typeof row?.gen === 'number' ? row.gen : 0;
+}
+
+// ── T04186 补算期增量同步 ──────────────────────────────────────────────────
+// 批量补算（懒索引边写边查、重建索引按钮）时每次写入都会把代号推高，改造前每一次紧跟的
+// 查询都要整目录重建矩阵：本机实测 10400 条 × 256 维每轮 70.6ms，而纯热查询只要 5.0ms。
+// 本进程知道自己改了哪些页面，就只摘那几个页面的槽位再追加它们现存的行——
+// 结果与全量重建逐条一致（行序论证见 reshapeMatrix），成本从「反序列化全库」降到「搬一次内存」。
+
+/** 写入侧记账：本模块的向量写函数在事务提交后登记「这页的向量变了、代号应推几格」。
+ *  没有该目录缓存时不记（那种情况下下一次查询本来就是全量新建，账是多余的）。
+ *  代号每行增删改推一格，与库内触发器同式；账对不上即说明存在旁路裸 SQL
+ *  （重建索引的整表 DELETE、脚本里的裸 UPDATE），退回整目录重建——
+ *  增量只是重建的等价快路径，不是第二套失效判据。 */
+function noteVecPageMutation(dataDir: string, pagePath: string, vecRowsTouched: number): void {
+  if (vecRowsTouched <= 0) return; // 没碰到向量行 → 代号一格没动（重切分但本页从未有向量）
+  const dir = vectorCaches.get(dataDir);
+  if (!dir || !dir.pendingPages) return;
+  dir.expectGen += vecRowsTouched;
+  dir.pendingPages.add(pagePath);
+  if (dir.pendingPages.size > MAX_PENDING_VEC_PAGES) dir.pendingPages = null;
+}
+
+/** 待同步页面在库中现存的向量行（rid 定次序，model/dim 决定落到哪一份矩阵） */
+interface PendingVecRow {
+  rid: number;
+  page_path: string;
+  chunk_index: number;
+  vec: Buffer;
+  dim: number;
+  model: string;
+}
+
+/** 取待同步页面现存的向量行：与全量扫描同一 JOIN 存活口径（正文缺席的向量不参与召回）、
+ *  同一 rowid 行序；分批 IN 查询避开绑定参数上限。 */
+function listPageVectorRows(d: SyncDb, pages: string[]): PendingVecRow[] {
+  const out: PendingVecRow[] = [];
+  for (let i = 0; i < pages.length; i += MAX_PENDING_VEC_PAGES) {
+    const slice = pages.slice(i, i + MAX_PENDING_VEC_PAGES);
+    const rows = (d
+      .prepare(`
+        SELECT v.rowid AS rid, v.page_path AS page_path, v.chunk_index AS chunk_index, v.vec AS vec, v.dim AS dim, v.model AS model
+        FROM chunk_vecs v CROSS JOIN chunks c ON c.page_path = v.page_path AND c.chunk_index = v.chunk_index
+        WHERE v.page_path IN (${slice.map(() => '?').join(', ')})
+        ORDER BY v.rowid
+      `)
+      .all(...slice) as unknown as PendingVecRow[]);
+    out.push(...rows);
+  }
+  out.sort((a, b) => a.rid - b.rid); // 分批各自有序，合并后全局再钉一次
+  return out;
 }
 
 /** 冷路径取数 SQL：只取向量与定位键，不取正文。
@@ -450,6 +525,104 @@ function buildMatrix(rows: Iterable<VectorRow>, dim: number): VectorMatrix {
   };
 }
 
+/** 摘掉待同步页面的槽位，再把它们现存的行追加到尾部。
+ *  追加后的行序与「全表按 rowid 重扫」逐条一致：一页的向量每次写都是先整页删再插，
+ *  故待同步页面的现存行必产自本次同步之后，rowid 单调递增即大于所有保留行的 rowid，
+ *  而保留行彼此次序不变——「保留段原序 + 新行按 rowid 排在尾部」正是全表扫描的次序，
+ *  同分并列名次（keepTopK 的先到先得）因而也与重建路径完全相同。
+ *  这份性质还让增量幂等：中途新建的矩阵已含新行，再摘再贴结果不变。 */
+function reshapeMatrix(m: VectorMatrix, droppedPages: Set<string>, adds: PendingVecRow[], dropped: number): VectorMatrix {
+  const dim = m.dim;
+  const allocated = m.count + adds.length;
+  const data = new Float32Array(allocated * dim);
+  const norms = new Float64Array(allocated);
+  const pagePaths: string[] = new Array(allocated);
+  const chunkIndexes = new Int32Array(allocated);
+  let filled = 0;
+  if (dropped === 0) {
+    // 补算期的主流形态（纯新增）：整块搬运旧矩阵，不逐个比较页面名
+    data.set(m.data, 0);
+    norms.set(m.norms, 0);
+    for (let i = 0; i < m.count; i++) {
+      pagePaths[i] = m.pagePaths[i];
+      chunkIndexes[i] = m.chunkIndexes[i];
+    }
+    filled = m.count;
+  } else {
+    for (let i = 0; i < m.count; i++) {
+      if (droppedPages.has(m.pagePaths[i])) continue;
+      data.set(m.data.subarray(i * dim, (i + 1) * dim), filled * dim);
+      norms[filled] = m.norms[i];
+      pagePaths[filled] = m.pagePaths[i];
+      chunkIndexes[filled] = m.chunkIndexes[i];
+      filled++;
+    }
+  }
+  for (const r of adds) {
+    if (r.vec.byteLength < dim * 4) continue; // 脏 BLOB：与 buildMatrix 同口径只丢这一行
+    const buf = r.vec.byteOffset % 4 === 0 ? r.vec : Buffer.from(r.vec);
+    const src = new Float32Array(buf.buffer, buf.byteOffset, dim);
+    const off = filled * dim;
+    let sq = 0;
+    for (let k = 0; k < dim; k++) {
+      const v = src[k];
+      data[off + k] = v;
+      sq += v * v;
+    }
+    norms[filled] = Math.sqrt(sq);
+    pagePaths[filled] = r.page_path;
+    chunkIndexes[filled] = r.chunk_index;
+    filled++;
+  }
+  return {
+    dim,
+    count: filled,
+    data: filled === allocated ? data : data.subarray(0, filled * dim),
+    norms: filled === allocated ? norms : norms.subarray(0, filled),
+    pagePaths: pagePaths.slice(0, filled),
+    chunkIndexes: filled === allocated ? chunkIndexes : chunkIndexes.subarray(0, filled),
+    bytes: filled * bytesPerVector(dim),
+  };
+}
+
+/** 把记账到的页面改动应用到已缓存矩阵。返回 false = 增量做不了（账对不上 / 已弃账 / 会超内存预算），
+ *  由调用方按原口径整目录重建。 */
+function applyPendingVecOps(d: SyncDb, dir: DirVectorCache, gen: number): boolean {
+  const pages = dir.pendingPages;
+  if (!pages || dir.expectGen !== gen) return false;
+  if (pages.size === 0) {
+    dir.gen = gen;
+    return true;
+  }
+  const rows = listPageVectorRows(d, [...pages]);
+  // 先只算增量后的总占用：超预算就退回重建，内存上界（WIKI_VECTOR_CACHE_MAX_MB）不因增量而失守
+  const plans: Array<{ key: string; matrix: VectorMatrix; dim: number; dropped: number; adds: PendingVecRow[] }> = [];
+  let projectedDelta = 0;
+  for (const [key, matrix] of dir.matrices) {
+    const sep = key.indexOf('\u0000');
+    const modelOfKey = key.slice(0, sep);
+    const dim = Number(key.slice(sep + 1));
+    let dropped = 0;
+    for (let i = 0; i < matrix.count; i++) if (pages.has(matrix.pagePaths[i])) dropped++;
+    // 空 model 段 = 「不传 model」的全量口径矩阵，任何模型的行都属于它；指定 model 的矩阵只收同模型的行
+    const adds = rows.filter((r) => r.dim === dim && (modelOfKey === '' || r.model === modelOfKey));
+    projectedDelta += (matrix.count - dropped + adds.length) * bytesPerVector(dim) - matrix.bytes;
+    if (dropped > 0 || adds.length > 0) plans.push({ key, matrix, dim, dropped, adds });
+  }
+  if (cachedVectorBytes + projectedDelta > vectorCacheBudgetBytes()) return false;
+  for (const p of plans) {
+    const next = reshapeMatrix(p.matrix, pages, p.adds, p.dropped);
+    dir.bytes += next.bytes - p.matrix.bytes;
+    cachedVectorBytes += next.bytes - p.matrix.bytes;
+    dir.matrices.set(p.key, next);
+  }
+  vectorCacheCounters.incrementalPages += pages.size;
+  dir.gen = gen;
+  dir.pendingPages = new Set();
+  dir.expectGen = gen;
+  return true;
+}
+
 /** 对已缓存矩阵做全量精确打分（O(count × dim)，无 SQL、无正文） */
 function scoreMatrix(m: VectorMatrix, queryVec: Float32Array, limit: number): VectorCandidate[] {
   const top: VectorCandidate[] = [];
@@ -510,12 +683,15 @@ function recallCandidates(
   const gen = readVecGen(d);
   let dir = vectorCaches.get(dataDir);
   if (dir && dir.gen !== gen) {
-    // 代号是全库口径：向量增删改过就整目录重建，不猜哪一份还新
-    dropDirCache(dataDir);
-    dir = undefined;
+    // T04186：先看本进程记得住账否——补算期只改过几页时增量同步即可；
+    // 账对不上（旁路裸写、批量已弃账）仍整目录重建，不猜哪一份还新
+    if (!applyPendingVecOps(d, dir, gen)) {
+      dropDirCache(dataDir);
+      dir = undefined;
+    }
   }
   if (!dir) {
-    dir = { gen, bytes: 0, matrices: new Map<string, VectorMatrix>() };
+    dir = { gen, bytes: 0, matrices: new Map<string, VectorMatrix>(), pendingPages: new Set<string>(), expectGen: gen };
     vectorCaches.set(dataDir, dir);
   }
   const key = `${model ?? ''}\u0000${queryVec.length}`;
