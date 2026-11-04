@@ -28,7 +28,7 @@ const BASE_TOKENS = [
   /^--accent-purple$/,
 ];
 
-/** 已完成接入、必须保持 0 裸用的文件（第一~五组累计；本组新增隧道页/导入页） */
+/** 已完成接入、必须保持 0 裸用的文件（第一~五组累计 + T04470 批次 A 已收文件） */
 const WHITELIST = [
   'src/views/Browse.vue', // T04449 第四组
   'src/views/Graph.vue', // T04449 第四组
@@ -37,11 +37,23 @@ const WHITELIST = [
   'src/views/Health.vue', // T04449 第三组
   'src/views/Tunnel.vue', // T04449 第五组
   'src/views/Ingest.vue', // T04449 第五组
+  'src/views/Login.vue', // T04470 批次 A1
+  'src/views/Register.vue', // T04470 批次 A1
 ];
 
 /**
+ * 从 BASELINE 移入 WHITELIST 的文件，登记它们**起算时**的处数（不是接入后的，接入后是 0）。
+ * 账本不变式：BASELINE + DONE 合计恒等于起算 163 处 / 35 个文件——
+ * 一个文件不能既离开基线表、又没在这里被记回数，否则「还剩多少」会凭空变小。
+ */
+const WIRING_DONE: Record<string, number> = {
+  'src/views/Login.vue': 5, // T04470 批次 A1
+  'src/views/Register.vue': 4, // T04470 批次 A1
+};
+
+/**
  * 未接入文件的基线（处数），冻结于 T04449 第五组收口时点：163 处 / 35 个文件。
- * 只允许下降——接入一处就把它调小，新增一处即红。接入完的文件请从这里移出并进 WHITELIST。
+ * 只允许下降——接入一处就把它调小，新增一处即红。接入完的文件请从这里移出并进 WHITELIST+DONE。
  */
 const BASELINE: Record<string, number> = {
   'src/views/Config.vue': 18,
@@ -56,11 +68,9 @@ const BASELINE: Record<string, number> = {
   'src/views/Users.vue': 6,
   'src/components/HealthIssueList.vue': 6,
   'src/views/Help.vue': 5,
-  'src/views/Login.vue': 5,
   'src/components/ConversationSidebar.vue': 5,
   'src/components/DocumentTabs.vue': 5,
   'src/components/ModelSelector.vue': 5,
-  'src/views/Register.vue': 4,
   'src/components/ClarifyCard.vue': 4,
   'src/components/InputToolbar.vue': 3,
   'src/components/SessionStatusIcon.vue': 3,
@@ -81,7 +91,9 @@ const BASELINE: Record<string, number> = {
   'src/components/ThemeSwitcher.vue': 1,
 };
 
-const BASELINE_TOTAL = 163;
+/** 起算账本（T04449 第五组收口时点的全站清点），不得随进度改动 */
+const START_TOTAL = 163;
+const START_FILES = 35;
 
 function walk(dir: string, acc: string[]): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -107,13 +119,23 @@ describe('T04449 全站索引锁：账本自证', () => {
   });
 
   it('白名单与基线表里的路径都必须是真实存在的文件（改名会静默丢掉预算）', () => {
-    const missing = [...WHITELIST, ...Object.keys(BASELINE)].filter((f) => !SCANNED.includes(f) || !existsSync(join(ROOT, f)));
+    const missing = [...WHITELIST, ...Object.keys(BASELINE), ...Object.keys(WIRING_DONE)].filter(
+      (f) => !SCANNED.includes(f) || !existsSync(join(ROOT, f)),
+    );
     expect(missing, `以下路径已不在遍历结果/磁盘上：${missing.join(', ')}`).toEqual([]);
   });
 
-  it('基线表合计与全站账本一致（收口时点为 163 处 / 35 个文件）', () => {
-    expect(Object.keys(BASELINE).length).toBe(35);
-    expect(Object.values(BASELINE).reduce((s, n) => s + n, 0)).toBe(BASELINE_TOTAL);
+  it('已完成登记表与基线表互斥、且已完成的文件确实在白名单里（防止双重登记或偷偷移出白名单）', () => {
+    const inBoth = Object.keys(WIRING_DONE).filter((f) => f in BASELINE);
+    expect(inBoth, `同时出现在 DONE 与 BASELINE：${inBoth.join(', ')}`).toEqual([]);
+    const notWhitelisted = Object.keys(WIRING_DONE).filter((f) => !WHITELIST.includes(f));
+    expect(notWhitelisted, `DONE 里的文件不在白名单：${notWhitelisted.join(', ')}`).toEqual([]);
+  });
+
+  it(`账本闭环：基线剩余 + 已完成登记 = 起算 ${START_TOTAL} 处 / ${START_FILES} 个文件`, () => {
+    const sum = (t: Record<string, number>) => Object.values(t).reduce((s, n) => s + n, 0);
+    expect(Object.keys(BASELINE).length + Object.keys(WIRING_DONE).length).toBe(START_FILES);
+    expect(sum(BASELINE) + sum(WIRING_DONE)).toBe(START_TOTAL);
   });
 });
 
@@ -137,8 +159,9 @@ describe('T04449 全站索引锁：白名单外只降不升', () => {
     expect(over, `新增裸基色前景，须接入 readable 口径：\n${over.join('\n')}`).toEqual([]);
   });
 
-  it(`全站裸基色前景总数不得超过 ${BASELINE_TOTAL} 处`, () => {
+  it('全站裸基色前景总数不得超过基线剩余合计', () => {
+    const allowed = Object.values(BASELINE).reduce((s, n) => s + n, 0);
     const total = SCANNED.reduce((s, f) => s + (WHITELIST.includes(f) ? 0 : hitsOf(f).length), 0);
-    expect(total).toBeLessThanOrEqual(BASELINE_TOTAL);
+    expect(total, `基线剩余 ${allowed} 处，实测 ${total} 处`).toBeLessThanOrEqual(allowed);
   });
 });

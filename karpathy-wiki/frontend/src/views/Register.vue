@@ -304,7 +304,7 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .form-input:focus {
-  border-color: var(--neon-cyan);
+  border-color: var(--accent-readable, var(--neon-cyan));
   box-shadow: 0 0 0 2px var(--accent-cyan-a08);
 }
 
@@ -339,7 +339,7 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .pwd-toggle:hover:not(:disabled) {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
 }
 
 .pwd-toggle:disabled {
@@ -350,7 +350,7 @@ function handleKeydown(e: KeyboardEvent) {
 .login-error {
   padding: 8px 12px;
   font-size: 12px;
-  color: var(--neon-magenta);
+  color: var(--pink-readable, var(--neon-magenta));
   background: var(--accent-pink-a10);
   border-radius: var(--radius-btn, 8px);
   border: 1px solid var(--accent-pink-a30);
@@ -389,7 +389,7 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 .switch-link {
-  color: var(--neon-cyan);
+  color: var(--accent-readable, var(--neon-cyan));
   cursor: pointer;
   font-weight: 600;
   margin-left: 4px;
