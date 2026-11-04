@@ -2148,8 +2148,8 @@ onBeforeUnmount(() => {
 
 .suggestion-chip:hover {
   background: var(--accent-purple-a18, rgba(176, 38, 255, 0.18));
-  border-color: var(--neon-purple);
-  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+  border-color: var(--purple-readable, var(--neon-purple));
+  color: var(--purple-readable, var(--accent-readable, var(--neon-cyan, #00f5ff)));
   transform: translateY(-2px);
   box-shadow: var(--glow-purple);
 }
@@ -2367,7 +2367,7 @@ onBeforeUnmount(() => {
   margin: 4px 0 8px;
   padding: 4px 10px;
   background: var(--accent-cyan-a08, rgba(0, 245, 255, 0.08));
-  border-left: 2px solid var(--neon-cyan);
+  border-left: 2px solid var(--accent-readable, var(--neon-cyan));
   border-radius: 0 4px 4px 0;
   font-size: 12px;
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
@@ -2770,8 +2770,8 @@ onBeforeUnmount(() => {
   transition: all 0.2s;
 }
 .output-modes-trigger:hover {
-  border-color: var(--neon-purple, #b226ff);
-  color: var(--neon-purple, #b226ff);
+  border-color: var(--purple-readable, var(--neon-purple, #b226ff));
+  color: var(--purple-readable, var(--neon-purple, #b226ff));
 }
 .output-modes-label {
   font-family: var(--font-mono);
@@ -2799,8 +2799,8 @@ onBeforeUnmount(() => {
   transition: all 0.2s;
 }
 .middlewares-trigger:hover {
-  border-color: var(--neon-magenta, #ff00ff);
-  color: var(--neon-magenta, #ff00ff);
+  border-color: var(--pink-readable, var(--neon-magenta, #ff00ff));
+  color: var(--pink-readable, var(--neon-magenta, #ff00ff));
 }
 .middlewares-label {
   font-family: var(--font-mono);
@@ -2901,11 +2901,11 @@ onBeforeUnmount(() => {
   padding: 0;
 }
 .advanced-toggle:hover {
-  color: var(--neon-purple, #b226ff);
+  color: var(--purple-readable, var(--neon-purple, #b226ff));
   background: var(--accent-purple-a12, rgba(176, 38, 255, 0.12));
 }
 .advanced-toggle.active {
-  color: var(--neon-purple, #b226ff);
+  color: var(--purple-readable, var(--neon-purple, #b226ff));
   background: var(--accent-purple-a18, rgba(176, 38, 255, 0.18));
 }
 /* 齿轮图标旋转：active 状态旋转 90°，让用户感知面板已展开

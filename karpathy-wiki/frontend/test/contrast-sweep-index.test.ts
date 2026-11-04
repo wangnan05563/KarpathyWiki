@@ -43,6 +43,7 @@ const WHITELIST = [
   'src/views/About.vue', // T04470 批次 A2
   'src/views/Dashboard.vue', // T04470 批次 A3
   'src/views/Users.vue', // T04470 批次 A3
+  'src/views/Query.vue', // T04470 批次 A4（8 处裸基色；另回补 1 处 T04175 遗留的错族，不在本账内）
 ];
 
 /**
@@ -57,6 +58,7 @@ const WIRING_DONE: Record<string, number> = {
   'src/views/About.vue': 7, // T04470 批次 A2
   'src/views/Dashboard.vue': 6, // T04470 批次 A3
   'src/views/Users.vue': 6, // T04470 批次 A3
+  'src/views/Query.vue': 8, // T04470 批次 A4
 };
 
 /**
@@ -69,7 +71,6 @@ const BASELINE: Record<string, number> = {
   'src/components/SingleFileProgressBar.vue': 10,
   'src/views/Cleanup.vue': 9,
   'src/components/MarkdownRenderer.vue': 9,
-  'src/views/Query.vue': 8,
   'src/components/RefsList.vue': 7,
   'src/components/HealthIssueList.vue': 6,
   'src/components/ConversationSidebar.vue': 5,
