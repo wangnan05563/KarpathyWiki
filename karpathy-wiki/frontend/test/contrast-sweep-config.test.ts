@@ -11,10 +11,11 @@
 //    （粉 a15 / 粉 a12 / 粉渐变 a18→a05 / 粉 a10）——这不是风格统一问题，是实算：同一面上
 //    `--pink-readable` 在 macaron / portfolio 最低只有 4.10~4.47，而 `--purple-readable` 4.58~4.74。
 //    「跨族按面选族」在本批从个案变成多数，故写成断言防止后来者按家族名改回粉族。
-// ③ **一处已知缺口（本批修不掉，另单裁决）**：`.key-badge-private`（紫 a15 × scene）接入紫族后
-//    macaron 实测 4.49 < 4.5，其余 7 主题 4.63~10.57。这是 macaron 的 `--purple-readable: #7a628d`
-//    本身偏浅所致，属 token 取值校准（T04468 口径），不在「接入既有 readable」授权范围内。
-//    本文件把这一格写成精确值留档锁，而不是把它塞进达标清单。
+// ③ **曾有的一处已知缺口已由 T04480 闭掉**：`.key-badge-private`（紫 a15 × scene）接入紫族后
+//    macaron 实测 4.49 < 4.5（其余 7 主题 4.63~10.57），根因是 macaron 的 `--purple-readable: #7a628d`
+//    本身偏浅，属 token 取值校准（非「接入既有 readable」授权范围，故当时只留档不修）。
+//    T04480 把该值压暗到 #76608a 后本格实测 4.67，18 面 × 8 主题全绿——留档用例已按它自己的
+//    迁移指引删除，源码形状断言（面没有被反向偷抬）并入上面的达标用例。
 // ④ **`.pattern-status.invalid` 的单行规则**：`color: var(--neon-pink)` 写在同一行的花括号里，
 //    行级口径扫描按分号切段也能抓到，故一并接入（该行涉及的假 token 属 T04460，不在本口径）。
 import { readFileSync } from 'node:fs';
@@ -123,9 +124,6 @@ const audit = (base: 'scene' | 'card', themes: ThemeTokens[]): AuditFailure[] =>
   return out;
 };
 
-/** 唯一已知缺口：macaron 的 --purple-readable 偏浅，需 token 取值校准（T04468），不在本批授权内 */
-const KNOWN_GAP = { theme: 'macaron', label: '.key-badge-private [L5794]' };
-
 /** 达标清单（既有 auditThemes 通道）：卡片实底 + 无自身底的三处，作为第二重下界 */
 const CARD_BOUND: AuditRow[] = POINTS.map((p) => ({
   label: `${PAGE}·${p.sel} [card 下界]`,
@@ -162,11 +160,11 @@ const famCount = (src: string, fam: string) => (src.match(new RegExp(`--${fam}-r
 const srcOf = () => readFileSync(join(ROOT, FILE), 'utf8');
 
 describe('T04470 批次 A6：逐主题达标（权威叠底 = 面板实底 --bg-scene）', () => {
-  it(`8 主题 × ${POINTS.length} 面接入后只剩 1 处已知缺口（L5794 × macaron）`, () => {
+  it(`8 主题 × ${POINTS.length} 面接入后全绿（L5794 缺口由 T04480 取值校准闭掉）`, () => {
     const failures = audit('scene', loadThemes());
-    expect(failures.map((f) => `${f.theme}·${f.label}`), formatFailures(failures)).toEqual([
-      `${KNOWN_GAP.theme}·${KNOWN_GAP.label}`,
-    ]);
+    expect(failures, formatFailures(failures)).toEqual([]);
+    // 校准只压暗前景，不许反过来把面偷抬成更亮来蒙过数值：源码形状逐字锁住
+    expect(srcOf()).toMatch(/\.key-badge-private \{\s*\r?\n\s*background: var\(--accent-purple-a15\);\s*\r?\n\s*border-color: var\(--accent-purple-a40\);\s*\r?\n\s*color: var\(--purple-readable, var\(--neon-purple\)\);/);
   });
 
   it('卡片页底下界同样成立（叠底猜错也不会翻案，18 面 8 主题全过）', () => {
@@ -324,18 +322,17 @@ describe('T04449 推广第二组：配置中心青族 28 面（本批未动，�
   });
 });
 
-// 事实留档（不是质量门）：本批唯一修不掉的格子。
-// L5794 `.key-badge-private` 接入紫族后仍有 macaron 4.49 < 4.5，根因是 macaron 的
-// `--purple-readable: #7a628d` 取值偏浅（其余 7 主题 4.63~10.57），属 token 取值校准而非接入。
-// ⚠ 若这条将来变红且缺口消失，说明 readable 已被校准——把 L5794 挪进上面的达标清单并删掉本用例。
-describe('T04470 批次 A6：已知缺口留档', () => {
-  it('L5794 缺口精确到主题与数值：只此一格、且源码确已接入紫族', () => {
+// T04480 取值校准后的数值锁（原为「已知缺口留档」，缺口闭掉后按该用例自己的迁移指引转正）。
+// 留精确值而不是只留 ≥4.5：macaron 无深色面，任何再压暗/提亮都会同时移动本主题全部紫族落点，
+// 精确值能把「顺手改动 readable」变成一次有意的、需要同时更新其它锁的变更。
+describe('T04470 批次 A6：L5794 校准后数值锁', () => {
+  it('L5794 逐主题实测：macaron 已从 4.49 抬到 4.67，其余 7 主题不因本次校准而变', () => {
     const themes = loadThemes();
     const p = POINTS.find((x) => x.ln === 5794)!;
     const vals = themes.map((t) => ({ th: t.name, v: ratio(p, t, 'scene') }));
-    const bad = vals.filter((c) => c.v < THRESHOLD.text);
-    expect(bad.map((b) => `${b.th}=${b.v.toFixed(2)}`)).toEqual(['macaron=4.49']);
-    expect(Math.max(...vals.map((c) => c.v))).toBeGreaterThan(10);
-    expect(srcOf()).toMatch(/\.key-badge-private \{\s*\r?\n\s*background: var\(--accent-purple-a15\);\s*\r?\n\s*border-color: var\(--accent-purple-a40\);\s*\r?\n\s*color: var\(--purple-readable, var\(--neon-purple\)\);/);
+    expect(vals.map((c) => `${c.th}=${c.v.toFixed(2)}`).join(' ')).toBe(
+      'default(:root)=5.42 creative=5.42 ecommerce=4.91 enterprise=4.63 light-business=4.81 macaron=4.67 portfolio=10.57 product=5.37',
+    );
+    expect(Math.min(...vals.map((c) => c.v)), '最小值必须自身达标，不留阈值余量债').toBeGreaterThanOrEqual(THRESHOLD.text);
   });
 });

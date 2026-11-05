@@ -60,12 +60,15 @@ const POINTS: Point[] = [
  * 为什么不是「换个族」能修：ALT 是同一格按另两个 readable 族的实测最差值——三族全都上不了 4.5，
  * 说明瓶颈是 hover 规则自带的 a25 淡底（叠在浅底主题的卡片上已被抬亮）加 readable 取值本身。
  * 派生单 T04481 处理面/取值校准；校准完成后本表要删掉并把这两行挪进达标清单。
+ * ⚠ T04480（macaron `--purple-readable` #7a628d → #76608a）顺带闭掉了本格的 macaron 一侧：
+ *    该格紫 a25 淡底同向变好，实测 4.4465 → 4.6201 ≥ 4.5，故 values 里删掉 macaron 键。
+ *    其余 6 个浅底主题的缺口仍在（瓶颈是 a25 淡底本身），属 T04482 未闭，本表不整表删除。
  */
 const KNOWN_GAPS: Record<string, { need: number; fam: string; values: Record<string, number>; alt: Record<string, number> }> = {
   'FloatingChat.vue:L942 .suggestion-chip:hover': {
     need: 4.5,
     fam: 'var(--purple-readable)',
-    values: { 'default(:root)': 4.3216, creative: 4.3216, ecommerce: 4.4129, enterprise: 4.3361, 'light-business': 4.3789, macaron: 4.4465, product: 4.3308 },
+    values: { 'default(:root)': 4.3216, creative: 4.3216, ecommerce: 4.4129, enterprise: 4.3361, 'light-business': 4.3789, product: 4.3308 },
     // 换族修不掉：青族最差 3.68、粉族 3.47，比留在紫族更差
     alt: { 'var(--accent-readable)': 3.6812, 'var(--pink-readable)': 3.4697 },
   },
@@ -221,13 +224,14 @@ describe('T04470 批次 C：13 个组件 21 面逐主题实算', () => {
     });
   }
 
-  it('19 个可修格接入后全部达 AA；残差只有登记过的 14 个主题×格组合', () => {
+  it('19 个可修格接入后全部达 AA；残差只有登记过的 13 个主题×格组合', () => {
     expect(POINTS.length).toBe(21);
     expect(FILES.length).toBe(13);
     expect(BEFORE_FAILURES, '接入前未达标组合数被改动——本批结论建立在这组实测上').toBe(74);
-    expect(AFTER_FAILURES.length).toBe(14);
+    // 本批收口时残差为 14；T04480 校准 macaron 紫 readable 后 FloatingChat L942 的 macaron 一侧闭掉 → 13
+    expect(AFTER_FAILURES.length).toBe(13);
     const repaired = 74 - AFTER_FAILURES.length;
-    expect(repaired).toBe(60);
+    expect(repaired).toBe(61);
   });
 
   it('13 个文件的裸基色前景声明全部归零（与索引锁同一口径的规模锁）', () => {

@@ -413,13 +413,16 @@ describe('T04448 粉/紫前景口径守护（不得再裸用 --accent-pink / --a
     //  · 紫族二次（T04449 第五组）——导入页把紫族文字压到更深一档的 `--accent-purple-a20` 面，
     //    原值在 5 个主题上 4.30~4.47 < 4.5（ecommerce/enterprise/macaron 压暗，default/creative/product 提亮），
     //    其余档位（a15/a12/a05/卡片）随方向同步变好。
+    //  · 紫族三次（T04480 取值校准）——macaron #7a628d 仍偏浅：配置页 `.key-badge-private` 的紫 a15
+    //    坐在面板实底 --bg-scene(#fff5f0) 上（比卡片页底更亮），该格实测 4.49 < 4.5 是全站唯一残留缺口。
+    //    再压暗一档到 #76608a 后 scene 叠底 4.67 / 卡片叠底 5.14；本主题无深色面，其余紫族落点全部同向变好。
     const EXPECT: Record<string, { pink: string; purple: string }> = {
       'default(:root)': { pink: '#ff338b', purple: '#c258ff' },
       creative: { pink: '#ff338b', purple: '#c258ff' },
       ecommerce: { pink: '#ac4824', purple: '#5d4fc6' },
       enterprise: { pink: '#2d63bb', purple: '#2158d1' },
       'light-business': { pink: '#b52e2e', purple: '#1554d1' },
-      macaron: { pink: '#8c6273', purple: '#7a628d' },
+      macaron: { pink: '#8c6273', purple: '#76608a' },
       portfolio: { pink: '#735f46', purple: '#1a1a1a' },
       product: { pink: '#ff2994', purple: '#c35aff' },
     };
