@@ -315,8 +315,9 @@ function handleKeydown(e: KeyboardEvent) {
   font-size: 14px;
   font-weight: 700;
   font-family: var(--font-body);
-  color: #fff;
-  background: var(--grad-fire);
+  /* T04472：登录主按钮坐火面，改用面级配对 token（原 --grad-fire + #fff 在 7/8 主题跌破 AA） */
+  color: var(--on-fire-fg);
+  background: var(--on-fire-bg);
   border: none;
   border-radius: var(--radius-btn, 8px);
   cursor: pointer;

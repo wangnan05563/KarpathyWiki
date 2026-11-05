@@ -81,6 +81,14 @@
      T01761：别名化——新权威为 --tk-accent-fg，旧变量名保留引用避免消费点断裂 */
   --menu-active-fg: var(--tk-accent-fg);
   --grad-aurora: linear-gradient(120deg, #00a8e8 0%, #6c5ce7 40%, #ff6b35 80%, #ff8c42 100%);
+  /* T04472 面级配对：亮青/亮橙端点上白字只有 2.31~2.70 → 同色相压深一档；
+     --danger 是 #dc2626（白字 4.83 达标）保留本体；粉 tint 与浮层底在纯白卡片上
+     白字只有 1.17 / 1.00 → 前景换本主题深墨、浮层换本主题深墨底。 */
+  --on-cool-bg: linear-gradient(135deg, #0077a5 0%, #0066cc 100%);
+  --on-aurora-bg: linear-gradient(120deg, #0077a5 0%, #6a5ae3 40%, #ba4e27 80%, #a75c2b 100%);
+  --on-danger-bg: var(--danger);
+  --on-danger-tint-fg: var(--text-bright);
+  --on-tooltip-bg: var(--text-bright);
 
   /* 柔和阴影 */
   --glow-purple: 0 4px 16px rgba(0, 102, 204, 0.15);

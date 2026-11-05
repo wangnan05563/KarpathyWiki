@@ -56,6 +56,13 @@
   --grad-fire: linear-gradient(135deg, #ff0080 0%, #6366f1 100%);
   --grad-cool: linear-gradient(135deg, #00ff88 0%, #00d4ff 100%);
   --grad-aurora: linear-gradient(120deg, #00ff88 0%, #00d4ff 30%, #6366f1 60%, #ff0080 100%);
+  /* T04472 面级配对：cool 两端都是亮霓虹（白字 1.34），霓虹观感靠亮度、压深即毁 →
+     该面前景换近黑墨（11.08 达标）。aurora 端点横跨亮绿到 #6366f1，
+     深墨被暗端堵死（4.39）、白字被亮端堵死（1.34）→ 只能压深整面（同色相 ≥ 5.0）。
+     危险面继承 :root 的压深红（本主题 --danger 与 :root 同为 #f87171，白字只有 2.77）。 */
+  --on-cool-fg: #0b0b12;
+  --on-cool-bg: var(--grad-cool);
+  --on-aurora-bg: linear-gradient(120deg, #008145 0%, #007a93 30%, #5d5fe1 60%, #da006d 100%);
 
   /* 强发光阴影 */
   --glow-purple: 0 0 32px rgba(99, 102, 241, 0.6), 0 0 64px rgba(99, 102, 241, 0.3);

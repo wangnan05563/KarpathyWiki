@@ -82,6 +82,16 @@
      T01761：别名化——新权威为 --tk-accent-fg，旧变量名保留引用避免消费点断裂 */
   --menu-active-fg: var(--tk-accent-fg);
   --grad-aurora: linear-gradient(120deg, #a8e0d8 0%, #c8a2e8 40%, #ffb3d1 80%, #ffc4d6 100%);
+  /* T04472 面级配对：本主题三个渐变面全是马卡龙浅彩，压深会毁掉主题识别度 →
+     方向反过来：面保持原样，前景换成该主题深墨 --text-bright（青绿面 4.85 / 浅粉面 6.25，
+     与 --bubble-user-* 同一口径）。危险面 #e06c6c 白字只有 3.22，且深墨压红也只有 3.24，
+     两头都不过 → 沿用 :root 的压深红 #b3261e（白字 6.54）。 */
+  --on-cool-fg: var(--text-bright);
+  --on-cool-bg: var(--grad-cool);
+  --on-aurora-fg: var(--text-bright);
+  --on-aurora-bg: var(--grad-aurora);
+  --on-danger-tint-fg: var(--text-bright);
+  --on-tooltip-bg: var(--text-bright);
 
   /* Soft shadows (no strong glow) */
   --glow-purple: 0 8px 32px rgba(200, 162, 232, 0.35);

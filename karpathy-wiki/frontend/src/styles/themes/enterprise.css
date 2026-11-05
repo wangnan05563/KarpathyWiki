@@ -76,6 +76,13 @@
   --bubble-user-bg: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
   --grad-cool: linear-gradient(135deg, #06b6d4 0%, #2563eb 100%);
   --grad-aurora: linear-gradient(120deg, #06b6d4 0%, #2563eb 40%, #3b82f6 80%, #6366f1 100%);
+  /* T04472 面级配对：青蓝端点偏亮（白字 2.43）→ 压深一档；#dc2626 危险面 4.83 达标保留；
+     白卡片上的粉 tint（1.19）与浮层（1.00）换本主题深墨。 */
+  --on-cool-bg: linear-gradient(135deg, #047a8f 0%, #2563eb 100%);
+  --on-aurora-bg: linear-gradient(120deg, #047a8f 0%, #2563eb 40%, #316dce 80%, #5d5fe1 100%);
+  --on-danger-bg: var(--danger);
+  --on-danger-tint-fg: var(--text-bright);
+  --on-tooltip-bg: var(--text-bright);
 
   /* 精致阴影 */
   --glow-purple: 0 8px 32px rgba(37, 99, 235, 0.18);

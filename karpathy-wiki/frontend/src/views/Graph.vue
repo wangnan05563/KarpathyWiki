@@ -2063,8 +2063,9 @@ watch(loading, () => {
 }
 
 .seg-control button.active {
-  background: var(--grad-cool, var(--accent-purple-a40));
-  color: #fff;
+  /* T04472 #6：青面亮端压白字实测 1.34~2.70，8/8 主题全线不达 AA → 用面级配对 token */
+  background: var(--on-cool-bg);
+  color: var(--on-cool-fg);
   box-shadow: var(--glow-cyan);
 }
 

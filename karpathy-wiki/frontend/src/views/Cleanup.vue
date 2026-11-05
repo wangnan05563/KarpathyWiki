@@ -818,13 +818,22 @@ onMounted(() => {
 
 /* 危险按钮：非预览模式变红 */
 .cleanup-btn.danger {
-  background: linear-gradient(135deg, var(--accent-pink-a30), var(--accent-pink-a15)) !important;
+  /* T04472 #10：粉 tint 面（a30→a15）坐在白卡片上就是浅粉，压 #fff 实测 macaron 1.08、
+     ecommerce/enterprise/light-business/portfolio 1.17~1.24 → 面与前景成对：
+     浅底族把前景换成该主题深墨，深底族（default/creative/product）保持白字 */
+  background: var(--on-danger-tint-bg) !important;
   border-color: var(--pink-readable, var(--neon-magenta)) !important;
-  color: #fff !important;
+  color: var(--on-danger-tint-fg) !important;
   box-shadow: 0 0 16px var(--accent-pink-a40) !important;
 }
 
+/* T04472：上面常规态之外，还要单独钉住 hover —— 通用 hover 规则
+   .cleanup-btn:hover:not(.is-disabled) 把 color/border-color 以 !important 写成青色 readable，
+   它与 .cleanup-btn.danger 同为 !important，胜负由特异性决定（:hover:not() 那条更高），
+   于是危险态在 hover 时会换成本页没配对过的第二套前景。这里用更高一级的选择器把配对着色钉回。 */
 .cleanup-btn.danger:hover:not(.is-disabled) {
+  color: var(--on-danger-tint-fg) !important;
+  border-color: var(--pink-readable, var(--neon-magenta)) !important;
   box-shadow: 0 0 24px var(--accent-pink-a60) !important;
   transform: translateY(-1px);
 }

@@ -79,6 +79,14 @@
   --bubble-user-bg: var(--grad-fire);
   --grad-cool: linear-gradient(135deg, #2f7de0 0%, #1554d1 100%);
   --grad-aurora: linear-gradient(120deg, #2f7de0 0%, #1554d1 40%, #3b6fd4 80%, #0f3f9e 100%);
+  /* T04472 面级配对：本主题蓝最暗，火面白字 6.52 自己达标（--on-fire-* 无需覆盖）；
+     青蓝亮端 4.09 只差一档 → 首端压深；白卡片上的粉 tint（1.24）与浮层（1.00）换深墨。
+     本主题原先用 [data-theme] .chip-tooltip 选择器补丁兜住的浮层，改由 token 统一供给。 */
+  --on-cool-bg: linear-gradient(135deg, #2a6fc7 0%, #1554d1 100%);
+  --on-aurora-bg: linear-gradient(120deg, #2a6fc7 0%, #1554d1 40%, #396cce 80%, #0f3f9e 100%);
+  --on-danger-bg: var(--danger);
+  --on-danger-tint-fg: var(--text-bright);
+  --on-tooltip-bg: rgba(17, 17, 17, 0.85);
 
   /* 柔和阴影（浅色主题下克制，避免脏感） */
   --glow-purple: 0 0 20px rgba(21, 84, 209, 0.16);
@@ -419,9 +427,6 @@
   color: #111111;
 }
 
-/* 浮动提示气泡：浅色主题下 --bg-card-solid 为白色，需强制深色底保证白字可读
-   （Query.vue 的 .chip-tooltip 用 background: var(--bg-card-solid) + color:#fff） */
-[data-theme="light-business"] .chip-tooltip {
-  background: rgba(17, 17, 17, 0.85);
-  color: #fff;
-}
+/* 浮动提示气泡：改由 --on-tooltip-bg / --on-tooltip-fg 面级配对 token 统一供给（T04472）。
+   原先这里是 [data-theme] .chip-tooltip 选择器补丁（深墨底 + #fff），与本主题其它面
+   「前景写在面上、换个主题就失效」同族；取值已迁到上方 token 块，保持同一观感。 */

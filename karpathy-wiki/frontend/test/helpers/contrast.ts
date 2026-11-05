@@ -71,6 +71,15 @@ export function hexToRgb(h: string): RGB {
 }
 export const rgbToHex = (c: RGB) => '#' + [c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
 
+/**
+ * 源码里真用过的 CSS 命名色（T04472 取证腿要按「改前原始表达式」实算，`.remove-btn` 原本写的是 `color: white`）。
+ * 只登记这张表的成员；新面孔由 resolve 直接报错，绝不静默按黑/白猜一个——猜错就是假达标。
+ */
+const NAMED_COLORS: Record<string, RGB> = {
+  white: { r: 255, g: 255, b: 255, a: 1 },
+  black: { r: 0, g: 0, b: 0, a: 1 },
+};
+
 /** 解析 var() 链（含嵌套 fallback）与 rgba()/hex，返回可用于合成的实色或渐变端点 */
 export function resolve(expr: string, decls: Map<string, string>, depth = 0): { solid: RGB } | { stops: RGB[] } {
   const e = expr.trim();
@@ -106,6 +115,8 @@ export function resolve(expr: string, decls: Map<string, string>, depth = 0): { 
   }
   if (e === 'transparent') return { solid: { r: 0, g: 0, b: 0, a: 0 } };
   if (/^#[0-9a-f]{3,8}$/i.test(e)) return { solid: hexToRgb(e) };
+  const named = NAMED_COLORS[e.toLowerCase()];
+  if (named) return { solid: named };
   throw new Error(`无法解析颜色表达式：${expr}`);
 }
 
@@ -229,6 +240,7 @@ export const FOREGROUND_PROPS = /^(?:color|border-color|border-(?:left|right|top
  *   - `--accent-purple-a15` 这类 tint（按口径是装饰底色）不会被当成基色裸用；
  *   - 单行规则 `.x { color: var(--neon-cyan); }` 与 `border: 1px solid var(--neon-cyan)` 简写不会漏报。
  */
+
 /**
  * 取出 SFC 里**全部** `<style>` 块拼接（Browse.vue 有两个块：一个全局、一个 scoped）。
  * 早期实现用 `lastIndexOf('<style')`，等于只看最后一个块——第一个块里的消费点会同时骗过
@@ -279,3 +291,105 @@ export function listBareBaseForegroundUses(
   }
   return violations;
 }
+
+/**
+ * 取出某个选择器的规则体（可能有多条同名规则，全部返回）。
+ * T04472 用它锁「面与前景成对出现在同一条规则里」——只在文件层面数 token 出现次数，
+ * 兜不住「前景接了配对 token、底色仍写原渐变」这类半接入。
+ * 口径：先去注释，再按大括号配平取体（SFC 里的 style 块已由 styleText 合并）。
+ */
+export function ruleBodies(src: string, selector: string): string[] {
+  const css = stripComments(styleText(src));
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const out: string[] = [];
+  for (const m of css.matchAll(new RegExp(`(?:^|[};{])\\s*${escaped}\\s*\\{`, 'g'))) {
+    let i = (m.index ?? 0) + m[0].length;
+    let depth = 1;
+    const start = i;
+    while (i < css.length && depth > 0) {
+      if (css[i] === '{') depth++;
+      else if (css[i] === '}') depth--;
+      i++;
+    }
+    out.push(css.slice(start, i - 1));
+  }
+  return out;
+}
+
+/** 把前景属性表达式（color / -webkit-text-fill-color）从规则体里取出来 */
+export function foregroundOf(body: string): string[] {
+  const out: string[] = [];
+  for (const m of body.matchAll(/(?:^|;)[ \t\r\n]*(?:-webkit-text-fill-color|color|border-color|outline-color)[ \t]*:[ \t]*([^;]+)/g)) {
+    out.push(m[1].trim().replace(/\s+/g, ' '));
+  }
+  return out;
+}
+
+/**
+ * T04472：硬白字前景扫描器（listBareBaseForegroundUses 的互补面）。
+ * 已有扫描器只认「强调色裸名当前景」，抓不到 `#fff` —— 白字压强调面是方向相反的同一缺陷族：
+ * 底色由 --grad-* / tint / 半透明卡片决定，浅底主题里白字直接掉到 1.00:1（文字不可见）。
+ * 口径：
+ *   - 只看前景属性（集合是 HARD_WHITE_PROPS = FOREGROUND_PROPS ∪ {-webkit-text-fill-color}，
+ *     含 border / outline 简写：白色描边同样是看得见的前景）；
+ *     background / gradient 里的白色是高亮装饰，不算前景；
+ *   - 「硬编码白」= #fff / #ffffff / white / rgba(255,255,255,·)；
+ *   - **var() 的 fallback 位不计**（如 `color: var(--menu-active-fg, #fff)`）：真实前景由 token 供给，
+ *     各主题已有 --tk-accent-fg 硬门禁与 *-readable 家族负责；这里抓的是「源码里没给所在面
+ *     留任何配对线索」的直接白字。
+ *   - 白字压纯深底（--bg-void 一类）合法，因此只返回逐处命中，由调用方按文件基线表冻结计数。
+ */
+export const HARD_WHITE_VALUE = /(?:#(?:fff|ffffff)\b|rgba?\(\s*255\s*,\s*255\s*,\s*255|\bwhite\b)/i;
+
+/**
+ * 硬白字扫描的前景属性集 = FOREGROUND_PROPS ∪ {-webkit-text-fill-color}。
+ * 为什么不直接往 FOREGROUND_PROPS 里加：那个集合同时服务「基色裸用」扫描（T04449/T04470），
+ * 它的逐文件基线数已按现集合冻结，扩集合会让那些基线无端漂移。
+ * 而 `-webkit-text-fill-color` 是真实可见前景（图标字/渐变文字兜底），漏判它等于给
+ * 「白字压强调面」留一条后门，故本扫描器单列超集。
+ */
+export const HARD_WHITE_PROPS = /^(?:(?:-webkit-)?text-fill-color|color|border-color|border-(?:left|right|top|bottom)-color|outline-color|border|border-(?:left|right|top|bottom)|outline)$/;
+
+/** 把 var(...) 组（含嵌套与 fallback）整体摘掉：剩下的才是「源码直接写给前景的色值」 */
+function stripVarGroups(value: string): string {
+  let out = '';
+  for (let i = 0; i < value.length; ) {
+    if (/^var\(/i.test(value.slice(i))) {
+      let depth = 0;
+      let j = i;
+      for (; j < value.length; j++) {
+        if (value[j] === '(') depth++;
+        else if (value[j] === ')' && --depth === 0) {
+          j++;
+          break;
+        }
+      }
+      i = j;
+    } else {
+      out += value[i];
+      i++;
+    }
+  }
+  return out;
+}
+
+export function listHardWhiteForegroundUses(src: string): string[] {
+  const css = stripComments(styleText(src));
+  const hits: string[] = [];
+  // 按语法边界（; { }）分段取声明，而不是按行锚定：
+  //   - `.a { color: #fff }` 这类单行规则里声明不在行首，行锚定版会漏（ mutation 探针实测出来的盲区）；
+  //   - \s 跨行在 CRLF 文件里会吞掉上一条声明的尾巴；`;`/`}` 边界没有这个问题。
+  // 属性集合用本扫描器的超集（含 -webkit-text-fill-color 与 border/outline 简写）
+  for (const seg of css.split(/[;{}]/)) {
+    const colon = seg.indexOf(':');
+    if (colon < 0) continue;
+    const prop = seg.slice(0, colon).trim().replace(/\s+/g, ' ');
+    if (!HARD_WHITE_PROPS.test(prop)) continue;
+    const value = seg.slice(colon + 1);
+    if (!HARD_WHITE_VALUE.test(value)) continue;
+    if (!HARD_WHITE_VALUE.test(stripVarGroups(value))) continue;
+    hits.push(`${prop} → ${value.trim().replace(/\s+/g, ' ').slice(0, 110)}`);
+  }
+  return hits;
+}
+

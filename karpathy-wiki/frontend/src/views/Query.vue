@@ -2251,8 +2251,11 @@ onBeforeUnmount(() => {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: var(--grad-fire);
-  color: #fff;
+  /* T04472：头像与用户气泡同面同语义，直接复用 T04447 已实算达标的配对 token
+     （原先 background: var(--grad-fire) + color: #fff 在 7/8 主题跌破 AA，最差 macaron 1.49） */
+  background: var(--on-fire-bg);
+  color: var(--on-fire-fg);
+  text-shadow: var(--bubble-user-text-shadow);
   font-size: 10px;
   font-weight: 700;
   display: flex;
@@ -2444,8 +2447,11 @@ onBeforeUnmount(() => {
   left: 50%;
   transform: translateX(-50%);
   padding: 3px 8px;
-  background: var(--bg-card-solid, rgba(0, 0, 0, 0.75));
-  color: #fff;
+  /* T04472 #9：浮层原先坐 --bg-card-solid + #fff —— 浅底族该面就是白，实测 1.00~1.02:1
+     （文字完全看不见）。改为不透明浮层专用面，前景与底成对取值（逐主题实算见
+     test/contrast-sweep-hard-white.test.ts）；light-business.css 原来的选择器补丁同时下线。 */
+  background: var(--on-tooltip-bg);
+  color: var(--on-tooltip-fg);
   font-size: 10px;
   font-family: var(--font-body);
   border-radius: 4px;

@@ -468,11 +468,13 @@ onBeforeUnmount(() => {
   width: 48px;
   height: 48px;
   border-radius: 12px;
-  background: var(--grad-aurora);
+  /* T04472 #8：这里是 currentColor 的 SVG 星形图标（非文本，按 WCAG 1.4.11 的 3.0 判），
+     但压 --grad-aurora 即使按 3.0 也全线不达（最差 1.34）→ 与品牌标同一配对面 */
+  background: var(--on-aurora-bg);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--on-aurora-fg);
   flex-shrink: 0;
   box-shadow: 0 0 18px var(--accent-purple-a40);
 }

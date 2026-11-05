@@ -1021,8 +1021,10 @@ onBeforeUnmount(() => {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: var(--grad-fire);
-  color: #fff;
+  /* T04472：与用户气泡同面同语义，复用配对 token（原 --grad-fire + #fff 在 7/8 主题不达 AA） */
+  background: var(--on-fire-bg);
+  color: var(--on-fire-fg);
+  text-shadow: var(--bubble-user-text-shadow);
   font-size: 10px;
   font-weight: 700;
   display: flex;

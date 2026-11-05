@@ -109,6 +109,36 @@
   --bubble-user-bg: linear-gradient(135deg, #d10059 0%, #8c1fd0 100%);
   --bubble-user-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 
+  /* ============================================================
+   * T04472 · 面级配对 token（--on-<面>-fg / --on-<面>-bg）
+   * 与 T04449/T04470 相反的同一缺陷族：那边是「强调色裸写当前景」，这边是
+   * 「白字硬写在强调面上」（渐变 / tint / 半透明卡片）。浅底主题里 --bg-card-solid
+   * 就是白，白字压白底实测 1.00:1——整块文字不可见。根因同样是前景与所在面各写各的，
+   * 所以修法也同样是成对声明：一个面给一对 token，取值逐主题实算。
+   * 口径红线：只压「该面」的取值，不动 --grad-fire / --grad-cool / --grad-aurora 本体
+   *（--grad-fire 全站 59 处引用，改端点会牵动所有填充位的观感）。
+   * 压深取值原则：同色相向黑缩放到「白字 ≥ 5.0」的亮度上限，观感保持霓虹家族只降一档。
+   * --on-fire-* 直接引用 T04447 已实算达标的气泡配对（同面同语义，零新色值）。
+   * 默认值服务 default（霓虹）主题自己；其余主题各自覆盖 --on-cool-bg / --on-aurora-bg
+   *（各主题渐变端点不同，:root 的字面压深版只适配 :root 的端点），
+   * 漏配由 test/contrast-sweep-hard-white.test.ts 的「逐主题显式声明锁 + 逐面数值锁」拦下。
+   * ============================================================ */
+  --on-fire-fg: var(--bubble-user-fg);
+  --on-fire-bg: var(--bubble-user-bg);
+  --on-cool-fg: #ffffff;
+  --on-cool-bg: linear-gradient(135deg, #007c81 0%, #8338ec 100%);
+  --on-aurora-fg: #ffffff;
+  --on-aurora-bg: linear-gradient(120deg, #007c81 0%, #a824f3 40%, #dc005f 80%, #c32f9a 100%);
+  /* 危险面：:root 的 --danger 是亮红 #f87171，白字只有 2.77 → 该面统一用压深红 */
+  --on-danger-fg: #ffffff;
+  --on-danger-bg: #b3261e;
+  /* 危险按钮的粉 tint 面：深底主题（default/creative/product）白字达标，浅底族换深墨前景 */
+  --on-danger-tint-fg: #ffffff;
+  --on-danger-tint-bg: linear-gradient(135deg, var(--accent-pink-a30), var(--accent-pink-a15));
+  /* 浮动提示面：浅底族的 --bg-card-solid 是白，改用该主题深墨作不透明浮层底 */
+  --on-tooltip-fg: #ffffff;
+  --on-tooltip-bg: var(--bg-card-solid, rgba(0, 0, 0, 0.75));
+
   /* URL 探测状态三色（Ingest 代理探测标签） */
   --probe-ok: #4ade80;
   --probe-ok-bg: rgba(74, 222, 128, 0.15);

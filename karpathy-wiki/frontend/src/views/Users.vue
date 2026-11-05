@@ -1046,8 +1046,9 @@ onMounted(loadUsers);
   font-size: 13px;
   font-weight: 600;
   font-family: var(--font-body);
-  color: #fff;
-  background: var(--grad-fire);
+  /* T04472：火面按钮改用面级配对 token（原 --grad-fire + #fff 在 7/8 主题跌破 AA，最差 1.49） */
+  color: var(--on-fire-fg);
+  background: var(--on-fire-bg);
   border: none;
   border-radius: 6px;
   cursor: pointer;

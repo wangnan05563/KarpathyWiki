@@ -263,13 +263,15 @@ function handleRemove(id: string) {
   height: 16px;
   border-radius: 50%;
   border: none;
-  background: var(--danger, #d32f2f);
-  color: white;
+  /* T04472 #11：× 是文字符号（按 4.5 判），压 --danger 实测 default/creative/product 2.77、
+     macaron 3.22 不达 AA → 危险面用配对的压深红（hover 仍从配对底取色，只往黑里混、对比度单调更好） */
+  background: var(--on-danger-bg);
+  color: var(--on-danger-fg);
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
 }
 .remove-btn:hover {
-  background: color-mix(in srgb, var(--danger, #d32f2f) 85%, black);
+  background: color-mix(in srgb, var(--on-danger-bg) 85%, black);
 }
 </style>

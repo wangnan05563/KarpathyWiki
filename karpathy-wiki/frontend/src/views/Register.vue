@@ -361,8 +361,9 @@ function handleKeydown(e: KeyboardEvent) {
   font-size: 14px;
   font-weight: 700;
   font-family: var(--font-body);
-  color: #fff;
-  background: var(--grad-fire);
+  /* T04472：与登录页同面同口径，改用面级配对 token */
+  color: var(--on-fire-fg);
+  background: var(--on-fire-bg);
   border: none;
   border-radius: var(--radius-btn, 8px);
   cursor: pointer;

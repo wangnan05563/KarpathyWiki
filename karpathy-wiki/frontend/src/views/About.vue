@@ -621,11 +621,12 @@ onBeforeUnmount(() => {
   width: 48px;
   height: 48px;
   border-radius: 12px;
-  background: var(--grad-aurora);
+  /* T04472 #7：品牌标「KW」是文字（按 4.5 判），压 --grad-aurora 实测 8/8 主题不达 AA（最差 1.34） */
+  background: var(--on-aurora-bg);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--on-aurora-fg);
   font-family: var(--font-display);
   font-size: 18px;
   font-weight: 900;

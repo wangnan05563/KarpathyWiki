@@ -84,6 +84,14 @@
   --bubble-user-bg: linear-gradient(135deg, #1a1a1a 0%, #4a3a1c 100%);
   --grad-cool: linear-gradient(135deg, #c9a961 0%, #8b7355 100%);
   --grad-aurora: linear-gradient(120deg, #c9a961 0%, #1a1a1a 40%, #8b7355 80%, #d4b572 100%);
+  /* T04472 面级配对：金棕面亮端白字 2.25，但 aurora 里含 #1a1a1a 暗端、换深墨反而 1.00，
+     两头都被这一面堵死 → 与 T04447 气泡同一处置：只把该面压深（金棕同色相降到白字 ≥ 5.0）。
+     危险面 --danger 本就是压深红 #b3261e（6.54 达标）保留本体。 */
+  --on-cool-bg: linear-gradient(135deg, #826d3f 0%, #826c50 100%);
+  --on-aurora-bg: linear-gradient(120deg, #826d3f 0%, #1a1a1a 40%, #826c50 80%, #806d45 100%);
+  --on-danger-bg: var(--danger);
+  --on-danger-tint-fg: var(--text-bright);
+  --on-tooltip-bg: var(--text-bright);
 
   /* 优雅阴影 */
   --glow-purple: 0 8px 32px rgba(26, 26, 26, 0.12);
