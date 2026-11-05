@@ -1137,6 +1137,53 @@ function createFallbackWithMultimodal(
   });
 }
 
+// 降级链第 2 级的执行体：发「降级搜索中」提示 → 跑检索+单轮生成 → 失败原因记进 failures。
+// 返回是否成功（true 时 queryWorkflow 直接 return，不再发兜底文案）。
+// 提取为独立函数降低 queryWorkflow 认知复杂度（S3776）；T04479 的跳过判定也放在这里，
+// 免得在主流程里再加一层 if/else。
+async function* runSearchFallbackLevel(ctx: {
+  harnessConfig: HarnessConfig;
+  vault: VaultService;
+  input: QueryInput;
+  options: { mediaConfig?: MediaConfig; appConfig?: AppConfig; mediaImageConfig?: MediaImageUserConfig; neighborSink: string[] };
+  outputModes: Set<OutputMode> | null;
+  failures: QueryFailure[];
+  neighborSink: string[];
+  skipCategory?: string;
+  stage: (phase: string, extra?: Record<string, unknown>) => void;
+}): AsyncGenerator<AnswerChunk, boolean, unknown> {
+  // 解构出来用，是为了让「透传 neighborSink」这条接线形状与 harness 分支保持一致
+  // ——graph-expand.test.ts 按出现次数锁这条接线，写成 ctx.xxx 会让计数少一次
+  const { harnessConfig, vault, input, options, outputModes, neighborSink } = ctx;
+  if (ctx.skipCategory !== undefined) {
+    // 不往 failures 记 fallback 级失败：记了会让 composeFallbackText 的「最后一级」落在本级上，
+    // 把「服务不可用」误判成「知识库未覆盖」。跳过的事实由 stage 日志与文案本身承载。
+    ctx.stage('fallback-skipped', { category: ctx.skipCategory, reason: '账号级错误，降级检索复用同一 provider/密钥，重试必然同样失败' });
+    return false;
+  }
+  if (shouldEmit('thinking', outputModes)) {
+    yield { thinking: { phase: 'composing', message: '降级搜索中...', ts: new Date().toISOString() } };
+  }
+  ctx.stage('fallback-start');
+  try {
+    for await (const chunk of upgradeRefs(
+      createFallbackWithMultimodal(
+      harnessConfig, vault, input, options, outputModes,
+    ), vault, options.appConfig, neighborSink)) {
+      yield chunk;
+    }
+    ctx.stage('fallback-done');
+    return true;
+  } catch (err) {
+    // fallback 也失败，落入兜底
+    // T04176：记下原因，兜底文案要能对上真实原因
+    const failure = describeQueryFailure('fallback', err);
+    ctx.failures.push(failure);
+    ctx.stage('fallback-failed', { kind: failure.kind, category: failure.category, reason: failure.reason });
+    return false;
+  }
+}
+
 // 中间件解析与有效输入构造：从 middlewares 数组派生布尔开关与覆盖后的 input。
 // 提取为独立函数降低 queryWorkflow 认知复杂度（S3776）。
 function buildMiddlewareContext(input: QueryInput): {
@@ -1315,7 +1362,31 @@ export const FALLBACK_SERVICE_ERROR_TEXT =
   '原因已记入服务端日志（[query-stage] harness-failed / fallback-failed）。请稍后重试；' +
   '若持续出现，请在「配置中心 → AI 服务」检查模型配置与网络。';
 
-export function composeFallbackText(failures: readonly QueryFailure[]): string {
+// T04479：按 LLM 错误分类补一句「当下能做的下一步」。
+// 主诉现场不是代码缺陷，而是上游模型回 HTTP 429（免费额度限流）；但默认文案的指引是
+// 「检查模型配置与网络」——配置和网络都没有错，用户照着这句话把同一个问题重试了三轮
+// （logs/api-dev.log：三连 harness-failed + fallback-failed，category 全是 rate_limit）。
+// 分类口径直接复用 friendlyLlmError 的结果，不在这里另起一套正则。
+const SERVICE_ERROR_GUIDE_BY_CATEGORY: Record<string, string> = {
+  rate_limit:
+    '上游模型限流或免费额度已用尽（429）：这与知识库是否覆盖此问题无关，换关键词或立刻重试都会撞上同一个限制。' +
+    '请降低请求频率、稍后再试，或在「配置中心 → AI 服务」换用有额度的密钥 / 其他 provider。',
+  auth: 'LLM API 认证失败（401/403）：请在「配置中心 → AI 服务」检查 API Key 是否有效或已过期；这类错误重试不会改变结果。',
+  request_too_large: '内容超出模型请求上限（413）：请缩短问题、限定页面范围（文件夹 / 标签）减少参与问答的内容，或拆分后分次提问。',
+};
+
+// T04479：账号级错误下再跑降级第 2 级是必然失败的空转。
+// 第 2 级复用同一个 provider / 同一把密钥，现场实测两级在 1s 内回同一个 429，
+// 多打一次只是多烧一次请求、多让用户等一轮。
+// 只跳「同一输入必然同样失败」的两类；不跳 service_down / timeout（换个时间可能成）
+// 与 request_too_large（第 2 级的上下文比深度问答小，可能正好落回上限内）。
+const ACCOUNT_LEVEL_CATEGORIES = new Set(['rate_limit', 'auth']);
+
+export function isAccountLevelFailure(failure: QueryFailure | undefined): boolean {
+  return !!failure && failure.kind === 'service_error' && ACCOUNT_LEVEL_CATEGORIES.has(failure.category);
+}
+
+export function composeFallbackText(failures: readonly QueryFailure[], fallbackSkipped = false): string {
   // 定性看「最后一级」（降级链第 2 级）的失败原因：它是「纯检索 + 单轮生成」，
   // 由它说「没检索到」就是库里真没有；此时 harness 的异常只补一句，不抢主线。
   // 反过来，若第 2 级本身是故障（LLM 不可达/限流…），就不能对用户说「未覆盖」——
@@ -1328,7 +1399,13 @@ export function composeFallbackText(failures: readonly QueryFailure[]): string {
       : FALLBACK_NO_COVERAGE_TEXT;
   }
   // 兜底链全故障，或异常发生在本不该出现的时机（failures 为空）——一律按「暂不可用」说更安全
-  return FALLBACK_SERVICE_ERROR_TEXT;
+  const guide = proximate ? SERVICE_ERROR_GUIDE_BY_CATEGORY[proximate.category] : undefined;
+  if (!guide) return FALLBACK_SERVICE_ERROR_TEXT;
+  const attempts = fallbackSkipped
+    ? '深度问答未完成，降级检索受同一个限制约束、已跳过'
+    : '深度问答与降级检索两次尝试都没有完成';
+  const stages = fallbackSkipped ? 'harness-failed / fallback-skipped' : 'harness-failed / fallback-failed';
+  return `当前问答服务暂不可用：${guide}${attempts}原因已记入服务端日志（[query-stage] ${stages}）。`;
 }
 
 export async function* queryWorkflow(
@@ -1438,27 +1515,15 @@ export async function* queryWorkflow(
   if (harnessSucceeded) return;
 
   // 降级链第 2 级：queryWithSearchFallback
-  if (shouldEmit('thinking', outputModes)) {
-    yield { thinking: { phase: 'composing', message: '降级搜索中...', ts: new Date().toISOString() } };
-  }
-  let fallbackSucceeded = false;
-  stage('fallback-start');
-  try {
-    for await (const chunk of upgradeRefs(
-      createFallbackWithMultimodal(
-      harnessConfig, vault, clarifyInput, { ...options, neighborSink }, outputModes,
-    ), vault, options.appConfig, neighborSink)) {
-      yield chunk;
-    }
-    fallbackSucceeded = true;
-    stage('fallback-done');
-  } catch (err) {
-    // fallback 也失败，落入兜底
-    // T04176：同上，兜底文案要能对上真实原因
-    const failure = describeQueryFailure('fallback', err);
-    failures.push(failure);
-    stage('fallback-failed', { kind: failure.kind, category: failure.category, reason: failure.reason });
-  }
+  // T04479：harness 因账号级错误（限流/额度、认证）失败时跳过本级——同一个 provider、同一把密钥，
+  // 再打一次必然同样失败（现场：两级在 1s 内各回一次 429），只是多烧一次请求、多让用户等一轮。
+  const harnessFailure = failures.find((f) => f.level === 'harness');
+  const fallbackSkipped = isAccountLevelFailure(harnessFailure);
+  const fallbackSucceeded = yield* runSearchFallbackLevel({
+    harnessConfig, vault, input: clarifyInput,
+    options: { ...options, neighborSink }, outputModes, failures, neighborSink,
+    skipCategory: fallbackSkipped ? harnessFailure?.category : undefined, stage,
+  });
 
   if (fallbackSucceeded) return;
 
@@ -1467,7 +1532,8 @@ export async function* queryWorkflow(
   // 兜底文本也按 outputModes.answer 过滤（关闭 answer 时不发任何兜底文本）
   if (shouldEmit('answer', outputModes)) {
     // T04176：按失败原因选文案——库里真没有 vs 服务没跑通，是两句不同的话
-    yield { text: composeFallbackText(failures) };
+    // T04479：第 2 级被跳过时要说「已跳过」，不能对用户声称「两次尝试都没有完成」
+    yield { text: composeFallbackText(failures, fallbackSkipped) };
   }
   stage('workflow-done');
   yield { refs: [], done: true };

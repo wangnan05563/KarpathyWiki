@@ -13,7 +13,12 @@
 //     「服务没通」压成同一句，用户对着可修复的配置故障反复换关键词。锁分类、锁一行截断、锁文案选择，
 //     并用不可达 LLM 跑一次真实降级链，验证两句文案各归各位。
 // 隔离纪律：vault 落在 os.tmpdir() 随机目录，用后即焚；LLM 一律指向本用例自建的桩服务
-// （127.0.0.1 随机端口，任何请求立即 500），不发任何真实请求、不消耗 token、不读真实密钥。
+// （127.0.0.1 随机端口，任何请求立即返回 500 或 429），不发任何真实请求、不消耗 token、不读真实密钥。
+//
+// T04479 在同一文件里加 E 组：主诉是「当前问答服务暂不可用：…两次尝试都没有完成…」
+// 那句兜底文案，现场真实原因是上游模型回 429（免费额度限流）。
+// 限流不是本侧代码缺陷，但①文案给的下一步动作（查配置与网络）与原因不符、②降级第 2 级
+// 用同一 provider/密钥重复撞一次限流，这两条是本侧的缺陷，E 组逐条锁死。
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -31,6 +36,7 @@ import {
   describeQueryFailure,
   FALLBACK_NO_COVERAGE_TEXT,
   FALLBACK_SERVICE_ERROR_TEXT,
+  isAccountLevelFailure,
   queryWorkflow,
   type QueryFailure,
 } from '../src/workflows/query-workflow.js';
@@ -39,12 +45,17 @@ import type { AnswerChunk } from '../src/types.js';
 let vaultDir: string;
 let stateDir: string;
 let vault: VaultService;
-// 桩 LLM：任何请求都立即 500。为什么不用不可达端口：ECONNREFUSED 会走 harness 的重试退避，
+// 桩 LLM：任何请求都立即按 stubStatus 返回（默认 500）。为什么不用不可达端口：ECONNREFUSED 会走 harness 的重试退避，
 // 两级降级实测 12 s（用例预算大头全花在等待上）；500 秒回，而且能统计「第 2 级真的走到调用点」的次数。
 // 只监听 127.0.0.1 随机端口，密钥是字面量 test-key，绝不指向任何真实 provider。
 let llmServer: http.Server;
 let llmUrl = '';
 let llmRequests = 0;
+// T04479：桩服务的响应状态可切换（默认 500 = service_down；E 组切 429 = rate_limit）。
+// 为什么按状态码而不是按用例注入 Error：要锁的是「真实链路里 provider 回 429 时本侧怎么办」，
+// 从 HTTP 响应到 friendlyLlmError 分类到文案的整条链必须真的走一遍，直接喂 Error 会绕开分类上游。
+let stubStatus = 500;
+let stubBody = '{"error":{"message":"stub upstream exploded","type":"server_error"}}';
 const createdDirs: string[] = [];
 
 function writePage(rel: string, body: string): void {
@@ -56,8 +67,8 @@ function writePage(rel: string, body: string): void {
 beforeAll(async () => {
   llmServer = http.createServer((_req, res) => {
     llmRequests += 1;
-    res.writeHead(500, { 'content-type': 'application/json' });
-    res.end('{"error":{"message":"stub upstream exploded","type":"server_error"}}');
+    res.writeHead(stubStatus, { 'content-type': 'application/json' });
+    res.end(stubBody);
   });
   await new Promise<void>((resolve) => {
     llmServer.listen(0, '127.0.0.1', () => {
@@ -73,6 +84,8 @@ afterAll(async () => {
 
 beforeEach(() => {
   llmRequests = 0;
+  stubStatus = 500;
+  stubBody = '{"error":{"message":"stub upstream exploded","type":"server_error"}}';
   vaultDir = mkdtempSync(path.join(tmpdir(), 'wiki-t04176-'));
   createdDirs.push(vaultDir);
   stateDir = mkdtempSync(path.join(tmpdir(), 'wiki-t04176-state-'));
@@ -263,8 +276,10 @@ describe('T04176-C 降级链归因', () => {
   it('文案选择：第 2 级本身是故障时绝不说「未覆盖」（本单主诉：把配置故障伪装成知识库缺陷）', () => {
     const bad: QueryFailure = { level: 'fallback', kind: 'service_error', category: 'auth', reason: '401' };
     const text = composeFallbackText([bad]);
-    expect(text).toBe(FALLBACK_SERVICE_ERROR_TEXT);
+    expect(text).toContain('问答服务暂不可用');
     expect(text).not.toContain('知识库未覆盖');
+    // T04479：认证失败有专属指引（查密钥），不再套用「检查模型配置与网络」这句泛化提示
+    expect(text).toContain('API Key');
   });
 
   it('需求 AC-03-2 措辞特征保留：未覆盖分支必须明说「知识库未覆盖此问题」', () => {
@@ -310,7 +325,127 @@ describe('T04176-D 端到端降级链', () => {
   }, 30_000);
 });
 
-// baseUrl 指向本用例的桩 LLM（永远 500）；
+// ===========================================================================
+// E. T04479：上游 429（免费额度限流）——归因、文案、以及降级第 2 级的空转
+// 现场取证 karpathy-wiki/logs/api-dev.log：同一个问题三连，每连都是
+//   harness-failed{category:rate_limit} → 968ms → fallback-failed{category:rate_limit}，
+//   reason 为「LLM API error 429: ...rate limit for free users...」。
+// 上游限流本身不是本侧代码缺陷；本侧的两个缺陷是：① 兜底文案把限流说成「检查模型配置与网络」，
+// 用户照着提示重试了三轮；② 降级第 2 级复用同一 provider/密钥，限流下必然同样失败却照跑。
+// ===========================================================================
+describe('T04479-E 上游限流', () => {
+  const RATE_LIMIT_BODY =
+    '{"error":{"code":"","message":"You\'ve reached the API rate limit for free users. Upgrade to a Token Plan to unlock more."}}';
+
+  it('现场错误串判为 rate_limit（分类只认 friendlyLlmError，本侧不再造口径）', () => {
+    const f = describeQueryFailure('harness', new Error(`LLM API error 429: ${RATE_LIMIT_BODY}`));
+    expect(f).toMatchObject({ level: 'harness', kind: 'service_error', category: 'rate_limit' });
+  });
+
+  it('跳过判据只认「同一输入必然同样失败」的账号级错误', () => {
+    const mk = (category: string, kind: QueryFailure['kind'] = 'service_error'): QueryFailure =>
+      ({ level: 'harness', kind, category, reason: 'x' });
+    expect(isAccountLevelFailure(mk('rate_limit'))).toBe(true);
+    expect(isAccountLevelFailure(mk('auth'))).toBe(true);
+    // service_down / timeout 换个时间可能成；request_too_large 的第 2 级上下文更小，
+    // 可能正好落回上限内——这三类跳掉就是少给用户一次机会，不许进跳过集合
+    expect(isAccountLevelFailure(mk('service_down'))).toBe(false);
+    expect(isAccountLevelFailure(mk('timeout'))).toBe(false);
+    expect(isAccountLevelFailure(mk('request_too_large'))).toBe(false);
+    expect(isAccountLevelFailure(mk('unknown'))).toBe(false);
+    expect(isAccountLevelFailure(mk('no_hits', 'no_coverage'))).toBe(false);
+    expect(isAccountLevelFailure(undefined)).toBe(false);
+  });
+
+  it('限流文案给「降频 / 换密钥 / 换 provider」，不再让用户去查配置与网络', () => {
+    const rate: QueryFailure = { level: 'harness', kind: 'service_error', category: 'rate_limit', reason: '429' };
+    const text = composeFallbackText([rate], true);
+    expect(text).toContain('429');
+    expect(text).toContain('provider');
+    // 主诉里把人引错的正是这句：配置和网络都没有错
+    expect(text).not.toContain('检查模型配置与网络');
+    expect(text).not.toContain('知识库未覆盖');
+    // 第 2 级是「跳过」而不是「跑失败」，不许声称两次尝试都没完成
+    expect(text).toContain('已跳过');
+    expect(text).not.toContain('两次尝试都没有完成');
+  });
+
+  it('认证失败给「查密钥」、413 给「减少内容」——动作要各自对得上原因', () => {
+    const mk = (category: string): QueryFailure =>
+      ({ level: 'harness', kind: 'service_error' as const, category, reason: 'x' });
+    expect(composeFallbackText([mk('auth')])).toContain('API Key');
+    expect(composeFallbackText([mk('request_too_large')])).toContain('413');
+  });
+
+  it('口径不扩散：未点名分类仍用默认文案（默认那句对 service_down/timeout 依然成立）', () => {
+    for (const category of ['service_down', 'timeout', 'unknown']) {
+      const f: QueryFailure = { level: 'fallback', kind: 'service_error', category, reason: 'x' };
+      expect(composeFallbackText([f])).toBe(FALLBACK_SERVICE_ERROR_TEXT);
+    }
+    expect(FALLBACK_SERVICE_ERROR_TEXT).toContain('检查模型配置与网络');
+  });
+
+  it('端到端：桩 LLM 回 429 → 第 2 级不进、不发「降级搜索中」、文案是限流话术', async () => {
+    stubStatus = 429;
+    stubBody = RATE_LIMIT_BODY;
+    const stage = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const chunks = await collectWorkflow('知识库的价值体现在哪里');
+    const phases = stagePhases(stage);
+    expect(phases).toContain('harness-failed');
+    expect(phases).toContain('fallback-skipped');
+    expect(phases).not.toContain('fallback-start');
+    expect(phases).not.toContain('fallback-failed');
+    // 「第 2 级一次请求都没发」由 not.toContain('fallback-start') 保证：
+    // 它的 LLM 调用只可能发生在 fallback-start 之后，start 没出现就是整级没进。
+    expect(llmRequests, 'harness 一次、降级第 2 级零次（harness 重试已在配置里关掉）').toBe(1);
+    const thinking = chunks.filter((c) => c.thinking).map((c) => c.thinking?.message ?? '').join('|');
+    expect(thinking).not.toContain('降级搜索中');
+    const text = chunks.filter((c) => typeof c.text === 'string').map((c) => c.text as string).join('');
+    expect(text).toContain('429');
+    expect(text).not.toContain('知识库未覆盖');
+    // 「跳过」这个事实必须端到端传到文案，不能只在单元测试里手工传 true：
+    // 探针把调用点改成 composeFallbackText(failures, false) 时，只看 429 字样会照样全绿，
+    // 用户就会对着一个从没跑过的降级检索被告知「两次尝试都没有完成」。
+    expect(text).toContain('已跳过');
+    expect(text).not.toContain('两次尝试都没有完成');
+    // 跳过时也不许声称日志里有 fallback-failed（那是「跑了且失败」，与本级没进是两件事）
+    expect(text).not.toContain('fallback-failed');
+    // 跳过也要留下可归因的一行（把原因吞掉正是本单主诉的成因之一）
+    const skipped = stage.mock.calls
+      .filter((c) => String(c[0]) === '[query-stage]')
+      .map((c) => JSON.parse(String(c[1])) as { phase: string; category?: string; reason?: string })
+      .find((o) => o.phase === 'fallback-skipped');
+    expect(skipped).toMatchObject({
+      phase: 'fallback-skipped',
+      category: 'rate_limit',
+      reason: '账号级错误，降级检索复用同一 provider/密钥，重试必然同样失败',
+    });
+  }, 30_000);
+
+  it('端到端反向控制：500（服务端故障）仍要走完第 2 级——跳过判据不许扩面', async () => {
+    const stage = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const chunks = await collectWorkflow('知识库的价值体现在哪里');
+    const phases = stagePhases(stage);
+    expect(phases).toContain('fallback-start');
+    expect(phases).toContain('fallback-failed');
+    expect(phases).not.toContain('fallback-skipped');
+    expect(llmRequests, '两级都要打到 LLM').toBeGreaterThanOrEqual(2);
+    // 反向的文案锁：真跑过两级就不许说成「已跳过」，且保持通用话术（不冒充限流指引）
+    const text = chunks.filter((c) => typeof c.text === 'string').map((c) => c.text as string).join('');
+    expect(text).toContain('两次尝试都没有完成');
+    expect(text).not.toContain('已跳过');
+    expect(text).not.toContain('429');
+  }, 30_000);
+});
+
+// [query-stage] 埋点里的 phase 序列（E 组用它判「哪一级真的跑了」）
+function stagePhases(spy: { mock: { calls: unknown[][] } }): string[] {
+  return spy.mock.calls
+    .filter((c) => String(c[0]) === '[query-stage]')
+    .map((c) => String((JSON.parse(String(c[1])) as { phase: string }).phase));
+}
+
+// baseUrl 指向本用例的桩 LLM（默认 500，E 组按用例切到 429）；
 // 与生产同源注入 stateStore（index.ts 也是这么传的）：不注入时 harness 在构造期就因
 // 「FileStateStore 需要显式状态目录」抛错，降级链两级都到不了检索/调用点，
 // 这条 e2e 就退化成「构造失败测试」，证明不了取词真的接进了检索。
@@ -319,6 +454,10 @@ function unreachableConfig(stateDir: string): HarnessConfig {
     llm: { provider: 'glm', baseUrl: llmUrl, apiKey: 'test-key', model: 'test-model' },
     tools: [],
     budget: { maxSteps: 1, tokenBudget: 1000 },
+    // T04479：关掉 harness 的指数退避重试（默认对 429 重试 3 次、睡 7~10s）。
+    // 重试是 wiki-harness 的行为、不是本单改的东西；关掉后「一次尝试 = 一次请求」，
+    // llmRequests 才能把「降级第 2 级有没有被调用」这一件事读干净，用例也不必为等待买单。
+    retry: { maxRetries: 0 },
     stateStore: createRunStateStore([stateDir]),
   } as unknown as HarnessConfig;
 }
