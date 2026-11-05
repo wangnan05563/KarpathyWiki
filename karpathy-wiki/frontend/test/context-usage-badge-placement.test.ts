@@ -90,7 +90,9 @@ describe('T04177 挂载点迁移（单实例 · 发送按钮左侧）', () => {
 });
 
 describe('T04177 组件渲染行为', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('maxTokens>0 时渲染徽章并显示百分比', () => {
     const wrapper = mount(ContextUsageBadge, {

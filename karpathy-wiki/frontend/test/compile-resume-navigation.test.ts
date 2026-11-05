@@ -87,7 +87,8 @@ describe('compile 恢复成功后的列表闭环 (T04094)', () => {
     store.isDone = true;
     store.doneMessage = '恢复完成';
     store.result = { pages: [], indexUpdated: false };
-    mockedFetch.mockImplementation(async (url: string) => {
+    mockedFetch.mockImplementation(async (input) => {
+      const url = String(input);
       if (url.includes('/compile/runs')) {
         return makeResponse({
           runs: [{ runId: 'abcd1234-0000-4000-8000-000000000000', status: 'done', step: 9, tokenUsed: 120, startedAt: '2026-11-01T00:00:00.000Z' }],

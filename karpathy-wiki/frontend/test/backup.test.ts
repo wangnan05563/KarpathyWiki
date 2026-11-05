@@ -12,7 +12,9 @@ import { createBackup, restoreBackup, readBackupFile } from '../src/services/bac
 import { dbPut } from '../src/services/chatDb';
 
 describe('backup (风险 R-2)', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('createBackup 生成自包含加密文件', async () => {
     const f = await createBackup('pwd');

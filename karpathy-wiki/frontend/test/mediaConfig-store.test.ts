@@ -138,8 +138,8 @@ describe('mergeImagePreset：预设只覆盖生成参数，保留用户密钥与
       sampler: 'euler_a', // 预设 sampler 缺失 → 保留
     });
     // 预设模板的展示字段不泄漏进用户配置
-    expect((r as Record<string, unknown>).key).toBeUndefined();
-    expect((r as Record<string, unknown>).label).toBeUndefined();
+    expect((r as unknown as Record<string, unknown>).key).toBeUndefined();
+    expect((r as unknown as Record<string, unknown>).label).toBeUndefined();
   });
 
   it('全量预设：可选字段齐备时逐项写入', () => {
@@ -194,8 +194,8 @@ describe('mergeVideoPreset', () => {
       fps: 24, // 预设 fps undefined → 保留
       seed: 7, // 预设 seed undefined → 保留
     });
-    expect((r as Record<string, unknown>).key).toBeUndefined();
-    expect((r as Record<string, unknown>).model).toBeUndefined(); // 只以 videoModel 落地
+    expect((r as unknown as Record<string, unknown>).key).toBeUndefined();
+    expect((r as unknown as Record<string, unknown>).model).toBeUndefined(); // 只以 videoModel 落地
   });
 
   it('fps=0 / motion=0 / seed=0 等数值 0 均写入；negativePrompt 空串不写入', () => {

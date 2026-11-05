@@ -263,7 +263,7 @@ describe('P0-7 [X6·L1·P1/REQ-014+REQ-038] 跨视图数据一致性', () => {
   it('前后端「页面目录口径」必须逐字相同——任何一侧改动都会再造「两个总数对不上」', () => {
     const scope = readApi('src/vault/page-scope.ts');
     const apiDirs = /export const PAGE_DIRS: string\[\] = \[([^\]]+)\]/.exec(scope)?.[1];
-    expect(apiDirs, 'api/src/vault/page-scope.ts 应导出 PAGE_DIRS 数组').toBeTruthy();
+    if (!apiDirs) throw new Error('api/src/vault/page-scope.ts 未导出 PAGE_DIRS 数组——本锁的被测对象丢失');
     const parsed = apiDirs
       .split(',')
       .map((s) => s.trim().replace(/^['"]|['"]$/g, ''))

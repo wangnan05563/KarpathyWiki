@@ -100,7 +100,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   misplacedList = [STRAY, STRAY, STRAY];
   precheckBody = { ...PRECHECK_BODY, warningCategories: PRECHECK_BODY.warningCategories.map((c) => ({ ...c })) };
-  (apiFetch as any).mockImplementation((url: string, init?: any) => routeFetch(url, init));
+  (apiFetch as any).mockImplementation((url: string) => routeFetch(url));
   (loadAiUserConfigForPreset as any).mockResolvedValue({});
   (resolveAutoPresetForUser as any).mockResolvedValue({ preset: { key: 'p1' }, config: {} });
 });

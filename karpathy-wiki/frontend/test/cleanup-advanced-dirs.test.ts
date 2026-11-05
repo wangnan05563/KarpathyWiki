@@ -191,15 +191,15 @@ describe('T02887 清理页「高级」面板渲染（四类目标各一组）', 
   });
 
   it('后端还没有目录清单前不渲染假路径：加载中走 StateBlock 的加载态', async () => {
-    let release: ((v: never) => void) | null = null;
+    let resolveStatus!: (v: never) => void;
     const wrapper = await mountWithStatus(
-      () => new Promise<never>((resolve) => { release = resolve as (v: never) => void; }),
+      () => new Promise<never>((resolve) => { resolveStatus = resolve; }),
     );
     // mountWithStatus 已 flush 过：此时 status 请求仍未回，面板必须是加载态而不是空白
     const panel = wrapper.find('#cleanup-advanced-dirs-runState');
     expect(panel.find('.state-block[role="status"]').exists()).toBe(true);
     expect(panel.findAll('.advanced-path')).toHaveLength(0);
-    release?.(makeResponse(statusFixture()) as never);
+    resolveStatus(makeResponse(statusFixture()));
     await flushPromises();
     expect(wrapper.find('#cleanup-advanced-dirs-runState').findAll('.advanced-row')).toHaveLength(2);
   });

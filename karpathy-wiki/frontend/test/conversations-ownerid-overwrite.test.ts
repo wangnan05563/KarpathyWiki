@@ -25,7 +25,7 @@ function seedExisting(id: string, ownerId: string, title: string): ConversationR
   return {
     id, title, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     messageCount: 1, isPinned: false, preview: title, messages: [msg(title)],
-    threadId: null, ownerId,
+    threadId: undefined, ownerId,
   };
 }
 
@@ -88,7 +88,7 @@ describe('FR-RM-06 回归：跨账户会话覆盖/改属泄漏', () => {
     setUser('admin-id');
     const store = useConversationsStore();
     store.currentConversationId = 'some-id';
-    store.conversations = [{ id: 'some-id', title: 'x', createdAt: '', updatedAt: '', messageCount: 0, isPinned: false, preview: '', messages: [], threadId: null, ownerId: 'admin-id' }];
+    store.conversations = [{ id: 'some-id', title: 'x', createdAt: '', updatedAt: '', messageCount: 0, isPinned: false, preview: '', messages: [], threadId: undefined, ownerId: 'admin-id' }];
     store.scopedOwnerId = 'admin-id';
 
     store.resetSession();

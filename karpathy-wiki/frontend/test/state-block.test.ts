@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, type ComponentMountingOptions } from '@vue/test-utils';
 import ElementPlus from 'element-plus';
 import StateBlock from '../src/components/StateBlock.vue';
 
@@ -8,7 +8,10 @@ import StateBlock from '../src/components/StateBlock.vue';
 // 1) 三态契约（loading / empty / error）各自渲染什么、ready 透传什么；
 // 2) 失败态必须自带重试入口并往外发 retry 事件——原语里「失败=一行灰字」就是 X2 要消灭的方言。
 
-function mountStateBlock(props: Record<string, unknown>, slots: Record<string, string> = {}) {
+/** props 类型直接取自组件挂载选项：口径单一来自 StateBlock 自身，改名或删参在编译期就红 */
+type StateBlockProps = NonNullable<ComponentMountingOptions<typeof StateBlock>['props']>;
+
+function mountStateBlock(props: StateBlockProps, slots: Record<string, string> = {}) {
   return mount(StateBlock, {
     props,
     slots,

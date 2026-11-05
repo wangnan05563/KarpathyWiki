@@ -13,7 +13,7 @@ import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
-import ElementPlus, { ElMessageBox, ElSelect } from 'element-plus';
+import ElementPlus, { ElMessageBox, ElSelect, type MessageBoxData } from 'element-plus';
 import Tunnel from '../src/views/Tunnel.vue';
 import type { TunnelConfigData } from '../src/types';
 
@@ -126,7 +126,8 @@ beforeEach(() => {
   vi.useRealTimers();
   while (document.body.firstElementChild) document.body.firstElementChild.remove();
   // 默认当作「用户点了确认」，需要取消/关闭的用例各自覆盖
-  ElMessageBox.confirm.mockResolvedValue('confirm');
+  // MessageBoxData 在类型层是无值可取的交叉声明，运行时 confirm 实际 resolve 出动作字符串 → 按运行时事实穿透
+  vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm' as unknown as MessageBoxData);
 });
 
 describe('A · 切换 Provider 不再隐式落盘', () => {
@@ -157,7 +158,7 @@ describe('A · 切换 Provider 不再隐式落盘', () => {
   });
 
   it('取消切换：下拉框退回原值，既不写盘也不出现未保存提示（不能留下「看着切了其实没确认」的表单）', async () => {
-    ElMessageBox.confirm.mockRejectedValueOnce('cancel');
+    vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce('cancel');
     const w = await mountTunnel();
     await switchProvider(w, 'tailscale');
     expect(vmOf(w).formProvider, '没同意就一个字段都不动').toBe('cpolar');
@@ -182,7 +183,7 @@ describe('B · 脏表单上点启动：三分岔各走各的', () => {
     const w = await mountTunnel();
     await switchProvider(w, 'tailscale');
     // 切换确认与启动确认共用 ElMessageBox.confirm：once 实现要按弹窗出现顺序排在切换之后
-    ElMessageBox.confirm.mockRejectedValueOnce('cancel');
+    vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce('cancel');
     expect(w.find('#tunnel-unsaved').exists(), '前提：此时确实带着未保存改动').toBe(true);
     await startButton(w).trigger('click');
     await nextTickFlush();
@@ -194,7 +195,7 @@ describe('B · 脏表单上点启动：三分岔各走各的', () => {
   it('关掉弹窗（右上角 / ESC）→ 既不启动也不写盘', async () => {
     const w = await mountTunnel();
     await switchProvider(w, 'tailscale');
-    ElMessageBox.confirm.mockRejectedValueOnce('close');
+    vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce('close');
     await startButton(w).trigger('click');
     await nextTickFlush();
     expect(started, 'close 不是「按已保存配置启动」，不能顺手启动').toBe(0);

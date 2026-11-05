@@ -116,8 +116,9 @@ describe('FloatingChat BYOK llmConfig 注入 + Q5 鉴权口径', () => {
     });
     await flushPromises();
 
-    wrapper.vm.inputQuestion = question;
-    wrapper.vm.handleSubmit();
+    const vm = wrapper.vm as unknown as { inputQuestion: string; handleSubmit: () => void };
+    vm.inputQuestion = question;
+    vm.handleSubmit();
     // T02753：等「/query 请求已发出」这个真实终点（本文件四个用例都以它为前提），不再睡 10ms 猜时长
     await waitForProgress('问答请求已发出', () => authFetchSpy?.mock?.calls?.length > 0, NO_TIMER_CHAIN);
     await flushPromises();

@@ -7,6 +7,7 @@
 // chatDb 持有未关闭连接导致 deleteDatabase 无法即时生效，也不会发生键碰撞导致的误判。
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
+import type { ToolsConfig } from '../src/types';
 
 // Node 环境无 localStorage/sessionStorage，localVault 需要，提供内存实现（沿用 ttsConfig-isolation 测试）。
 class MemStorage {
@@ -25,8 +26,18 @@ const aiA = { provider: 'glm', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', 
 const aiB = { provider: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiKey: 'KEY_B' };
 const searchA = { provider: 'tavily' as const, apiKey: 'WS_A', maxResults: 5 };
 const searchB = { provider: 'bing' as const, apiKey: 'WS_B', maxResults: 10 };
-const toolsA = { mcpServers: [{ id: 'a1' }], cliTools: [], scenes: [], routerMode: 'keyword' as const };
-const toolsB = { mcpServers: [], cliTools: [{ name: 'bcli' }], scenes: [], routerMode: 'auto' as const };
+const toolsA: ToolsConfig = {
+  mcpServers: [{ name: 'a1', transport: 'stdio', command: 'a1-server', enabled: true }],
+  cliTools: [],
+  scenes: [],
+  routerMode: 'keyword',
+};
+const toolsB: ToolsConfig = {
+  mcpServers: [],
+  cliTools: [{ name: 'bcli', command: 'bcli', description: 'B 用户的命令行工具', enabled: true }],
+  scenes: [],
+  routerMode: 'auto',
+};
 
 describe('用户配置（AI/搜索/工具）按用户隔离', () => {
   it('AI 配置：不同用户相互独立、读取互不可见', async () => {

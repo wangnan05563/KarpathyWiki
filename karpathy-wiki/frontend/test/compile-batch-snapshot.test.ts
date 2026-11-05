@@ -121,7 +121,8 @@ describe('Progress 恢复批量快照 (T04095)', () => {
     setActivePinia(createPinia());
     localStorage.clear();
     mockedFetch.mockReset();
-    mockedFetch.mockImplementation(async (url: string) => {
+    mockedFetch.mockImplementation(async (input) => {
+      const url = String(input);
       if (url.includes('/ai/presets')) return makeResponse({ presets: [] });
       if (url.includes('/ai/config')) return makeResponse({ model: 'test-model' });
       if (url.includes('/compile/runs')) return makeResponse({ runs: [] });

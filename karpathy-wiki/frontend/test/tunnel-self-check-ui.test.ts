@@ -34,7 +34,7 @@ vi.mock('../src/utils/apiBase', () => ({
 
 describe('classifyStartError：后端原文 → 分类（关键字表与 throw 点同步）', () => {
   // 逐条取自 api/src/tunnel/tunnel-service.ts 的真实抛出文案
-  const CASES: Array<[string, string, ReturnType<typeof classifyStartError>]> = [
+  const CASES: Array<[string, string | undefined, ReturnType<typeof classifyStartError>]> = [
     ['未检测到 Tailscale。请先安装并登录 Tailscale：https://tailscale.com/download/windows', 'tailscale', 'tailscale_install'],
     ['请先打开并登录 Tailscale，然后重新启动隧道', 'tailscale', 'tailscale_login'],
     ['Tailscale 尚未启用 MagicDNS，无法生成固定 ts.net 地址', 'tailscale', 'magicdns'],

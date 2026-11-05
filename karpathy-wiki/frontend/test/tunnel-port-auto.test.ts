@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
-import ElementPlus, { ElMessageBox } from 'element-plus';
+import ElementPlus, { ElMessageBox, type MessageBoxData } from 'element-plus';
 import Tunnel from '../src/views/Tunnel.vue';
 import type { TunnelConfigData } from '../src/types';
 
@@ -93,7 +93,8 @@ async function saveViaUnsavedBar(w: Awaited<ReturnType<typeof mountTunnel>>) {
 beforeEach(() => {
   vi.clearAllMocks();
   while (document.body.firstElementChild) document.body.firstElementChild.remove();
-  ElMessageBox.confirm.mockResolvedValue('confirm');
+  // MessageBoxData 在类型层是无值可取的交叉声明，运行时 confirm 实际 resolve 出动作字符串 → 按运行时事实穿透
+  vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm' as unknown as MessageBoxData);
 });
 
 describe('A · 自动勾选态（localPort=0 存量配置读回）', () => {

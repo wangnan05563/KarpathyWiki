@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "node scripts/check-theme-tokens.mjs && vue-tsc --noEmit && vite build",
+    "typecheck:test": "vue-tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

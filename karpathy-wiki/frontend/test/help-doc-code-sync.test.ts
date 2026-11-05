@@ -45,7 +45,7 @@ describe('帮助文档与代码同源：菜单/页签实名（T02784）', () => 
   });
 
   it('每个直达按钮的 view 是真实菜单、tab 是真实配置页签', () => {
-    const tabNames = new Set(CONFIG_TAB_GROUPS.flatMap((g) => g.tabs.map((t) => t.name)));
+    const tabNames = new Set<string>(CONFIG_TAB_GROUPS.flatMap((g) => g.tabs.map((t) => t.name)));
     for (const s of DOC_SECTIONS) {
       for (const b of s.blocks) {
         if (!b.action) continue;
@@ -93,7 +93,7 @@ describe('帮助文档与代码同源：cleanup 章节（T02784 批次 1）', ()
   });
 
   it('「仅预览」关闭后果与页面红色横幅同源', () => {
-    expect(textOf('cleanup')).toContain(buildPreviewBanner(false));
+    expect(textOf('cleanup')).toContain(buildPreviewBanner('live'));
   });
 });
 

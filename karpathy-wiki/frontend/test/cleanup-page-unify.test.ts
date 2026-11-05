@@ -92,7 +92,7 @@ describe('S2 预览开关收敛为页级单开关', () => {
 
   it('卡片元数据里没有 per-card 开关字段（dry_run 只能来自页级开关）', () => {
     for (const card of CLEANUP_CARDS) {
-      expect((card as Record<string, unknown>).dry_run).toBeUndefined();
+      expect((card as unknown as Record<string, unknown>).dry_run).toBeUndefined();
       expect(card.target).not.toBe('all');
     }
     expect(CLEANUP_CARDS).toHaveLength(4);

@@ -31,7 +31,7 @@ function seedRecord(id: string, ownerId: string | undefined, title: string): Con
     isPinned: false,
     preview: title,
     messages: [msg(title)],
-    threadId: null,
+    threadId: undefined,
     ownerId,
   };
 }

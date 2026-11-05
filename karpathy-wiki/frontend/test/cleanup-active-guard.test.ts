@@ -120,7 +120,7 @@ describe('T02655 置灰判定：只信后端 active', () => {
   });
 
   it('可清对象为 0 时仍优先说「无需清理」，不拿拦截文案糊弄', () => {
-    const s = statusOf({ active: compileBusy, runState: { fileCount: 0, sizeMb: 0, oldest: null } });
+    const s = statusOf({ active: compileBusy, runState: { fileCount: 0, sizeMb: 0, oldest: null, dirs: [] } });
     expect(cleanupButtonState('runState', s, false).label).toBe('无需清理');
   });
 });
@@ -238,7 +238,7 @@ describe('T02655 Cleanup.vue 组件层', () => {
     await flushPromises();
 
     const { ElMessage } = await import('element-plus');
-    const warn = vi.mocked(ElMessage).warning;
+    const warn = vi.mocked(ElMessage.warning);
     expect(warn).toHaveBeenCalled();
     expect(warn.mock.calls[0][0]).toContain('已拦截真实删除');
     // 结果区显示的是原因，不是 HTTP 状态码

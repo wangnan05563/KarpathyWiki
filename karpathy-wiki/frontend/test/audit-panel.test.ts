@@ -8,7 +8,7 @@ import ElementPlus from 'element-plus';
 import Users from '../src/views/Users.vue';
 import { useAuthStore } from '../src/stores/auth';
 import { AUDIT_ACTION_LABELS, auditActionLabel } from '../src/utils/labels';
-import type { AuditLogEntry } from '../src/types';
+import type { AuditLogEntry, AuditLogResponse } from '../src/types';
 
 const entries: AuditLogEntry[] = [
   { ts: '2026-10-22T08:00:00.000Z', userId: 'u1', username: 'admin', action: 'login', resource: '/api/auth/login', ip: '192.168.1.2', result: 'success' },
@@ -17,7 +17,12 @@ const entries: AuditLogEntry[] = [
 ];
 
 // mock 的引用存模块级，用例内直接断言调用
-let fetchAuditLogMock: ReturnType<typeof vi.fn>;
+type FetchAuditLog = () => Promise<AuditLogResponse | null>;
+// vi.fn() 无实现时返回类型是 Mock<any[], unknown>，直接赋给 store 方法会丢返回值口径 → 用带实现的工厂
+function mkAuditMock(result: AuditLogResponse | null): FetchAuditLog {
+  return vi.fn(async () => result);
+}
+let fetchAuditLogMock: FetchAuditLog;
 
 async function mountUsers(auditResult?: { entries: AuditLogEntry[]; count: number } | null) {
   const pinia = createPinia();
@@ -26,7 +31,7 @@ async function mountUsers(auditResult?: { entries: AuditLogEntry[]; count: numbe
   (authStore as any).user = { id: 'u1', role: 'admin', username: 'admin' };
   (authStore as any).isAdmin = true;
   authStore.listUsers = vi.fn().mockResolvedValue([]);
-  fetchAuditLogMock = vi.fn().mockResolvedValue(auditResult === undefined ? { entries, count: entries.length } : auditResult);
+  fetchAuditLogMock = mkAuditMock(auditResult === undefined ? { entries, count: entries.length } : auditResult);
   authStore.fetchAuditLog = fetchAuditLogMock;
 
   const wrapper = mount(Users, {
@@ -108,7 +113,7 @@ describe('Users.vue 审计日志面板（T02782）', () => {
     (authStore as any).isAdmin = true;
     (authStore as any).auditError = '加载审计日志失败';
     authStore.listUsers = vi.fn().mockResolvedValue([]);
-    fetchAuditLogMock = vi.fn().mockResolvedValue(null);
+    fetchAuditLogMock = mkAuditMock(null);
     authStore.fetchAuditLog = fetchAuditLogMock;
 
     const wrapper = mount(Users, { global: { plugins: [pinia, ElementPlus] }, attachTo: document.body });

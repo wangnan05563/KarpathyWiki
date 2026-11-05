@@ -213,14 +213,21 @@ describe('auth store', () => {
     });
   });
 
+  /** fetch 的第二参在类型上可选，但被测代码一定会传；取不到即断言对象丢失，直接抛错而不是静默通过 */
+  function lastFetchInit(spy: { mock: { calls: unknown[][] } }): RequestInit {
+    const call = spy.mock.calls[spy.mock.calls.length - 1];
+    const init = call?.[1] as RequestInit | undefined;
+    if (!init) throw new Error('fetch 调用未携带 RequestInit，断言对象丢失');
+    return init;
+  }
+
   describe('authFetch', () => {
     it('应注入 Authorization 头', async () => {
       const store = useAuthStore();
       store.token = 'my-token';
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makeResponse({}));
       await store.authFetch('/api/test');
-      const callArgs = fetchSpy.mock.calls[0];
-      const headers = callArgs[1].headers as Headers;
+      const headers = lastFetchInit(fetchSpy).headers as Headers;
       expect(headers.get('Authorization')).toBe('Bearer my-token');
     });
 
@@ -228,8 +235,7 @@ describe('auth store', () => {
       const store = useAuthStore();
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makeResponse({}));
       await store.authFetch('/api/test');
-      const callArgs = fetchSpy.mock.calls[0];
-      const headers = callArgs[1].headers as Headers;
+      const headers = lastFetchInit(fetchSpy).headers as Headers;
       expect(headers.get('Authorization')).toBeNull();
     });
 
@@ -237,8 +243,7 @@ describe('auth store', () => {
       const store = useAuthStore();
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makeResponse({}));
       await store.authFetch('/api/test', { method: 'POST', body: '{}' });
-      const callArgs = fetchSpy.mock.calls[0];
-      const headers = callArgs[1].headers as Headers;
+      const headers = lastFetchInit(fetchSpy).headers as Headers;
       expect(headers.get('Content-Type')).toBe('application/json');
     });
 
@@ -324,8 +329,7 @@ describe('auth store', () => {
       );
       await store.createUser({ username: 'new', password: 'pwd', role: 'user' });
       expect(fetchSpy).toHaveBeenCalled();
-      const callArgs = fetchSpy.mock.calls[0];
-      expect(callArgs[1].method).toBe('POST');
+      expect(lastFetchInit(fetchSpy).method).toBe('POST');
     });
 
     it('非管理员调用 deleteUser 返回 false', async () => {

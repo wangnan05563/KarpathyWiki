@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { MisplacedPage, PageQualityScore } from '../src/types';
+import type { MisplacedPage, PageQualityScore, PrecheckWarningCategory } from '../src/types';
 import {
   ISSUE_CATEGORIES,
   MISPLACED_ISSUE_TEXT,
@@ -33,7 +33,13 @@ import {
 } from '../src/utils/dataCleanPresentation';
 
 /** 造一条「健康」页面：有元信息、有出链、字数达标；用 metadata 覆写制造各类问题 */
-function makePage(over: Partial<PageQualityScore> & { path: string }): PageQualityScore {
+/** metadata 是「按字段覆写」的 fixture，故用 Partial：只写被测断言关心的那几个字段 */
+type PagePatch = Partial<Omit<PageQualityScore, 'path' | 'metadata'>> & {
+  path: string;
+  metadata?: Partial<PageQualityScore['metadata']>;
+};
+
+function makePage(over: PagePatch): PageQualityScore {
   const { metadata: metaOver, ...rest } = over;
   return {
     title: over.path.split('/').pop()!.replace('.md', ''),
@@ -281,7 +287,7 @@ describe('子目录中的页面展示（T02797）', () => {
 // T02907：预检分类计数的展示口径。misplaced 行必须用前端自己的短语（不透传服务端 label），
 // 否则同屏「预检分类行」与「错位块标题」两句话又会漂移（T02843 起就是同源约定）。
 describe('预检分类计数展示（T02907）', () => {
-  const result = (categories: Array<{ key: string; label: string; count: number }>) => ({
+  const result = (categories: PrecheckWarningCategory[]) => ({
     scannedFiles: 245,
     passed: false,
     warnings: [],

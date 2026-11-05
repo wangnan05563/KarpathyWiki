@@ -25,7 +25,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { HEALTHY_POLL_MS, NO_TIMER_CHAIN, waitForProgress } from './helpers/waitForProgress';
+import { HEALTHY_POLL_MS, NO_TIMER_CHAIN, waitForProgress, type WaitResult } from './helpers/waitForProgress';
 
 const TEST_DIR = __dirname;
 /** 扫描面自指排除用文件名常量（守护不留豁免口子，但也不该把自己的合成时钟算成放水） */
@@ -100,6 +100,16 @@ function reportedMs(message: string): { starve: number; ours: number } {
   return { starve: Number(s?.[1]), ours: Number(o?.[1]) };
 }
 
+/**
+ * reject 出来的一定要是 Error：`waitForProgress` 正常收尾时给的是 WaitResult，
+ * 所以「拿到对象」本身不算证据。这里替代 `expect(x).toBeInstanceOf(Error)` 那一行——
+ * 断言强度不变（不是 Error 当场红），但调用点此后可以合法地读 `.message`。
+ */
+function asError(v: Error | WaitResult): Error {
+  if (!(v instanceof Error)) throw new Error(`期望 reject 出 Error，实际拿到 resolve 值：${JSON.stringify(v)}`);
+  return v;
+}
+
 const HELPER_SRC = () => readFileSync(path.join(TEST_DIR, 'helpers', 'waitForProgress.ts'), 'utf8');
 
 describe('T04461 · waitForProgress 判据：欠账扣得掉，牙齿不能一起磨掉', () => {
@@ -113,8 +123,7 @@ describe('T04461 · waitForProgress 判据：欠账扣得掉，牙齿不能一�
         now: clock.now,
       });
       await expect(wait).rejects.toThrow(/无进展实算/);
-      const err = await wait.catch((e: unknown) => e as Error);
-      expect(err).toBeInstanceOf(Error);
+      const err = asError(await wait.catch((e: unknown) => e as Error));
       const { starve, ours } = reportedMs(err.message);
       expect(starve).toBe(0);
       // 判红轮次与实算都必须落在闭式解上——阈值被抬高却没人同步预算，这里就会偏
@@ -170,8 +179,7 @@ describe('T04461 · waitForProgress 判据：欠账扣得掉，牙齿不能一�
         progress: () => 'loadingAi=1',
         now: clock.now,
       });
-      const err = await wait.catch((e: unknown) => e as Error);
-      expect(err).toBeInstanceOf(Error);
+      const err = asError(await wait.catch((e: unknown) => e as Error));
       expect(err.message).toMatch(/无进展实算|硬上限/);
       const { starve, ours } = reportedMs(err.message);
       // 判红时的实算恰好等于「轮数 × 健康上限」：每轮 5000ms 的虚耗全部记进欠账，一分不进预算。
@@ -195,8 +203,7 @@ describe('T04461 · waitForProgress 判据：欠账扣得掉，牙齿不能一�
         progress: () => `churn=${++churn}`,
         now: clock.now,
       });
-      const err = await wait.catch((e: unknown) => e as Error);
-      expect(err).toBeInstanceOf(Error);
+      const err = asError(await wait.catch((e: unknown) => e as Error));
       expect(err.message).toContain('硬上限');
       const { starve } = reportedMs(err.message);
       expect(starve).toBe(0);

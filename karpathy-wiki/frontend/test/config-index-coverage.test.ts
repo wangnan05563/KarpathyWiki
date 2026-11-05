@@ -59,7 +59,7 @@ function json(body: unknown, ok = true): Response {
 }
 
 let statusUrls: string[] = [];
-let statusFixture = { ...STATUS_FIXTURE };
+let statusFixture: Record<string, unknown> = { ...STATUS_FIXTURE };
 
 function installFetchStub(): void {
   statusUrls = [];

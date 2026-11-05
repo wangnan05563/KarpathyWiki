@@ -254,8 +254,9 @@ describe('Query.vue 编辑重发端到端', () => {
     await flushPromises();
 
     // 发起一条在途问答（真实 abortController，isLoading=true）
-    wrapper.vm.inputQuestion = '第二个问题';
-    wrapper.vm.handleSubmit();
+    const vm = wrapper.vm as unknown as { inputQuestion: string; handleSubmit: () => void };
+    vm.inputQuestion = '第二个问题';
+    vm.handleSubmit();
     await waitFor('应处于流式生成中', () => queryStore.isLoading, {
       progress: () => progressSignature(authFetch.mock.calls.length, queryStore),
     });
@@ -373,8 +374,9 @@ describe('Query.vue 编辑重发端到端', () => {
     queryStore.finalizeAnswer('sess', 0);
     await flushPromises();
 
-    wrapper.vm.inputQuestion = '第二个问题';
-    wrapper.vm.handleSubmit();
+    const vm = wrapper.vm as unknown as { inputQuestion: string; handleSubmit: () => void };
+    vm.inputQuestion = '第二个问题';
+    vm.handleSubmit();
     await waitFor('应处于流式生成中', () => queryStore.isLoading, {
       progress: () => progressSignature(authFetch.mock.calls.length, queryStore),
     });
