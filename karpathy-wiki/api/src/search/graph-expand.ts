@@ -1,7 +1,7 @@
 // T04072 命中页一跳图拓：沿正文 wikilink 出边 + 反向链接取邻居，只返回标题与首段摘要。
 // 为什么只给摘要：邻居是「关联参考」而非一手依据，全文留给 LLM 按需 read_page，避免 token 失控。
 // 为什么复用 buildLinkGraph：图谱已有 30s TTL 缓存且与 /api/graph、/api/stats 共享，不引入新扫描。
-import matter from 'gray-matter';
+import { tryParsePage } from '../utils/frontmatter.js';
 import type { VaultService } from '../vault/vault-service.js';
 import type { QueryGraphExpandConfig } from '../types.js';
 
@@ -53,7 +53,11 @@ export function extractTitleAndSnippet(
   path: string,
   maxChars: number,
 ): { title: string; snippet: string } {
-  const body = matter(content).content;
+  // T04454：坏 YAML 头按「没有正文」处理。expandNeighbors 的既有承诺是「单页失败直接跳过，
+  // 不阻断问答」，但它只兜住了 readFile——此前 matter() 抛的异常会一路冒出 expandNeighbors，
+  // 一个邻居页写坏就让整个图拓挂掉。正文留空后 snippet 为空，正好落进调用方已有的 `!snippet` 跳过分支。
+  const parsed = tryParsePage(content);
+  const body = parsed.ok ? parsed.content : '';
   const base = path.split('/').pop() ?? path;
   let title = base.replace(/\.md$/i, '');
   let titleFound = false;
