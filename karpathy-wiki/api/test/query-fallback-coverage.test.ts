@@ -32,15 +32,18 @@ import { searchPages } from '../src/search-util.js';
 import { createRunStateStore } from '../src/engine/run-state-store.js';
 import { extractSearchKeywords } from '../src/utils/query-keywords.js';
 import {
+  answerBodyChunks,
   composeFallbackText,
   describeQueryFailure,
+  emptyAnswerFailure,
   FALLBACK_NO_COVERAGE_TEXT,
   FALLBACK_SERVICE_ERROR_TEXT,
+  hasAnswerBody,
   isAccountLevelFailure,
   queryWorkflow,
   type QueryFailure,
 } from '../src/workflows/query-workflow.js';
-import type { AnswerChunk } from '../src/types.js';
+import type { AnswerChunk, QueryInput } from '../src/types.js';
 
 let vaultDir: string;
 let stateDir: string;
@@ -56,7 +59,22 @@ let llmRequests = 0;
 // 从 HTTP 响应到 friendlyLlmError 分类到文案的整条链必须真的走一遍，直接喂 Error 会绕开分类上游。
 let stubStatus = 500;
 let stubBody = '{"error":{"message":"stub upstream exploded","type":"server_error"}}';
+// T04456：真流式（请求体 stream:true）走 SSE。null = 本用例不测流式，仍按 JSON 分支回。
+// 为什么按请求体里的 stream 标志分叉，而不是按用例切整个桩：深度问答与降级第 2 级在同一次
+// 端到端里分别用流式/非流式发请求，只有一处判据能同时验到两级。
+let stubStreamContent: string | null = null;
 const createdDirs: string[] = [];
+
+// OpenAI 流式协议帧：content 为空串时一帧 delta.content 都不发（正是「200 但零正文」的流式形态）
+function sseFrames(content: string): string {
+  const frames = [
+    JSON.stringify({ choices: [{ index: 0, delta: { role: 'assistant' } }] }),
+    ...(content ? [JSON.stringify({ choices: [{ index: 0, delta: { content } }] })] : []),
+    JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }),
+    '[DONE]',
+  ];
+  return frames.map((f) => (f === '[DONE]' ? 'data: [DONE]' : `data: ${f}`)).join('\n\n') + '\n\n';
+}
 
 function writePage(rel: string, body: string): void {
   const abs = path.join(vaultDir, rel);
@@ -65,10 +83,28 @@ function writePage(rel: string, body: string): void {
 }
 
 beforeAll(async () => {
-  llmServer = http.createServer((_req, res) => {
+  llmServer = http.createServer((req, res) => {
     llmRequests += 1;
-    res.writeHead(stubStatus, { 'content-type': 'application/json' });
-    res.end(stubBody);
+    const body: Buffer[] = [];
+    req.on('data', (c) => body.push(c as Buffer));
+    req.on('error', () => {
+      /* 客户端中断：不响应即可，不能让无监听器的 error 事件掀翻桩服务 */
+    });
+    req.on('end', () => {
+      let wantsStream = false;
+      try {
+        wantsStream = (JSON.parse(Buffer.concat(body).toString('utf8')) as { stream?: boolean }).stream === true;
+      } catch {
+        /* 非 JSON 请求体按非流式处理 */
+      }
+      if (wantsStream && stubStreamContent !== null) {
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.end(sseFrames(stubStreamContent));
+        return;
+      }
+      res.writeHead(stubStatus, { 'content-type': 'application/json' });
+      res.end(stubBody);
+    });
   });
   await new Promise<void>((resolve) => {
     llmServer.listen(0, '127.0.0.1', () => {
@@ -86,6 +122,7 @@ beforeEach(() => {
   llmRequests = 0;
   stubStatus = 500;
   stubBody = '{"error":{"message":"stub upstream exploded","type":"server_error"}}';
+  stubStreamContent = null;
   vaultDir = mkdtempSync(path.join(tmpdir(), 'wiki-t04176-'));
   createdDirs.push(vaultDir);
   stateDir = mkdtempSync(path.join(tmpdir(), 'wiki-t04176-state-'));
@@ -462,10 +499,171 @@ function unreachableConfig(stateDir: string): HarnessConfig {
   } as unknown as HarnessConfig;
 }
 
-async function collectWorkflow(question: string): Promise<AnswerChunk[]> {
+async function collectWorkflow(question: string, input?: Partial<QueryInput>): Promise<AnswerChunk[]> {
   const out: AnswerChunk[] = [];
-  for await (const chunk of queryWorkflow(unreachableConfig(stateDir), vault, { question, stream: false })) {
+  for await (const chunk of queryWorkflow(unreachableConfig(stateDir), vault, { question, stream: false, ...input })) {
     out.push(chunk);
   }
   return out;
 }
+
+// ===========================================================================
+// F. T04456：空答案（HTTP 200 但零正文）——既不降级也不兜底的那条缝
+// 取证（改造前实测，桩 LLM 回 200）：
+//   content="" 或 null → 第 1 级把硬编码占位句「知识库未覆盖此问题。」当答案发出并 harness-done，
+//                        用户被告知「库里没有」，而库里其实有这篇页面；既不降级也不打 *-failed。
+//   content="  \n  "   → 原样发出这串空白，用户得到一只空白气泡（本单主诉形态）。
+// ===========================================================================
+describe('T04456-F 空答案判定', () => {
+  const EMPTY_BODY = '{"choices":[{"message":{"role":"assistant","content":""}}]}';
+  const WS_BODY = '{"choices":[{"message":{"role":"assistant","content":"  \\n  "}}]}';
+
+  function joinedText(chunks: AnswerChunk[]): string {
+    return chunks.filter((c) => typeof c.text === 'string').map((c) => c.text as string).join('');
+  }
+
+  it('判据真值表：空白串不算正文，image/ppt 算正文，thinking/refs/followups 不算', () => {
+    expect(hasAnswerBody('')).toBe(false);
+    expect(hasAnswerBody('  \n ')).toBe(false);
+    expect(hasAnswerBody(null)).toBe(false);
+    expect(hasAnswerBody(undefined)).toBe(false);
+    expect(hasAnswerBody('一句正文')).toBe(true);
+    expect(answerBodyChunks({ text: '   ' })).toBe(0);
+    expect(answerBodyChunks({ text: '一句正文' })).toBe(1);
+    expect(answerBodyChunks({ thinking: { phase: 'thinking', message: '正在思考', ts: '' } })).toBe(0);
+    expect(answerBodyChunks({ refs: ['a/b.md'], done: true })).toBe(0);
+    expect(answerBodyChunks({ followups: ['追问'] })).toBe(0);
+    expect(answerBodyChunks({ image: { url: 'u', alt: 'a' } })).toBe(1);
+    expect(answerBodyChunks({ ppt: { markdown: '# m', title: 't', archivePath: 'p' } })).toBe(1);
+  });
+
+  it('空答案归为 service_error/empty_answer，且不属于账号级（第 2 级值得再问一次）', () => {
+    expect(emptyAnswerFailure('harness')).toEqual({
+      level: 'harness',
+      kind: 'service_error',
+      category: 'empty_answer',
+      reason: expect.any(String),
+    });
+    expect(isAccountLevelFailure(emptyAnswerFailure('harness'))).toBe(false);
+  });
+
+  it('兜底文案：说「没拿到正文」，日志指针按真实阶段拼，不冒充未覆盖也不支人查网络', () => {
+    const text = composeFallbackText([emptyAnswerFailure('harness'), emptyAnswerFailure('fallback')]);
+    expect(text).toContain('没有返回任何答案正文');
+    expect(text).toContain('[query-stage] harness-empty-answer / fallback-empty-answer');
+    expect(text).not.toContain('知识库未覆盖');
+    expect(text).not.toContain('检查模型配置与网络');
+  });
+
+  it('混排（第 1 级空正文、第 2 级抛错）时指针不许谎报第 1 级为 harness-failed', () => {
+    const text = composeFallbackText([
+      emptyAnswerFailure('harness'),
+      { level: 'fallback', kind: 'service_error', category: 'auth', reason: '401' },
+    ]);
+    expect(text).toContain('[query-stage] harness-empty-answer / fallback-failed');
+  });
+
+  it('端到端：200 空正文 → 真的降级到第 2 级，且不再硬编「知识库未覆盖此问题。」', async () => {
+    stubStatus = 200;
+    stubBody = EMPTY_BODY;
+    const stage = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const chunks = await collectWorkflow('知识库的价值体现在哪里');
+    const phases = stagePhases(stage);
+    expect(phases).toContain('harness-empty-answer');
+    expect(phases).not.toContain('harness-done');
+    expect(phases).toContain('fallback-start');
+    expect(phases).toContain('fallback-empty-answer');
+    expect(phases).not.toContain('fallback-done');
+    // 两级各打一次；用 >=2 而不是 ===2：多模态包装若再加调用不该把这条锁变成误报
+    expect(llmRequests, '空答案必须真的走降级第 2 级').toBeGreaterThanOrEqual(2);
+    const text = joinedText(chunks);
+    expect(text).not.toContain('知识库未覆盖此问题。');
+    expect(text).toContain('没有返回任何答案正文');
+    expect(chunks.some((c) => c.done), '兜底后仍要收口 done').toBe(true);
+  }, 30_000);
+
+  it('端到端：纯空白正文（改造前是一只空泡）不再发出空白 text chunk，且有归因文案', async () => {
+    stubStatus = 200;
+    stubBody = WS_BODY;
+    const chunks = await collectWorkflow('知识库的价值体现在哪里');
+    expect(joinedText(chunks)).not.toBe('  \n  ');
+    expect(chunks.some((c) => typeof c.text === 'string' && c.text.trim() === ''), '不许再发只含空白的正文块').toBe(false);
+    expect(joinedText(chunks)).toContain('没有返回任何答案正文');
+  }, 30_000);
+
+  it('反向控制：模型正常给出正文时不触发空答案判据（判据不许扩到正常路径）', async () => {
+    stubStatus = 200;
+    stubBody = '{"choices":[{"message":{"role":"assistant","content":"知识库的价值体现在复利。"}}]}';
+    const stage = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const chunks = await collectWorkflow('知识库的价值体现在哪里');
+    const phases = stagePhases(stage);
+    expect(phases).toContain('harness-done');
+    expect(phases).not.toContain('harness-empty-answer');
+    expect(phases).not.toContain('fallback-start');
+    expect(joinedText(chunks)).toContain('复利');
+  }, 30_000);
+
+  it('关闭 answer 输出时零正文是预期内的：不降级、不兜底、不打空答案阶段', async () => {
+    stubStatus = 200;
+    stubBody = EMPTY_BODY;
+    const stage = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const chunks = await collectWorkflow('知识库的价值体现在哪里', { outputModes: ['thinking'] });
+    const phases = stagePhases(stage);
+    expect(phases).not.toContain('harness-empty-answer');
+    expect(phases).toContain('harness-done');
+    expect(chunks.filter((c) => typeof c.text === 'string')).toHaveLength(0);
+    expect(llmRequests, 'answer 关闭时不该再烧第 2 级').toBe(1);
+  }, 30_000);
+
+  // 真流式分支：判据是在「实际发到 wire 上的正文块」上测量的，所以 delta 一帧都没回
+  // 也应当被同一口径接住。取证事实（本组实测）：降级第 2 级没有流式变体，它总是走非流式
+  // chat()——所以这里让 SSE 分支与 JSON 分支给**相反**的内容，只有第 1 级真的按 stream:true
+  // 发请求并消费了 SSE，才会出现「第 1 级空、第 2 级有正文」这个只有真流式才有的形态；
+  // 一旦哪天有人把第 1 级悄悄退回非流式，这条腿立刻红。
+  it('端到端（真流式）：SSE 一帧 delta 都没回 → 第 1 级判空答案、第 2 级（非流式）救回正文', async () => {
+    stubStatus = 200;
+    stubBody = '{"choices":[{"message":{"role":"assistant","content":"降级检索给出的正文。"}}]}';
+    stubStreamContent = '';
+    const stage = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const chunks = await collectWorkflow('知识库的价值体现在哪里', { stream: true });
+    const phases = stagePhases(stage);
+    expect(phases).toContain('harness-empty-answer');
+    expect(phases).not.toContain('harness-done');
+    expect(phases).toContain('fallback-start');
+    expect(phases).toContain('fallback-done');
+    const text = joinedText(chunks);
+    expect(text).toContain('降级检索给出的正文');
+    expect(text).not.toContain('知识库未覆盖此问题。');
+    expect(chunks.some((c) => c.done), '救回后仍要收口 done').toBe(true);
+  }, 30_000);
+
+  it('端到端（真流式）：两级都没正文 → 兜底说「没拿到答案正文」，不冒充未覆盖', async () => {
+    stubStatus = 200;
+    stubBody = EMPTY_BODY;
+    stubStreamContent = '';
+    const stage = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const chunks = await collectWorkflow('知识库的价值体现在哪里', { stream: true });
+    const phases = stagePhases(stage);
+    expect(phases).toContain('harness-empty-answer');
+    expect(phases).toContain('fallback-empty-answer');
+    const text = joinedText(chunks);
+    expect(text).not.toContain('知识库未覆盖此问题。');
+    expect(text).toContain('没有返回任何答案正文');
+    expect(chunks.some((c) => c.done), '兜底后仍要收口 done').toBe(true);
+  }, 30_000);
+
+  it('端到端（真流式反向控制）：delta 正文必须算作答案，正常流式问答不许被误判为空答案', async () => {
+    // 与上一条刻意相反：JSON 分支给空正文、SSE 分支给正文。
+    // 只有第 1 级真的消费了 SSE 才拿得到正文——否则这条腿会因 JSON 空正文而红。
+    stubStatus = 200;
+    stubBody = EMPTY_BODY;
+    stubStreamContent = '知识库的价值体现在复利上，持续维护的页面会随时间累积收益。';
+    const stage = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const chunks = await collectWorkflow('知识库的价值体现在哪里', { stream: true });
+    const phases = stagePhases(stage);
+    expect(phases).toContain('harness-done');
+    expect(phases).not.toContain('harness-empty-answer');
+    expect(phases).not.toContain('fallback-start');
+    expect(joinedText(chunks)).toContain('复利');
+  }, 30_000);
+});

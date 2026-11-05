@@ -292,6 +292,22 @@ function generateFollowups(question: string, answer: string, refs: string[]): st
   return [...new Set(followups)].slice(0, 3);
 }
 
+// T04456：「这一轮到底有没有给出答案正文」的单一判据。
+// 为什么在消费侧测量、而不是让各级生成器为空答案抛错：空答案来自 HTTP 200（迭代器正常走完），
+// 抛错要改三处生成器并牵动 wiki-harness 的判定；测量真正发到 wire 上的正文只需一处口径，
+// 且顺带覆盖「只回一串空白」这种看起来成功、实则一只空泡的形态。
+// 用类型谓词：收窄后调用方可以直接把结果当非空 string 用，不必再挂断言。
+export function hasAnswerBody(text: string | null | undefined): text is string {
+  return typeof text === 'string' && text.trim().length > 0;
+}
+
+// 计的是「答案正文块」的个数，不是字符数：text 要 trim 后非空；image / ppt 本身就是正文
+// （多模态与幻灯片回复可以一个 text 都没有）。thinking / refs / followups / progress 一律不算——
+// 「只有思考过程没有答案」正是本单要归因的那种形态。
+export function answerBodyChunks(chunk: AnswerChunk): number {
+  return (hasAnswerBody(chunk.text) ? 1 : 0) + (chunk.image ? 1 : 0) + (chunk.ppt ? 1 : 0);
+}
+
 // 把答案文本按更细粒度（小段）切分，逐块 yield 模拟流式输出。
 // v2 优化：从"按句子切分"改为"按短句/短语切分"：
 //   1. 句子切分（句号/问号/感叹号边界）后单块仍可能很长（80-200 字），首屏等待仍久
@@ -591,7 +607,10 @@ async function* queryWithHarness( // NOSONAR - S107 - 函数签名需要多个�
   }
 
   // 7. 将 finalContent 按句切分，逐块 yield 模拟流式输出
-  const answer = result.finalContent || '知识库未覆盖此问题。';
+  // T04456：模型回空内容时不再硬编「知识库未覆盖此问题。」——那是把「服务没答上来」说成
+  // 「库里没有」，还会让上层把空答案当成功（既不降级也不兜底）。这里留空正文，
+  // 由 queryWorkflow 按「零答案正文」降级。
+  const answer = hasAnswerBody(result.finalContent) ? result.finalContent : '';
   for (const chunk of yieldAnswerInSentences(answer)) {
     yield chunk;
   }
@@ -729,7 +748,9 @@ async function* emitPostStreamChunks(
     yield { thinking: { ...t, ts: t.ts || new Date().toISOString() } };
   }
 
-  const answer = finalAnswer || '知识库未覆盖此问题。';
+  // T04456：流式分支同理——真流式下没收到任何非空白 delta 就是没答案，
+  // 拿占位句去喂 extractRefs/generateFollowups 会凭空造出一条「未覆盖」结论与追问。
+  const answer = hasAnswerBody(finalAnswer) ? finalAnswer : '';
   // FR-21：引用槽位并入 refs（流式分支）
   // T04072：图拓邻居排在槽位之后并入（无 slot，不占用 [n] 编号）
   const refs = mergeCitationSlots(
@@ -945,7 +966,9 @@ ${intentHint}
   }
 
   // 5. 流式输出
-  const answer = result.finalContent || '知识库未覆盖此问题。';
+  // T04456：本级是「已经检索到页面、只等模型组织答案」，模型回空却报「知识库未覆盖此问题」
+  // 错得最直白——库里明明有。留空正文交给上层判「零答案正文」。
+  const answer = hasAnswerBody(result.finalContent) ? result.finalContent : '';
   for (const chunk of yieldAnswerInSentences(answer)) {
     yield chunk;
   }
@@ -1165,12 +1188,23 @@ async function* runSearchFallbackLevel(ctx: {
     yield { thinking: { phase: 'composing', message: '降级搜索中...', ts: new Date().toISOString() } };
   }
   ctx.stage('fallback-start');
+  let answerBodies = 0;
   try {
     for await (const chunk of upgradeRefs(
       createFallbackWithMultimodal(
       harnessConfig, vault, input, options, outputModes,
     ), vault, options.appConfig, neighborSink)) {
+      answerBodies += answerBodyChunks(chunk);
       yield chunk;
+    }
+    // T04456：本级走完却没吐出正文（模型回空/仅空白），不能算成功——
+    // 算成功就等于「降级检索已答」，第 3 级兜底永远不触发，用户看到的还是空泡。
+    // 检索没命中是另一回事：那条路走 throw（no_hits → kind=no_coverage），不会落到这里。
+    if (answerBodies === 0 && shouldEmit('answer', outputModes)) {
+      const failure = emptyAnswerFailure('fallback');
+      ctx.failures.push(failure);
+      ctx.stage('fallback-empty-answer', { kind: failure.kind, category: failure.category, reason: failure.reason });
+      return false;
     }
     ctx.stage('fallback-done');
     return true;
@@ -1373,6 +1407,9 @@ const SERVICE_ERROR_GUIDE_BY_CATEGORY: Record<string, string> = {
     '请降低请求频率、稍后再试，或在「配置中心 → AI 服务」换用有额度的密钥 / 其他 provider。',
   auth: 'LLM API 认证失败（401/403）：请在「配置中心 → AI 服务」检查 API Key 是否有效或已过期；这类错误重试不会改变结果。',
   request_too_large: '内容超出模型请求上限（413）：请缩短问题、限定页面范围（文件夹 / 标签）减少参与问答的内容，或拆分后分次提问。',
+  empty_answer:
+    '模型这一轮没有返回任何答案正文（请求成功、内容为空）：这与知识库是否覆盖此问题无关，' +
+    '换个问法或稍后重试通常就能拿到答案；若持续为空，请在「配置中心 → AI 服务」检查所选模型的最大输出长度与思考模式设置。',
 };
 
 // T04479：账号级错误下再跑降级第 2 级是必然失败的空转。
@@ -1384,6 +1421,20 @@ const ACCOUNT_LEVEL_CATEGORIES = new Set(['rate_limit', 'auth']);
 
 export function isAccountLevelFailure(failure: QueryFailure | undefined): boolean {
   return !!failure && failure.kind === 'service_error' && ACCOUNT_LEVEL_CATEGORIES.has(failure.category);
+}
+
+// T04456：空答案（HTTP 成功但正文为空/仅空白）是一类真实的 service_error。
+// 必须进 failures：不进就既不降级也不兜底，用户只剩一只空泡；记成 no_coverage 又会把
+// 「服务没答上来」说成「库里没有」——那正是本族单要消灭的误归因。
+export const EMPTY_ANSWER_CATEGORY = 'empty_answer';
+
+export function emptyAnswerFailure(level: QueryFailure['level']): QueryFailure {
+  return {
+    level,
+    kind: 'service_error',
+    category: EMPTY_ANSWER_CATEGORY,
+    reason: '迭代器正常结束但零答案正文（HTTP 成功、内容为空或仅空白）',
+  };
 }
 
 export function composeFallbackText(failures: readonly QueryFailure[], fallbackSkipped = false): string {
@@ -1401,10 +1452,19 @@ export function composeFallbackText(failures: readonly QueryFailure[], fallbackS
   // 兜底链全故障，或异常发生在本不该出现的时机（failures 为空）——一律按「暂不可用」说更安全
   const guide = proximate ? SERVICE_ERROR_GUIDE_BY_CATEGORY[proximate.category] : undefined;
   if (!guide) return FALLBACK_SERVICE_ERROR_TEXT;
+  // T04456：空答案那一路要说「没拿到正文」而不是「两次尝试都没完成」——两级其实都走完了，
+  // 只是谁也没吐出正文；混着说会把人支去查网络，而该查的是模型侧的输出设置。
+  const emptyAnswer = proximate?.category === EMPTY_ANSWER_CATEGORY;
   const attempts = fallbackSkipped
     ? '深度问答未完成，降级检索受同一个限制约束、已跳过'
-    : '深度问答与降级检索两次尝试都没有完成';
-  const stages = fallbackSkipped ? 'harness-failed / fallback-skipped' : 'harness-failed / fallback-failed';
+    : emptyAnswer
+      ? '深度问答与降级检索都没有拿到答案正文'
+      : '深度问答与降级检索两次尝试都没有完成';
+  // 日志指针按 failures 里真实记下的原因拼：混着空答案与抛错时（第 1 级空、第 2 级炸）
+  // 固定写 harness-failed / fallback-failed 会让用户去 grep 一个不存在的阶段名。
+  const stages = fallbackSkipped
+    ? 'harness-failed / fallback-skipped'
+    : failures.map((f) => (f.category === EMPTY_ANSWER_CATEGORY ? `${f.level}-empty-answer` : `${f.level}-failed`)).join(' / ');
   return `当前问答服务暂不可用：${guide}${attempts}原因已记入服务端日志（[query-stage] ${stages}）。`;
 }
 
@@ -1494,16 +1554,26 @@ export async function* queryWorkflow(
   // 委托 createHarnessWithMultimodal 处理流式切换与 multimodal 包装，降低认知复杂度（S3776）
   let harnessSucceeded = false;
   stage('harness-start');
+  let harnessAnswerBodies = 0;
   try {
     for await (const chunk of upgradeRefs(
       createHarnessWithMultimodal(
       useStream, harnessConfig, vault, clarifyInput, { ...options, neighborSink },
       collectedThinking, collectedWebRefs, collectedProgress, outputModes,
     ), vault, options.appConfig, neighborSink)) {
+      harnessAnswerBodies += answerBodyChunks(chunk);
       yield chunk;
     }
-    harnessSucceeded = true;
-    stage('harness-done');
+    // T04456：迭代器正常走完但零正文（模型回空内容/仅空白）不算成功。
+    // 关闭 answer 输出时零正文是预期内的，不能拿它当失败去降级。
+    harnessSucceeded = harnessAnswerBodies > 0 || !shouldEmit('answer', outputModes);
+    if (!harnessSucceeded) {
+      const failure = emptyAnswerFailure('harness');
+      failures.push(failure);
+      stage('harness-empty-answer', { kind: failure.kind, category: failure.category, reason: failure.reason });
+    } else {
+      stage('harness-done');
+    }
   } catch (err) {
     // harness 失败（LLM 异常、预算耗尽、工具循环错误），落入降级链
     // T04176：记下原因（旧实现 `catch {}` 丢掉 err，线上无从归因）
