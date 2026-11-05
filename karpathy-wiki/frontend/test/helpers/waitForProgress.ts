@@ -24,8 +24,27 @@
 // 行为与改造前逐毫秒一致（真卡死照样在第 floor+idle 拍就红，由 wait-for-progress-starvation.test.ts
 // 的正反两组用例锁住）。欠账再大也续不了命——实算时间仍要撞上 cap，最坏退化成用例自身超时，
 // 仍然是红，只是取证信息变差，不存在「被饿就永不失败」的假绿。
+//
+// T04471 又补了一层：**那个「健康节拍」本身必须量出来**。原值 25ms 是估的，实测 978 轮里 14% 的
+// 正常轮次都被记成欠账，等于判据被悄悄放宽；现在阈值按 4 轮全量并行的实测分位推导，
+// 数与来源成对锁死（见 HEALTHY_POLL_MS 注释 + 单测「阈值必须是实测派生」），并留了一个默认关闭的
+// 取证出口（T04471_POLL_DUMP）——分布要重测就重测，不许再靠话术定数。
 // ————————————————————————————————————————————————————————————
+import { appendFileSync } from 'node:fs';
 import { flushPromises } from '@vue/test-utils';
+
+/**
+ * T04471 取证出口：设了环境变量 `T04471_POLL_DUMP=<jsonl 路径>` 才逐轮留存节拍样本，默认完全不走这条路。
+ * 落盘只发生在一次等待**结束时**（正常返回或判红抛出），绝不在轮询循环里做 I/O——
+ * 写文件自身的耗时会落进下一轮的 gap，把要测的东西测脏，分布就失去意义了。
+ * 循环里唯一的代价是 `gaps.push(gap)`（一个数组追加）。
+ */
+const POLL_SAMPLE_DUMP = process.env.T04471_POLL_DUMP;
+
+function dumpPollSamples(entry: { label: string; rounds: number; elapsedMs: number; starveMs: number; outcome: string; synthetic: boolean; gaps: number[] }): void {
+  if (!POLL_SAMPLE_DUMP) return;
+  appendFileSync(POLL_SAMPLE_DUMP, `${JSON.stringify({ pid: process.pid, ...entry })}\n`);
+}
 
 export interface ProgressWaitOptions {
   /** 契约下限：早于此不判「无进展」失败。必须由被测代码的阈值/防抖时长推导，不能随手大数 */
@@ -45,12 +64,45 @@ export interface ProgressWaitOptions {
 }
 
 /**
- * 健康轮询的单轮节拍上限。一次 `flushPromises + setTimeout(0)` 在没人抢占的机器上是亚毫秒级，
- * 25ms 已是十几倍余量；超出部分判为「事件循环被外部占用」（并行 worker 的同步代码、GC、进程调度），
- * 不计进无进展/上限预算——这是 T04461 判据的全部依据，也是它不等同于「把超时调大」的地方：
- * 预算的放大量不是常量，而是逐轮实测出来的。
+ * 健康轮询的单轮节拍上限。**这个数是量出来的，不是估的**（T04471）。
+ *
+ * 样本来源：本文件的取证出口（`T04471_POLL_DUMP`）在 **4 轮全量并行**（129 文件，vitest 默认
+ * threads 池满并行）里逐轮留存的**真实时钟**单轮间隔；合成时钟用例（下面 A/B/C/D 那四条腿）
+ * 按 `synthetic` 标记筛掉，不计入分布。共 120 次等待 / **978 个轮次样本**（其中第 4 轮是阈值
+ * 抬到 100 之后的交叉核对轮，间隔分布与前 3 轮同源——欠账只影响预算记账，不影响节拍本身）。
+ * 实测分位：P50=15ms  P90=29ms  P95=44ms  P99=144ms  P99.9=2671ms  最大值 2671ms  均值 27.6ms。
+ *
+ * 分布是**双峰**的，这一点决定阈值怎么取：
+ *  - 正常总体止于 ~144ms（一次 `flushPromises + setTimeout(0)` 加一个廉价谓词，被同批 worker 挤压后就是这样）；
+ *  - 再往上的 407 / 467 / 556 / 621 / 1237 / 1411 / 1507 / 1888 / 2671ms（978 轮里 9 轮，0.9%）与 P50 差两个数量级，
+ *    不是「应用算得慢」而是**事件循环被整段偷走**——T04461 那次偶发红（单轮 2036ms）就属于这一总体。
+ *    被饿的那一段不归被测链路管，所以必须记成欠账；这一段是本判据存在的唯一理由。
+ *
+ * 因此阈值要落在两个总体之间，取 **`ceil(2 × P95 / 50) × 50 = 100`**：
+ *  - 下界 `2 × P95 = 88`：正常总体的极端（含 P95 的机器抖动）一律不记欠账，判据按墙钟原样收敛；
+ *  - 上界 `P99 = 144`：越过正常总体就必须记欠账，否则 T04461 的偶发红回归。
+ *  两侧都由 `wait-for-progress-starvation.test.ts` 的「阈值必须是实测派生」那节盯着：**改了数没改注释、
+ *  或改了注释没改数，都会红**（旧口径下 25→30 这种小抬无人值守，正是本单要补的牙）。
+ *
+ * 为什么不是原来的 25：实测 978 轮里有 **137 轮（14.0%）超过 25ms**，其中 120 轮落在 25~100ms 的
+ * 正常总体里——那等于把机器常态负载一律免进预算，等待实际消耗的墙钟比契约预算多出 14%，
+ * 判据被悄悄放宽了（本单修的就是这个口径失真）。抬到 100 后被判欠账的只剩 17 轮（1.74%）：
+ * 其中 9 轮（0.9%）确实是整段偷走，另外 8 轮（0.8%）是正常总体 P95→P99 的拖尾——把上界钉在
+ * P99 之下必然要付这点代价，但它比旧口径的 14% 免单小一个数量级，且不会随机器负载放大。
+ *
+ * 抬阈值会让各等待的「垫付」变少、判定更严，所以按点名文件逐条核对过余量（4 轮实测；下面「垫付」
+ * 一律指该轮实际生效阈值下记到的 starveMs，阈值 25 的那三轮和阈值 100 的这一轮不能直接混着看）：
+ *  - `query-edit-resend-flow` 的 `S3 兜底定时器`：158~202 轮 / 墙钟 3046~3100ms。旧阈值 25 下垫付 386/120/50ms，
+ *    实算 2660~3010ms；抬到 100 后第 4 轮只垫付 32ms（那轮节拍 123ms），实算 3068ms，对 floor 3500ms
+ *    余 432ms——这是四轮里最薄的一次，也仍落在它自己推导式 `EDIT_RESEND_FALLBACK_MS(3000) + 500`
+ *    声明的余量之内（实测兜底定时器比标称 3000ms 迟了 46~100ms）。阈值再往上抬之前必须先重估这个 +500。
+ *  - `config-index-coverage` 的语义索引等待：第 4 轮最坏一次墙钟 3294ms、单轮被偷 2671ms，阈值 100 下
+ *    仍记欠账 2571ms、实算 723ms（floor 1000ms，余量 277ms）。被偷的轮次越多它反而越宽松——
+ *    这条靠的是欠账记账，不是阈值大小。
+ * 阈值调整后复跑的两轮全量并行零偶发红：带取证的第 4 轮与不带取证的第 5 轮均 129 文件 / 1299 用例全绿，
+ * 点名两条 `config-index-coverage`（34.5s / 35.9s）与 `query-edit-resend-flow`（5.3s / 5.1s）稳定通过。
  */
-export const HEALTHY_POLL_MS = 25;
+export const HEALTHY_POLL_MS = 100;
 
 export interface WaitResult {
   /** 从调用到谓词成立实际等待的墙钟毫秒（供取证断言） */
@@ -80,6 +132,8 @@ export async function waitForProgress(
   const idleMs = options.idleMs ?? floorMs;
   const capMs = options.capMs ?? floorMs + idleMs + 1_000;
   const nowFn = options.now ?? Date.now;
+  /** 合成时钟下的节拍不是机器真实分布（T04461 的 A/B/C/D 用例），取证时必须能筛掉 */
+  const isSynthetic = options.now !== undefined;
   const startedAt = nowFn();
   let lastProgressAt = startedAt;
   let lastSignature = options.progress?.() ?? '-';
@@ -89,13 +143,24 @@ export async function waitForProgress(
   /** 上次进展时点的欠账快照：用它算「自上次进展以来」的欠账，而不是全程欠账 */
   let starveAtProgress = 0;
   let prevRoundAt = startedAt;
+  /** T04471：逐轮节拍样本，只在取证模式下落盘（见 dumpPollSamples） */
+  const gaps: number[] = [];
   for (;;) {
     rounds++;
     if (predicate()) {
-      return { elapsedMs: nowFn() - startedAt, rounds, starveMs };
+      const at = nowFn();
+      // 闭合轮的间隔（上一轮判红点到终点成立这一段）必须进样本：结构与其它轮完全一样
+      // （一次 await + 一次 predicate），漏掉它会让实测尾部系统性偏小——实测里就出现过
+      // rounds=2 / elapsed=1511ms 这种「全部耗时都落在闭合轮」的等待。判据本身不受影响
+      // （成功路径没有预算可判），所以这条只走取证出口。
+      if (POLL_SAMPLE_DUMP) gaps.push(at - prevRoundAt);
+      const result = { elapsedMs: at - startedAt, rounds, starveMs };
+      dumpPollSamples({ label, rounds, elapsedMs: result.elapsedMs, starveMs, outcome: 'ok', synthetic: isSynthetic, gaps });
+      return result;
     }
     const now = nowFn();
     const gap = now - prevRoundAt;
+    gaps.push(gap);
     prevRoundAt = now;
     if (gap > HEALTHY_POLL_MS) starveMs += gap - HEALTHY_POLL_MS;
     const elapsed = now - startedAt;
@@ -108,24 +173,26 @@ export async function waitForProgress(
       starveAtProgress = starveMs;
     } else if (ours > floorMs && elapsed - lastProgressAt - (starveMs - starveAtProgress) > idleMs) {
       const idleOurs = elapsed - lastProgressAt - (starveMs - starveAtProgress);
-      throw new Error(
+      const message =
         `waitForProgress 超时（第 ${elapsed}ms 仍无进展，其中调度器欠账 ${starveMs}ms，实算 ${ours}ms；` +
-          `无进展实算 ${idleOurs}ms > ${idleMs}ms（墙钟连续 ${elapsed - lastProgressAt}ms），` +
-          `且超过契约下限 ${floorMs}ms）：${label}\n` +
-          `  轮询 ${rounds} 次，最后进展于第 ${lastProgressAt - startedAt}ms\n` +
-          `  最后一次进展签名：${lastSignature}`,
-      );
+        `无进展实算 ${idleOurs}ms > ${idleMs}ms（墙钟连续 ${elapsed - lastProgressAt}ms），` +
+        `且超过契约下限 ${floorMs}ms）：${label}\n` +
+        `  轮询 ${rounds} 次，最后进展于第 ${lastProgressAt - startedAt}ms\n` +
+        `  最后一次进展签名：${lastSignature}`;
+      dumpPollSamples({ label, rounds, elapsedMs: elapsed, starveMs, outcome: 'idle-timeout', synthetic: isSynthetic, gaps });
+      throw new Error(message);
     }
     // 硬上限每轮都判，不看签名有没有变。旧实现把它挂在 `签名未变` 分支的 else if 上，
     // 于是「一直在动但永远不到终点」的链路只会靠用例自身超时兜底，与 capMs 的注释
     // （「到点无论有无进展都失败」）不符——T04461 落判据时顺带纠正，由 starvation 用例 D 锁住。
     if (ours > capMs) {
-      throw new Error(
+      const message =
         `waitForProgress 超时（实算 ${ours}ms > 硬上限 ${capMs}ms；墙钟 ${elapsed}ms，` +
-          `其中调度器欠账 ${starveMs}ms）：${label}\n` +
-          `  轮询 ${rounds} 次，最后进展于第 ${lastProgressAt - startedAt}ms\n` +
-          `  最后一次进展签名：${lastSignature}`,
-      );
+        `其中调度器欠账 ${starveMs}ms）：${label}\n` +
+        `  轮询 ${rounds} 次，最后进展于第 ${lastProgressAt - startedAt}ms\n` +
+        `  最后一次进展签名：${lastSignature}`;
+      dumpPollSamples({ label, rounds, elapsedMs: elapsed, starveMs, outcome: 'cap-timeout', synthetic: isSynthetic, gaps });
+      throw new Error(message);
     }
     await flushPromises();
     await new Promise((r) => setTimeout(r, 0));
