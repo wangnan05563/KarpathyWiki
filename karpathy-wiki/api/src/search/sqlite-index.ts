@@ -756,6 +756,22 @@ export function listPageIndexStates(dataDir: string): Map<string, { status: stri
   return new Map(rows.map((r) => [r.page_path, { status: r.status, attempts: r.attempts }]));
 }
 
+/** 索引变更代号（覆盖统计缓存的键成分）：任何一次影响「哪些页已覆盖/待补/失败」的写入都会推高其中至少一项。
+ *  四项来源：
+ *    chunks 行数——重切分/删页；
+ *    index_status 的行数与 attempts 合计——状态行增删、补算失败重试；
+ *    index_status 的最大 updated_at——同页数下的状态翻转（pending↔indexed）；
+ *    vec_gen——库内触发器逐行记数，向量的增删改跑不掉（也是 readVecGen 同一口径）。
+ *  成本：全是单行聚合（页面量级几百行），比它保护的那次覆盖统计便宜两个数量级。 */
+export function getIndexWatermark(dataDir: string): string {
+  const d = getIndexDb(dataDir);
+  const s = d.prepare(
+    `SELECT COUNT(*) AS row_count, IFNULL(SUM(attempts), 0) AS attempts, IFNULL(MAX(updated_at), '') AS latest FROM index_status`,
+  ).get() as { row_count: number; attempts: number; latest: string };
+  const chunks = (d.prepare('SELECT COUNT(*) AS n FROM chunks').get() as { n: number }).n;
+  return `c${chunks}|s${s.row_count}|a${s.attempts}|t${s.latest}|v${readVecGen(d)}`;
+}
+
 /** 模型过期页面清单（T04067）：chunk 已切分，但向量缺失或属于其它 embedding 模型。
  *  模型切换后这些页面的旧向量不可比——既不能参与召回，也要交给懒索引按新模型补算。
  *  判据按页聚合：只要有任一分块的向量不等于当前模型（含 LEFT JOIN 出的「无向量」NULL），该页即待补。 */

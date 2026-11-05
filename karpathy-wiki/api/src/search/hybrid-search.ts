@@ -9,6 +9,7 @@ import path from 'node:path';
 import { VaultService } from '../vault/vault-service.js';
 // T02686：与 search-util 同源——页面目录取 page-scope，不再各自写清单
 import { PAGE_DIRS } from '../vault/page-scope.js';
+import { DerivedCache, computePageSignature } from '../utils/derived-cache.js';
 import {
   getIndexDb,
   replacePageChunks,
@@ -18,6 +19,7 @@ import {
   vectorRecall,
   getIndexStatus,
   listPageIndexStates,
+  getIndexWatermark,
   listPendingPages,
   listStaleModelPages,
   removePageIndex,
@@ -177,7 +179,42 @@ export interface IndexCoverage {
   staleModelPages: number | null;
 }
 
+/** 覆盖统计的缓存（性能报告 §12.6「新发现」）。
+ *  为什么必须缓存：11-03 与 11-05 两轮压测里它都是 20 并发阶段的头号尾延迟源
+ *  （服务端 p50 226 ms，同期其余端点 ≤20 ms）——每个请求都要 7 次 readdir（libuv 线程池默认只有 4 个 worker）
+ *  外加逐页状态映射与 stale-model 的 LEFT JOIN，全部串行在请求线程上。
+ *  键里为什么同时放页面签名与索引代号：覆盖数由「vault 页面清单 × 库内状态」交叉得出，两侧都可能单独变。
+ *  只用页面签名会把懒索引补算期间的进展冻住（向量一页一页写进库，页面却没动）；
+ *  只用在库代号则挡不住「刚写完页还没同步」的那一段。两侧都进键后，任一侧有动静就立刻真算，
+ *  静止期（设置页轮询、无 key 的关键词检索）共享一次计算。
+ *  TTL 到期只触发一次「重新核键」，签名与代号都没变就续期（见 DerivedCache 的续期说明），
+ *  所以这里不会重现 11-01 那轮「每 30 s 在请求线程重扫全库」的静默。 */
+const COVERAGE_CACHE_TTL_MS = 10_000;
+const coverageCache = new DerivedCache<IndexCoverage>(COVERAGE_CACHE_TTL_MS, 'searchCoverage');
+
+/** 页面签名：桩 vault（覆盖统计的用例夹具）故意让 getChangeRevision 抛错，
+ *  那种情形退化为「纯 TTL 复用同一份快照」，不影响用例断言的口径。 */
+async function vaultPageSignature(vault: VaultService): Promise<string> {
+  let revision = 0;
+  try {
+    revision = vault.getChangeRevision();
+  } catch {
+    revision = 0;
+  }
+  return computePageSignature(vault.getVaultPath(), revision);
+}
+
 export async function getIndexCoverage(dataDir: string, vault: VaultService, model?: string): Promise<IndexCoverage> {
+  const signature = [
+    dataDir,
+    model || '',
+    await vaultPageSignature(vault),
+    getIndexWatermark(dataDir),
+  ].join('|');
+  return coverageCache.get(signature, () => computeIndexCoverage(dataDir, vault, model));
+}
+
+async function computeIndexCoverage(dataDir: string, vault: VaultService, model?: string): Promise<IndexCoverage> {
   const pages = await listVaultPages(vault);
   const states = listPageIndexStates(dataDir);
   let coveredPages = 0;

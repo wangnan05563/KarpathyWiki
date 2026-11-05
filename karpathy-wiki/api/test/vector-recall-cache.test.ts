@@ -325,8 +325,13 @@ describe('向量取数不再物化全表正文（T04069 防退化守卫）', () 
   });
 
   it('缓存失效判据只有库内代号一处，模块内不留第二套脏标记', () => {
+    // 2026-11-05：覆盖统计缓存（getIndexWatermark）也来读同一个代号，消费者从 1 个变成 2 个。
+    // 「调用次数 ≤2」会随正当消费者增加而误红，所以这里改盯真正的不变量——**读法只有一处**：
+    // 除 readVecGen 自身那一行 SELECT，模块内不许再出现直接读 vec_gen 的 SQL（那才是第二套判据）。
     const genReads = SRC.match(/readVecGen\(/g) ?? [];
-    expect(genReads.length).toBeLessThanOrEqual(2); // 定义 + 唯一调用点
+    expect(genReads.length, 'readVecGen 定义 + 至少一个调用点').toBeGreaterThanOrEqual(2);
+    const directGenSql = (SRC.match(/SELECT\s+gen\s+FROM\s+vec_gen/gi) ?? []).length;
+    expect(directGenSql, '代号只能经 readVecGen 读，别处再写一份 SELECT 就是第二套脏标记').toBe(1);
     expect(SRC).toMatch(/CREATE TRIGGER IF NOT EXISTS vec_gen_ad AFTER DELETE ON chunk_vecs/);
     expect(SRC).toMatch(/CREATE TRIGGER IF NOT EXISTS vec_gen_au AFTER UPDATE ON chunk_vecs/);
   });
