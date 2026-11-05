@@ -10,6 +10,8 @@
 //   A 取证（改前实况，永久留在仓库说明为什么要改）：11 处按原始表达式逐主题实算，
 //     断言未达标条数与「最差 ≤ 1.05」这两件事成立；
 //   B 数值主锁：11 处按配对 token 逐主题实算，必须 0 未达标；另加清理页危险态的 border-color 行；
+//     T04510 起 .remove-btn:hover 的混色面也从**源码实取**后进这条腿（原先只有结构断言，
+//     改混色方向不会惊动任何数值口径——测试里复刻一份表达式等于没测）；
 //   C 成对锁：每个落点的同一条规则里必须同时出现该面的 -fg 与 -bg，且前景不再有硬编码白
 //     （防「只接前景、底色仍写原渐变」的半接入——只数 token 出现次数兜不住这种）；
 //   D 取值定调锁：逐主题登记 --on-cool-bg / --on-aurora-bg 的字面取值，
@@ -28,7 +30,9 @@ import {
   foregroundOf,
   listHardWhiteForegroundUses,
   loadThemes,
+  pageOf,
   ruleBodies,
+  worstRatio,
   type AuditRow,
 } from './helpers/contrast';
 
@@ -63,10 +67,32 @@ const SITES: Site[] = [
 const row = (s: Site): AuditRow => ({ label: s.label, fg: `var(--${s.face}-fg)`, bg: `var(--${s.face}-bg)`, kind: s.kind });
 const beforeRow = (s: Site): AuditRow => ({ label: s.label, fg: s.beforeFg, bg: s.beforeBg, kind: s.kind });
 
+const src = (f: string) => readFileSync(join(ROOT, f), 'utf8');
+
+/**
+ * T04510：从源码实取 `.remove-btn:hover` 的混色面与它的前景（hover 不覆盖 color，前景仍来自基规则）。
+ * 必须在模块级实取而不是测试里复刻一份 `color-mix(..., black)`：复刻的那份永远绿，
+ * 源码把 black 换成 white 只有结构断言会红，数值主锁对真实的 hover 面一无所知。
+ * 形状不合预期时直接抛——抛错让腿变红，等于「锁跟丢了源码」这件事不会静默过去。
+ */
+const REMOVE_HOVER = (() => {
+  const s = src('src/components/AttachmentUploader.vue');
+  const hover = ruleBodies(s, '.remove-btn:hover');
+  if (hover.length !== 1) throw new Error(`.remove-btn:hover 规则应恰好 1 条，实测 ${hover.length} 条：数值锁要跟住真实源码`);
+  const bg = hover[0].match(/(?:^|;)[ \t\r\n]*background[ \t]*:[ \t]*([^;]+?)[ \t\r\n]*;/);
+  if (!bg) throw new Error('.remove-btn:hover 里没有 background 声明：数值锁失去对象');
+  const base = ruleBodies(s, '.remove-btn');
+  const fgs = base.length ? foregroundOf(base[0]) : [];
+  if (fgs.length !== 1) throw new Error(`.remove-btn 的前景声明应恰好 1 条，实测 ${fgs.length} 条`);
+  return { bg: bg[1].trim(), fg: fgs[0] };
+})();
+
 /** 附加行：同一条规则里的其它前景（不清钉 hover 会被通用 hover 规则顶掉，见 Cleanup.vue 注释） */
 const EXTRA_ROWS: AuditRow[] = [
   { label: '清理页·.cleanup-btn.danger [border-color·pink readable × 配对 tint 面]', fg: 'var(--pink-readable)', bg: 'var(--on-danger-tint-bg)', kind: 'ui' },
   { label: '问答页·.chip-tooltip [border 无·仅面本身]', fg: 'var(--on-tooltip-fg)', bg: 'var(--on-tooltip-bg)', kind: 'text' },
+  // T04510：hover 面（源码实取）——× 是文字符号，按 4.5 判；混色写法变了、比例变了、换成混白都会在这里红
+  { label: `附件上传·.remove-btn:hover [配对前景 × 源码实取混色面 ${REMOVE_HOVER.bg}]`, fg: REMOVE_HOVER.fg, bg: REMOVE_HOVER.bg, kind: 'text' },
 ];
 
 /** 取值定调锁：逐主题登记的压深面字面值（改它等于改本单定调，需连带工单一起动） */
@@ -133,8 +159,6 @@ const MOBILE_BASELINE: Record<string, number> = {
 };
 const FIXED_FILES = [...new Set(SITES.map((s) => s.file))];
 
-const src = (f: string) => readFileSync(join(ROOT, f), 'utf8');
-
 describe('T04472 · 取证：改前的硬白字面全线不达 AA', () => {
   it('A · 11 处按原始表达式逐主题实算：未达标条数 ≥ 70，且存在 ≤1.05 的「文字不可见」面', () => {
     const failures = auditThemes(SITES.map(beforeRow), loadThemes());
@@ -155,7 +179,7 @@ describe('T04472 · 取证：改前的硬白字面全线不达 AA', () => {
 });
 
 describe('T04472 · 数值主锁：配对 token 逐主题达标', () => {
-  it('B · 8 主题 × 11 面 + 2 附加行全部达 AA（文本 4.5 / 非文本 3.0）', () => {
+  it('B · 8 主题 × 11 面 + 3 附加行全部达 AA（文本 4.5 / 非文本 3.0）', () => {
     const failures = auditThemes([...SITES.map(row), ...EXTRA_ROWS], loadThemes());
     expect(failures, formatFailures(failures)).toEqual([]);
   });
@@ -173,10 +197,22 @@ describe('T04472 · 数值主锁：配对 token 逐主题达标', () => {
     expect(failures.length).toBeLessThanOrEqual(8);
   });
 
-  it('B3 · remove-btn 的 hover 只从配对底取色（不得退回未配对的 --danger）', () => {
+  it('B3 · remove-btn 的 hover 仍从配对底取色（不得退回未配对的 --danger）', () => {
     const s = src('src/components/AttachmentUploader.vue');
-    expect(s).toContain('background: color-mix(in srgb, var(--on-danger-bg) 85%, black);');
+    // T04510：本条只守「取色来源」。不再逐字钉 background 的整串写法——
+    // 钉死字面会让 `85%` 改成同一个比例的 `85.0%` 也报红（合法写法被误伤），
+    // 而「混黑还是混白」这件事本就该由 B（4.5 达标）与 B4（单调性）按实算判，不由字符串判。
+    expect(REMOVE_HOVER.bg, `hover 面的第一个操作数必须仍取配对底，实测：${REMOVE_HOVER.bg}`).toMatch(/^color-mix\(\s*in\s+srgb\s*,\s*var\(--on-danger-bg\)(\s+[\d.]+%)?\s*,/);
     expect(s, 'hover 若混 --danger 本体，压深底会被换回亮红、白字重新掉档').not.toContain('var(--danger, #d32f2f)');
+  });
+
+  it('B4 · 混色面对配对前景必须单调不变差（往黑里混只降亮度，换成亮色当场红）', () => {
+    for (const t of loadThemes()) {
+      const page = pageOf(t.decls);
+      const base = worstRatio(REMOVE_HOVER.fg, 'var(--on-danger-bg)', t.decls, page);
+      const mixed = worstRatio(REMOVE_HOVER.fg, REMOVE_HOVER.bg, t.decls, page);
+      expect(mixed, `${t.name}：混色后 ${base.toFixed(2)} → ${mixed.toFixed(2)}，混的不是暗色（T04472 的定调是只往黑里混）`).toBeGreaterThanOrEqual(base);
+    }
   });
 });
 

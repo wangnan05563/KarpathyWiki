@@ -124,7 +124,62 @@ const NAMED_COLORS: Record<string, RGB> = {
   black: { r: 0, g: 0, b: 0, a: 1 },
 };
 
-/** 解析 var() 链（含嵌套 fallback）与 rgba()/hex，返回可用于合成的实色或渐变端点 */
+/**
+ * T04510：只登记 **srgb** 的 `color-mix(in srgb, A [p%], B [q%])`。
+ * 按预乘 alpha 混（CSS Color 5 的口径）：`color-mix(in srgb, X 12%, transparent)` 得到「X 的色相 + a=0.12」。
+ * 若图省事按非预乘直接混，transparent 的黑底会把 X 一路拉暗（12% 时约 rgb(0.12X)），
+ * 那些面的实算会同时骗过「不达标的红」和「达标的绿」——两种假。
+ * 其余色彩空间（oklab/oklch/hsl…）、渐变操作数、双边比例不合规：一律抛错，绝不回落成某个颜色
+ * （沿用 NAMED_COLORS 的纪律：静默猜色就是把假达标写进主锁）。
+ */
+const COLOR_MIX_RE = /^color-mix\(\s*in\s+([A-Za-z-]+)\s*,([\s\S]*)\)$/;
+
+/**
+ * 取操作数尾部的百分比。只认「以 % 结尾 + 数字段 + 前一个字符是空白 + 前缀括号配平」，
+ * 否则 `rgba(0 0 0 / 85%)` 这类把百分比写在括号里的写法会被从中间劈开，得出一个错色。
+ */
+function splitOperandPercent(part: string): { expr: string; pct: number | null } {
+  if (!part.endsWith('%')) return { expr: part, pct: null };
+  let k = part.length - 2;
+  while (k > 0 && /[\d.]/.test(part[k - 1])) k--;
+  const expr = part.slice(0, k).trim();
+  const pct = Number(part.slice(k, part.length - 1));
+  if (!expr || !/\s/.test(part[k - 1]) || !Number.isFinite(pct)) return { expr: part, pct: null };
+  let depth = 0;
+  for (const ch of expr) {
+    if (ch === '(') depth++;
+    else if (ch === ')' && --depth < 0) return { expr: part, pct: null };
+  }
+  return depth === 0 ? { expr, pct } : { expr: part, pct: null };
+}
+
+/** color-mix 的一边：递归 resolve 出实色 + 它登记的百分比；渐变操作数显式报错（端点无法定权） */
+function resolveMixOperand(part: string, decls: Map<string, string>, depth: number, expr: string): { c: RGB; pct: number | null } {
+  const { expr: sub, pct } = splitOperandPercent(part);
+  const r = resolve(sub, decls, depth + 1);
+  if ('stops' in r) throw new Error(`color-mix 的操作数是渐变，端点无法定权（表达式：${expr}）`);
+  return { c: r.solid, pct };
+}
+
+/** 两操作数的权重：单边给比例则另一边取补，双边都给必须和为 100（其余形状不在登记口径内） */
+function mixWeights(p1: number | null, p2: number | null, expr: string): [number, number] {
+  if (p1 === null && p2 === null) return [0.5, 0.5];
+  if (p1 !== null && p2 === null) return [p1 / 100, 1 - p1 / 100];
+  if (p1 === null && p2 !== null) return [1 - p2 / 100, p2 / 100];
+  const sum = (p1 as number) + (p2 as number);
+  if (Math.abs(sum - 100) > 1e-6) throw new Error(`color-mix 双边比例和为 ${sum}%，非 100% 的归一化写法不在口径内（表达式：${expr}）`);
+  return [(p1 as number) / 100, (p2 as number) / 100];
+}
+
+/** 预乘 alpha 的 srgb 混合：gamma 编码分量直接插值（srgb 空间的定义就是按编码值混） */
+function mixSrgb(a: RGB, b: RGB, wa: number, wb: number): RGB {
+  const alpha = wa * a.a + wb * b.a;
+  if (alpha === 0) return { r: 0, g: 0, b: 0, a: 0 };
+  const ch = (x: number, y: number) => (wa * x * a.a + wb * y * b.a) / alpha;
+  return { r: ch(a.r, b.r), g: ch(a.g, b.g), b: ch(a.b, b.b), a: alpha };
+}
+
+/** 解析 var() 链（含嵌套 fallback）、rgba()/hex、linear-gradient 端点与 srgb 的 color-mix() */
 export function resolve(expr: string, decls: Map<string, string>, depth = 0): { solid: RGB } | { stops: RGB[] } {
   const e = expr.trim();
   const varName = e.match(/^var\((--[\w-]+)\)$/);
@@ -161,6 +216,16 @@ export function resolve(expr: string, decls: Map<string, string>, depth = 0): { 
   if (/^#[0-9a-f]{3,8}$/i.test(e)) return { solid: hexToRgb(e) };
   const named = NAMED_COLORS[e.toLowerCase()];
   if (named) return { solid: named };
+  const mix = e.match(COLOR_MIX_RE);
+  if (mix) {
+    if (mix[1].toLowerCase() !== 'srgb') throw new Error(`color-mix 色彩空间 in ${mix[1]} 不在解析口径内（表达式：${expr}）`);
+    const parts = splitTopLevel(mix[2]).map((p) => p.trim());
+    if (parts.length !== 2) throw new Error(`color-mix 需要恰好两个操作数，实测 ${parts.length} 个（表达式：${expr}）`);
+    const A = resolveMixOperand(parts[0], decls, depth, expr);
+    const B = resolveMixOperand(parts[1], decls, depth, expr);
+    const [wa, wb] = mixWeights(A.pct, B.pct, expr);
+    return { solid: mixSrgb(A.c, B.c, wa, wb) };
+  }
   throw new Error(`无法解析颜色表达式：${expr}`);
 }
 
