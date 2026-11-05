@@ -342,7 +342,7 @@ watch(
 }
 
 .row-badge.ineffective {
-  color: var(--neon-amber, #f5a623);
+  color: var(--warning-readable);
   border-color: rgba(245, 166, 35, 0.5);
 }
 

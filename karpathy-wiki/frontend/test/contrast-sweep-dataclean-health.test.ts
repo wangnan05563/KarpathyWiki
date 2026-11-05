@@ -1,19 +1,21 @@
 // T04449 口径推广·第三组：数据清洗页（DataClean.vue）+ 体检页（Health.vue）。
 // 与首组/第二组同一缺陷族：把为深色霓虹底设计的强调色基名直接写进 color / border(-color) / outline，
-// 在浅底主题上跌破 WCAG AA。本组覆盖两页全部 60 处「基色当前景」消费点（清洗页 33 + 体检页 27），
+// 在浅底主题上跌破 WCAG AA。本组覆盖两页全部 62 处「基色当前景」消费点（清洗页 33 + 体检页 29），
 // 其中包含 CSS 扫描看不见的模板内联 style（清洗页 3 处）——它们同样是用户可见文字。
 //
 // 口径边界（写清楚，避免下一组误判）：
-//   - 前景（文字/图标/描边/色条/焦点环）一律走 *-readable；本组涉及四个族：
-//     accent（青）/ pink（粉红·危险）/ purple（紫）/ lime（绿·成功，本组新建 token）。
+//   - 前景（文字/图标/描边/色条/焦点环）一律走 *-readable；本组涉及五个族：
+//     accent（青）/ pink（粉红·危险）/ purple（紫）/ lime（绿·成功，本组新建 token）/
+//     warning（琥珀·警告，T04460 把两处假 token 转真后并入）。
 //   - 体检页的「通过 / 警告 / 危险」三态没有使用 --warning-* token，而是复用 magenta/pink/lime 族，
-//     因此按 pink-readable / lime-readable 接入；--warning-readable 在本组无真实消费点，不硬凑。
+//     因此按 pink-readable / lime-readable 接入。（T04460 后 .job-stat.warn / .estimate-basis 两处
+//     琥珀假 token 改接 --warning-readable，本组口径新增这两处前景消费点，见下方逐主题实算。）
 //   - 大量 `border: 1px solid var(--accent-purple-aNN)` 是刻意压淡的装饰性分隔线：实测它在深色母主题上
 //     同样只有 1.07~1.6:1（见 T04449 回传），属全站视觉语言而非浅底主题回归，不在本组口径内；
 //     若要按 1.4.11 重定 alpha 档需要单独的设计裁决（已建派生单）。
-//   - `.job-stat.warn` / `.estimate-basis.is-low-confidence` 引用的 --neon-amber / --accent-amber
-//     是**从未定义的假 token**（渲染恒等于继承色），已冻结在 T04448 的 FAKE_TOKEN_BASELINE 里、
-//     由 T04460 专项治理；本组不改它（那是渲染缺陷而非对比度缺陷），只在下面用基线锁拦住新增。
+//   - `.job-stat.warn` / `.estimate-basis.is-low-confidence` 曾引用从未定义的 --neon-amber /
+//     --accent-amber（渲染恒等于写死的 fallback 橙），T04460 已改接 --warning-readable 并纳入
+//     下面的逐主题实算清单；页面上不得再出现任何空挂 var()（由 qa-contrast-pairing 零空挂硬断言把关）。
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -90,7 +92,7 @@ const AUDIT: AuditRow[] = [
   { label: '清洗页·AI 新增项标记', fg: 'var(--accent-readable)', bg: CARD, kind: 'text' },
   { label: '清洗页·AI 流转箭头', fg: 'var(--accent-readable)', bg: CARD, kind: 'text' },
   { label: '清洗页·AI 分组代表页（淡青 tint 面）', fg: 'var(--accent-readable)', bg: 'var(--accent-cyan-a10, rgba(0, 255, 200, 0.1))', kind: 'text' },
-  // —— 体检页（27）——
+  // —— 体检页（29，含 T04460 转真的 2 处琥珀前景）——
   { label: '体检页·主按钮 hover 描边', fg: 'var(--accent-readable)', bg: CARD, kind: 'ui' },
   { label: '体检页·主按钮 hover 文字', fg: 'var(--accent-readable)', bg: CARD, kind: 'text' },
   { label: '体检页·批量修复按钮文字（红族）', fg: 'var(--pink-readable)', bg: CARD, kind: 'text' },
@@ -118,23 +120,28 @@ const AUDIT: AuditRow[] = [
   { label: '体检页·目录行代码片段（紫族）', fg: 'var(--purple-readable)', bg: CARD, kind: 'text' },
   { label: '体检页·清空日志按钮 hover（红族）', fg: 'var(--pink-readable)', bg: CARD, kind: 'text' },
   { label: '体检页·修复日志工具名（淡青 tint 面）', fg: 'var(--accent-readable)', bg: 'var(--accent-cyan-a10)', kind: 'text' },
+  // T04460：以下两点此前引用假 token（--neon-amber / --accent-amber），实际渲染恒等于写死的
+  // fallback 橙（#f5a623 / #ffb224），换真 token --warning-readable 后第一次真正随主题变化，
+  // 因此纳入逐主题实算
+  { label: '体检页·任务统计「未消解」琥珀文字', fg: 'var(--warning-readable)', bg: CARD, kind: 'text' },
+  { label: '体检页·估算依据「低置信」琥珀文字', fg: 'var(--warning-readable)', bg: CARD, kind: 'text' },
 ];
 
 /** readable 消费点总数（数 token 名出现次数，不受单行规则 / 内联 style / !important 排版影响） */
 const readableRefCount = (src: string) => (src.match(/-readable/g) || []).length;
 
 describe('T04449 推广第三组：清洗页/体检页前景逐主题达标', () => {
-  it('8 主题 × 60 面全部达 AA（文本 4.5 / 非文本 3.0）', () => {
+  it('8 主题 × 62 面全部达 AA（文本 4.5 / 非文本 3.0）', () => {
     const failures = auditThemes(AUDIT, themes);
     expect(failures, formatFailures(failures)).toEqual([]);
   });
 
   it('清单规模与两页实现严格对齐（防止清单与代码脱钩空转）', () => {
-    expect(AUDIT.length).toBe(60);
+    expect(AUDIT.length).toBe(62);
     const dc = readFileSync(join(ROOT, FILES[0]), 'utf8');
     const he = readFileSync(join(ROOT, FILES[1]), 'utf8');
     expect(readableRefCount(dc), 'DataClean.vue 的 readable 消费点数与清单不一致').toBe(33);
-    expect(readableRefCount(he), 'Health.vue 的 readable 消费点数与清单不一致').toBe(27);
+    expect(readableRefCount(he), 'Health.vue 的 readable 消费点数与清单不一致').toBe(29);
   });
 
   it('每个包裹表达式括号平衡（防止接入器吃掉右括号）', () => {
@@ -148,7 +155,7 @@ describe('T04449 推广第三组：清洗页/体检页前景逐主题达标', ()
   it('审计清单里的每个 readable token 都在对应页面被真实消费', () => {
     const src = FILES.map((f) => readFileSync(join(ROOT, f), 'utf8')).join('\n');
     const tokens = [...new Set(AUDIT.map((r) => r.fg.match(/--([\w-]+-readable)/)![1]))];
-    expect(tokens.sort()).toEqual(['accent-readable', 'lime-readable', 'pink-readable', 'purple-readable']);
+    expect(tokens.sort()).toEqual(['accent-readable', 'lime-readable', 'pink-readable', 'purple-readable', 'warning-readable']);
     for (const t of tokens) expect(src, `清单需要 ${t}，但页面里没有它的消费点`).toContain(`var(--${t}`);
   });
 
@@ -251,9 +258,10 @@ describe('T04449 推广第三组：口径守护（基色不得再裸写进前景
     expect(count(FILES[1])).toBeLessThanOrEqual(23);
   });
 
-  it('假 token（--neon-amber / --accent-amber）在这两页停在 2 处，只允许下降', () => {
-    // 归属 T04460（假 token 专项），这里只锁「不再变多」。
+  it('假 token（--neon-amber / --accent-amber）在这两页已清零（T04460 治理后为硬断言）', () => {
+    // T04448 时代这里是「停在 2 处，只允许下降」的棘轮；T04460 把两处改接到本主题
+    // --warning-readable（真 token），此后新增空挂即在 qa-contrast-pairing 的零空挂硬断言里红。
     const total = FILES.map((f) => readFileSync(join(ROOT, f), 'utf8')).join('\n').match(/var\(\s*--(?:neon|accent)-amber\b/g) || [];
-    expect(total.length).toBeLessThanOrEqual(2);
+    expect(total, '两页仍引用从未定义的琥珀假 token').toEqual([]);
   });
 });

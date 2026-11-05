@@ -5421,7 +5421,7 @@ async function importConfig() {
 .unsaved-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-color);
+  color: var(--text-base);
 }
 
 .unsaved-desc {
@@ -5440,10 +5440,10 @@ async function importConfig() {
   gap: 10px;
   margin-bottom: 16px;
   padding: 10px 14px;
-  border: 1px solid var(--accent-danger-a30, rgba(220, 76, 90, 0.35));
+  border: 1px solid var(--accent-danger-a30);
   border-left-width: 3px;
   border-radius: 10px;
-  background: var(--accent-danger-a10, rgba(220, 76, 90, 0.08));
+  background: var(--accent-danger-a10);
 }
 
 .pending-icon {
@@ -5469,7 +5469,7 @@ async function importConfig() {
 .pending-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-color);
+  color: var(--text-base);
 }
 
 .pending-list {
@@ -5558,7 +5558,7 @@ async function importConfig() {
   border-radius: 8px;
   background: var(--bg-scene);
   border: 1px solid var(--accent-purple-a20);
-  color: var(--text-color);
+  color: var(--text-base);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.7;

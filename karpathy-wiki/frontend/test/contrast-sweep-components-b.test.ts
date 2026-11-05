@@ -361,10 +361,11 @@ describe('T04470 批次 B：状态点 currentColor 惯用法（10 处，不按�
       expect(blocks.length, '状态点规则块没扫到').toBeGreaterThanOrEqual(5);
       const bareColor = blocks.filter((b) => /(^|[;\n])\s*color:\s*var\(--neon-/m.test(b));
       expect(bareColor, `仍有裸基色 color：${bareColor.map((b) => b.trim().slice(0, 40)).join(' | ')}`).toEqual([]);
-      const glows = [...src.matchAll(/--dot-glow:\s*var\((--neon-[\w-]+)\)/g)].map((m) => m[1]);
+      const glows = [...src.matchAll(/--dot-glow:\s*var\((--[\w-]+)\)/g)].map((m) => m[1]);
       expect(glows.length, `${f} --dot-glow 声明数`).toBe(GLOW[f]);
       // 光晕与填充逐条同 token：颜色对调（例如 done 点亮成粉）会被这条抓到
-      const pairs = [...src.matchAll(/background:\s*var\((--neon-[\w-]+)\);\s*\r?\n\s*--dot-glow:\s*var\((--neon-[\w-]+)\)/g)];
+      // T04460 后中断态改用真 token --warning（--neon-amber 从未定义），故配对口径不再限定 --neon- 族
+      const pairs = [...src.matchAll(/background:\s*var\((--[\w-]+)\);\s*\r?\n\s*--dot-glow:\s*var\((--[\w-]+)\)/g)];
       expect(pairs.length, '填充与光晕的同 token 配对数').toBe(GLOW[f]);
       expect(pairs.every((p) => p[1] === p[2]), `${f} 存在光晕色与填充色不同 token`).toBe(true);
       expect(src).not.toMatch(/box-shadow: 0 0 8px currentColor/);
@@ -375,7 +376,8 @@ describe('T04470 批次 B：状态点 currentColor 惯用法（10 处，不按�
   it('BatchProgressBar 中断态（琥珀）点同步改走 --dot-glow，否则基块改完后它会失去光晕', () => {
     const block = /\.batch-progress-container\.interrupted \.progress-status-dot \{([^}]*)\}/.exec(srcOf('BatchProgressBar.vue'));
     expect(block, '中断态规则块丢失').not.toBeNull();
-    expect(block![1]).toMatch(/--dot-glow: var\(--neon-amber\)/);
+    // T04460：原 var(--neon-amber) 是假 token（恒等于 fallback 的霓虹橙），现改走本主题警示色
+    expect(block![1]).toMatch(/--dot-glow: var\(--warning\)/);
     expect(block![1]).toMatch(/box-shadow: 0 0 8px var\(--dot-glow\)/);
     expect(block![1]).not.toMatch(/(^|[;\n])\s*color:/);
   });

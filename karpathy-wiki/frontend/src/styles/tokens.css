@@ -225,6 +225,12 @@
   --accent-cyan-a70: rgba(107, 157, 255, 0.7);
   --accent-pink-a70: rgba(248, 81, 73, 0.7);
   --accent-magenta-a70: rgba(240, 136, 62, 0.7);
+  /* 语义 tint 档位：绿=本主题 --success，红=本主题 --danger（暗底校准值，T04460 由假 token 转真） */
+  --accent-lime-a10: rgba(63, 185, 80, 0.1);
+  --accent-lime-a25: rgba(63, 185, 80, 0.25);
+  --accent-lime-a40: rgba(63, 185, 80, 0.4);
+  --accent-danger-a10: rgba(248, 81, 73, 0.1);
+  --accent-danger-a30: rgba(248, 81, 73, 0.3);
 
   /* ---- Element Plus --el-* 桥接（FR-24 规格 5）----
      EP 弹层 teleport 到 body，但 data-theme 挂在 <html>，变量经继承到达，

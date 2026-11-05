@@ -339,7 +339,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg-sidebar, rgba(255, 255, 255, 0.03));
+  background: var(--bg-glass);
   border-right: 1px solid var(--border-color, rgba(128, 128, 128, 0.15));
   /* F-3.11 折叠动画 ≤ 250ms：SRS 验收标准要求 */
   transition: width 250ms ease;
@@ -585,7 +585,7 @@ onBeforeUnmount(() => {
   height: 40px;
   border-radius: 0 8px 8px 0;
   border: 1px solid var(--border-color, rgba(128, 128, 128, 0.15));
-  background: var(--bg-sidebar, rgba(255, 255, 255, 0.05));
+  background: var(--bg-glass);
   color: var(--text-soft, #888);
   cursor: pointer;
   font-size: 10px;

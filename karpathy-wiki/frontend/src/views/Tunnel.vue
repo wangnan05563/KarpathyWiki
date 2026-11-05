@@ -1450,7 +1450,7 @@ onBeforeUnmount(() => {
 .prereq-label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-color, #eee);
+  color: var(--text-base);
 }
 
 .prereq-detail {
@@ -1482,7 +1482,7 @@ onBeforeUnmount(() => {
   padding: 4px 10px;
   font-size: 12px;
   border-radius: 8px;
-  border: 1px solid var(--accent-blue-a35, rgba(21, 84, 209, 0.35));
+  border: 1px solid var(--border-accent);
   background: transparent;
   color: var(--text-soft, #ccc);
   cursor: pointer;

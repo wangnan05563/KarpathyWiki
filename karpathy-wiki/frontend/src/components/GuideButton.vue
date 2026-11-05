@@ -48,7 +48,7 @@ const tooltip = computed(() => (guide.visible ? '引导进行中' : '查看本�
   border: none;
   border-radius: 50%;
   background: var(--bg-card, #ffffff);
-  color: var(--text-secondary, #6b7380);
+  color: var(--text-soft);
   cursor: pointer;
   box-shadow: 0 6px 20px var(--accent-purple-a20, rgba(124, 77, 255, 0.2));
   transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease;

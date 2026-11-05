@@ -235,6 +235,12 @@
   --accent-cyan-a70: rgba(47, 125, 224, 0.7);
   --accent-pink-a70: rgba(217, 54, 54, 0.7);
   --accent-magenta-a70: rgba(224, 121, 43, 0.7);
+  /* 语义 tint 档位：绿=本主题 --lime-readable 色相，红=本主题 --danger 色相（T04460 由假 token 转真） */
+  --accent-lime-a10: rgba(37, 133, 83, 0.1);
+  --accent-lime-a25: rgba(37, 133, 83, 0.25);
+  --accent-lime-a40: rgba(37, 133, 83, 0.4);
+  --accent-danger-a10: rgba(220, 38, 38, 0.1);
+  --accent-danger-a30: rgba(220, 38, 38, 0.3);
 }
 
 /* ============================================================

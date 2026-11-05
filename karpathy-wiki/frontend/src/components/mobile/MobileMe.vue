@@ -478,7 +478,7 @@ select.mme-input {
   width: 100%;
   padding: 12px 10px;
   border-radius: 10px;
-  background: var(--m-surface-2, #ffffff);
+  background: var(--m-surface);
   border: 1px solid var(--m-border, #ececee);
   color: var(--m-text, #111111);
   font-size: 14px;

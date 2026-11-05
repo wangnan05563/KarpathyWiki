@@ -758,7 +758,7 @@ onMounted(() => {
 
 .dir-canonical {
   background: rgba(57, 255, 20, 0.1);
-  border-color: var(--accent-lime-a40, rgba(57, 255, 20, 0.4));
+  border-color: var(--accent-lime-a40);
   color: var(--neon-lime);
 }
 
@@ -788,7 +788,7 @@ onMounted(() => {
 .mode-safe,
 .block-mode.mode-safe {
   background: rgba(57, 255, 20, 0.1);
-  border-color: var(--accent-lime-a40, rgba(57, 255, 20, 0.4));
+  border-color: var(--accent-lime-a40);
   color: var(--neon-lime);
 }
 

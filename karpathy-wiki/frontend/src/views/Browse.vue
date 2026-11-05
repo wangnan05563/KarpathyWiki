@@ -2778,7 +2778,7 @@ onMounted(async () => {
   background: var(--bg-card);
   border: 1px solid var(--accent-purple-a25);
   border-radius: 8px;
-  color: var(--text-secondary);
+  color: var(--text-soft);
   cursor: pointer;
   box-shadow: 0 4px 12px var(--accent-purple-a15);
   transition: color 0.2s ease, border-color 0.2s ease;
@@ -2882,7 +2882,7 @@ onMounted(async () => {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: var(--text-secondary);
+  color: var(--text-soft);
   cursor: pointer;
   transition: color 0.2s ease, background 0.2s ease;
 }
@@ -2938,7 +2938,7 @@ onMounted(async () => {
   background: var(--bg-card);
   border: 1px solid var(--accent-purple-a20);
   border-radius: 0 8px 8px 0;
-  color: var(--text-secondary);
+  color: var(--text-soft);
   cursor: pointer;
   box-shadow: 0 4px 12px var(--accent-purple-a15);
   transition: color 0.2s ease;
@@ -2985,7 +2985,7 @@ onMounted(async () => {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: var(--text-secondary);
+  color: var(--text-soft);
   cursor: pointer;
   transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
 }
@@ -3096,7 +3096,7 @@ onMounted(async () => {
   border: none;
   border-radius: 6px;
   font-size: 11px;
-  color: var(--text-secondary);
+  color: var(--text-soft);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
@@ -3314,7 +3314,7 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-/* FR-18 时效角标：ok=绿(stale 语义用 --graph-solutions) / stale=橙(--graph-qa) / unknown=灰(text-secondary)。
+/* FR-18 时效角标：ok=绿(stale 语义用 --graph-solutions) / stale=橙(--graph-qa) / unknown=灰(--text-dim)。
    只用主题既有变量，保证深浅主题下语义一致。hover 的 title 展示距今时长。 */
 .status-dot {
   display: inline-block;
@@ -3323,7 +3323,7 @@ onMounted(async () => {
   margin-right: 6px;
   border-radius: 50%;
   vertical-align: middle;
-  background: var(--text-secondary);
+  background: var(--text-dim);
 }
 .status-dot.ok {
   background: var(--graph-solutions, #00ff88);
@@ -3334,7 +3334,7 @@ onMounted(async () => {
   box-shadow: 0 0 6px rgba(255, 149, 0, 0.55);
 }
 .status-dot.unknown {
-  background: var(--text-secondary);
+  background: var(--text-dim);
 }
 
 .search-results {

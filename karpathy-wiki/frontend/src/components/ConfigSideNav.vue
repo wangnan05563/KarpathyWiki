@@ -94,7 +94,7 @@ function tabTip(item: ConfigTabMeta & { locked: boolean }): string {
   margin: 0 0 6px;
   font-size: 11px;
   line-height: 1.5;
-  color: var(--text-faint, #9aa3af);
+  color: var(--text-dim);
 }
 .nav-list {
   list-style: none;
@@ -114,7 +114,7 @@ function tabTip(item: ConfigTabMeta & { locked: boolean }): string {
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
-  color: var(--text-color, #333);
+  color: var(--text-base);
   font-size: 13px;
   text-align: left;
   cursor: pointer;
@@ -130,7 +130,7 @@ function tabTip(item: ConfigTabMeta & { locked: boolean }): string {
   font-weight: 600;
 }
 .nav-item.is-locked {
-  color: var(--text-faint, #9aa3af);
+  color: var(--text-dim);
   cursor: not-allowed;
 }
 .nav-item.is-locked:hover {

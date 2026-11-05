@@ -186,6 +186,12 @@
   --accent-cyan-a70: rgba(201, 169, 97, 0.7);
   --accent-pink-a70: rgba(139, 115, 85, 0.7);
   --accent-magenta-a70: rgba(212, 181, 114, 0.7);
+  /* 语义 tint 档位：绿=本主题 --lime-readable 色相，红=本主题 --danger 色相（T04460 由假 token 转真） */
+  --accent-lime-a10: rgba(130, 113, 73, 0.1);
+  --accent-lime-a25: rgba(130, 113, 73, 0.25);
+  --accent-lime-a40: rgba(130, 113, 73, 0.4);
+  --accent-danger-a10: rgba(179, 38, 30, 0.1);
+  --accent-danger-a30: rgba(179, 38, 30, 0.3);
 
   /* Additional alpha variants for portfolio theme */
   --accent-purple-a20: rgba(26, 26, 26, 0.2);

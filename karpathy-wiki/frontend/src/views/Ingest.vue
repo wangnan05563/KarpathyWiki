@@ -2089,11 +2089,11 @@ function handleUrlInputChange() {
   align-items: flex-start;
   gap: 8px;
   padding: 12px 16px;
-  background: var(--accent-red-a08, rgba(255, 119, 158, 0.12));
-  border: 1px solid var(--accent-red-a30, rgba(255, 119, 158, 0.35));
+  background: var(--accent-danger-a10);
+  border: 1px solid var(--accent-danger-a30);
   border-radius: 10px;
   margin-bottom: 14px;
-  color: var(--accent-red-text, #d6336c);
+  color: var(--pink-readable);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -2101,7 +2101,7 @@ function handleUrlInputChange() {
 .url-diagnosis-banner .el-icon {
   margin-top: 2px;
   flex-shrink: 0;
-  color: var(--accent-red-text, #d6336c);
+  color: var(--pink-readable);
 }
 
 .url-pages-title,

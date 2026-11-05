@@ -1263,7 +1263,7 @@ onMounted(() => {
 
 /* 未消解：流程没报错但问题还在，用琥珀色与「失败」区分开 */
 .job-stat.warn {
-  color: var(--neon-amber, #f5a623);
+  color: var(--warning-readable);
 }
 
 .job-stat.fail {
@@ -1507,14 +1507,14 @@ onMounted(() => {
 
 /* 样本不足（default / measured-low）：把「估算非承诺」显性化，避免被当成实测值 */
 .estimate-basis.is-low-confidence {
-  color: var(--accent-amber, #ffb224);
+  color: var(--warning-readable);
 }
 
 /* ===== 修复日志 ===== */
 .fix-log-section {
   padding: 18px 22px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-lime-a25, rgba(193, 255, 62, 0.25));
+  border: 1px solid var(--accent-lime-a25);
   border-radius: var(--radius-card);
 }
 
@@ -1529,8 +1529,8 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   padding: 7px 14px;
-  background: var(--accent-lime-a08, rgba(193, 255, 62, 0.08));
-  border: 1px solid var(--accent-lime-a20, rgba(193, 255, 62, 0.2));
+  background: var(--accent-lime-a10);
+  border: 1px solid var(--accent-lime-a25);
   border-radius: 8px;
   font-family: var(--font-mono);
   font-size: 12px;

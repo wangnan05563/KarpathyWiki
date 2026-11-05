@@ -186,6 +186,12 @@
   --accent-cyan-a70: rgba(168, 224, 216, 0.7);
   --accent-pink-a70: rgba(255, 179, 209, 0.7);
   --accent-magenta-a70: rgba(255, 196, 214, 0.7);
+  /* 语义 tint 档位：绿=本主题 --lime-readable 色相，红=本主题 --danger 色相（T04460 由假 token 转真） */
+  --accent-lime-a10: rgba(106, 120, 84, 0.1);
+  --accent-lime-a25: rgba(106, 120, 84, 0.25);
+  --accent-lime-a40: rgba(106, 120, 84, 0.4);
+  --accent-danger-a10: rgba(224, 108, 108, 0.1);
+  --accent-danger-a30: rgba(224, 108, 108, 0.3);
 
   /* Additional alpha variants for macaron theme */
   --accent-purple-a20: rgba(200, 162, 232, 0.2);

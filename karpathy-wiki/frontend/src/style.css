@@ -259,6 +259,12 @@
   --accent-cyan-a70: rgba(0, 245, 255, 0.7);
   --accent-pink-a70: rgba(255, 0, 110, 0.7);
   --accent-magenta-a70: rgba(255, 62, 201, 0.7);
+  /* 语义 tint 档位：绿=本主题 --lime-readable 色相，红=本主题 --danger 色相（T04460 由假 token 转真） */
+  --accent-lime-a10: rgba(193, 255, 62, 0.1);
+  --accent-lime-a25: rgba(193, 255, 62, 0.25);
+  --accent-lime-a40: rgba(193, 255, 62, 0.4);
+  --accent-danger-a10: rgba(248, 113, 113, 0.1);
+  --accent-danger-a30: rgba(248, 113, 113, 0.3);
 
   /* ============================================================
    * 移动端毛玻璃（glassmorphism）设计 token

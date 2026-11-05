@@ -1991,7 +1991,7 @@ watch(loading, () => {
 .gap-chip:hover {
   border-color: var(--pink-readable, var(--neon-pink, var(--accent-pink-a70)));
   color: var(--pink-readable, var(--neon-pink, var(--accent-pink-a70)));
-  box-shadow: var(--glow-pink, 0 0 12px var(--accent-pink-a40));
+  box-shadow: 0 0 12px var(--accent-pink-a40);
 }
 
 .gap-chip-icon {

@@ -811,7 +811,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   font-weight: 600;
   letter-spacing: 0;
   vertical-align: 2px;
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border: var(--border-glass);
 }
 .head-status.is-running {
   color: #00f5ff;
@@ -1064,7 +1064,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 
 .quick-switch-label {
   font-size: 13px;
-  color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+  color: var(--text-soft);
 }
 
 /* 缓存命中提示 */

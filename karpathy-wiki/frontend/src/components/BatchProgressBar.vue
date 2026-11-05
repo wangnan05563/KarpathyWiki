@@ -166,7 +166,7 @@ const progressColor = computed(() => {
     case 'cancelled':
       return 'var(--neon-pink)';
     case 'interrupted':
-      return 'var(--neon-amber)';
+      return 'var(--warning)';
     case 'running':
       return 'var(--neon-pink)';
     default:
@@ -324,8 +324,8 @@ function handleCancel() {
 }
 
 .batch-progress-container.interrupted .progress-status-dot {
-  background: var(--neon-amber);
-  --dot-glow: var(--neon-amber);
+  background: var(--warning);
+  --dot-glow: var(--warning);
   box-shadow: 0 0 8px var(--dot-glow);
 }
 
@@ -512,11 +512,11 @@ function handleCancel() {
 
 .interrupted-banner {
   background: var(--accent-purple-a08);
-  color: var(--neon-amber);
+  color: var(--warning-readable);
 }
 
 .interrupted-banner::before {
-  background: var(--neon-amber);
+  background: var(--warning);
 }
 
 .banner-icon {

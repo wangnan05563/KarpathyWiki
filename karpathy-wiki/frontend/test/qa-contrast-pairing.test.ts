@@ -304,10 +304,18 @@ describe('T04447 用户气泡正文配对（逐主题最差值 + 色值锁）', 
 //   （= 本主题 *-base）+ 建立 --pink-readable / --purple-readable 前景配对。
 // ===========================================================================
 describe('T04448 粉/紫真 token 已定义（假 token 不再骗过审查看板）', () => {
+  // 定义源 = src 下全部 CSS。只取 style.css + styles/themes/ 会漏掉 styles/tokens.css
+  // （--tk-* 语义层）与 styles/mobile-light.css，那两处定义的 token 会被误判成空挂。
+  const walkAll = (dir: string, re: RegExp): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) return walkAll(p, re);
+      return re.test(e.name) ? [p] : [];
+    });
+  const SRC_DIR = join(ROOT, 'src');
   const definedProps = (() => {
     const names = new Set<string>();
-    const files = [STYLE_CSS, ...readdirSync(THEMES_DIR).filter((f) => f.endsWith('.css')).map((f) => join(THEMES_DIR, f))];
-    for (const f of files) {
+    for (const f of walkAll(SRC_DIR, /\.css$/)) {
       for (const m of stripComments(readFileSync(f, 'utf8')).matchAll(/(--[\w-]+)\s*:/g)) names.add(m[1]);
     }
     return names;
@@ -322,57 +330,39 @@ describe('T04448 粉/紫真 token 已定义（假 token 不再骗过审查看板
     for (const t of ['--pink-readable', '--purple-readable']) expect(rootDecl.has(t), `${t} 缺少 :root 默认`).toBe(true);
   });
 
-  it('本单族（粉/紫）不再有假 token；其余族的已知空挂冻结为基线，新增即红', () => {
-    const walk = (dir: string): string[] =>
-      readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-        const p = join(dir, e.name);
-        if (e.isDirectory()) return walk(p);
-        return /\.(vue|css)$/.test(e.name) ? [p] : [];
-      });
-    // 与本单同族但范围外的空挂 token（T04448 只负责粉/紫）。实测 41 处引用 / 19 个名字 /
-    // 14 个文件，已由 T04448 建派生单专项治理；此处冻结为基线——只拦「新增的假 token」，
-    // 存量清单被删干净时同样会红（防止基线悄悄失效）。
-    const FAKE_TOKEN_BASELINE = new Set([
-      '--text-secondary',
-      '--text-color',
-      '--text-faint',
-      '--bg-sidebar',
-      '--border-subtle',
-      '--neon-amber',
-      '--neon-',
-      '--accent-lime-a40',
-      '--accent-lime-a25',
-      '--accent-lime-a08',
-      '--accent-lime-a20',
-      '--accent-red-a08',
-      '--accent-red-a30',
-      '--accent-red-text',
-      '--accent-danger-a30',
-      '--accent-danger-a10',
-      '--accent-amber',
-            '--accent-blue-a35',
-    ]);
-    const GLOBAL_PREFIX = /^(--accent-|--neon-|--warning-|--text-|--bg-|--border-|--pink-|--purple-)/;
-    const ownFamily = /^(--accent-pink|--accent-purple|--pink-|--purple-)/;
+  it('全站零假 token：任何前缀族 var(--x) 都必须有定义（T04460 撤销白名单后的硬断言）', () => {
+    // T04448 时代这里留了 FAKE_TOKEN_BASELINE 白名单冻结存量空挂；T04460 已把 19 个假名
+    // 全部治理（改接到真 token 或补真声明），白名单随之撤销——此后任何空挂即红，不再放行。
+    const FAKE_PREFIX =
+      /^(--accent-|--neon-|--warning-|--text-|--bg-|--border-|--pink-|--purple-|--m-|--tk-|--grad-|--glow-|--probe-|--on-|--success|--danger$)/;
+    // 注释里的 var(--x) 不是消费点：除 /* */ 外，.vue 的 <script> 还有 // 行与 JSDoc「 * 」行
+    // （历史基线里的 '--neon-' 就是 <script> 注释里的一行说明被当成了引用）。
+    const stripAll = (s: string) => stripComments(s).replace(/^\s*\/\/.*$/gm, '').replace(/^\s*\*.*$/gm, '');
     const offenders: string[] = [];
-    const baselineHits = new Set<string>();
-    for (const file of walk(join(ROOT, 'src'))) {
-      const src = readFileSync(file, 'utf8');
+    let refCount = 0;
+    let prefixed = 0;
+    for (const file of walkAll(SRC_DIR, /\.(vue|css)$/)) {
+      const src = stripAll(readFileSync(file, 'utf8'));
       // 组件内自行定义的局部变量不算空挂
       const local = new Set([...src.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
-      for (const m of src.matchAll(/var\((--[\w-]+)/g)) {
+      for (const m of src.matchAll(/var\(\s*(--[\w-]+)/g)) {
+        refCount++;
         const name = m[1];
-        if (!GLOBAL_PREFIX.test(name)) continue;
+        if (FAKE_PREFIX.test(name)) prefixed++;
+        else continue;
         if (definedProps.has(name) || local.has(name)) continue;
-        if (ownFamily.test(name)) offenders.push(`${file.replace(ROOT, '')} → ${name}`);
-        else if (FAKE_TOKEN_BASELINE.has(name)) baselineHits.add(name);
-        else offenders.push(`新增假 token ${file.replace(ROOT, '')} → ${name}`);
+        offenders.push(`${file.replace(ROOT, '')} → ${name}`);
       }
     }
     expect(offenders).toEqual([]);
-    // 基线里的 --accent-pink-a80 / --accent-purple 族若被治理掉，也应显式更新本清单——
-    // 至少确认基线仍在覆盖空挂大户，避免「清单留着但已不命中」的空转
-    expect(baselineHits.size, '存量假 token 基线未被扫描命中（用例可能已空转）').toBeGreaterThan(10);
+    // 两条正控制：零 offenders 只有在「确实扫到足够多消费点、且前缀口径确实覆盖到它们」时
+    // 才有意义——否则把 FAKE_PREFIX 改坏（或整段扫描空转）会留下一个永远绿的假守护
+    expect(refCount, 'var() 消费点计数异常偏低，扫描口径可能已失效').toBeGreaterThan(3000);
+    expect(prefixed, '落入本守护前缀口径的 var() 引用数异常偏低，FAKE_PREFIX 可能被改窄').toBeGreaterThan(2500);
+    // 落位锁：本单转真的 5 个 tint 档位必须在 CSS 定义集内（漏插某个主题文件会在这里红）
+    for (const t of ['--accent-lime-a10', '--accent-lime-a25', '--accent-lime-a40', '--accent-danger-a10', '--accent-danger-a30']) {
+      expect(definedProps, `${t} 未在任何 CSS 中定义`).toContain(t);
+    }
   });
 });
 

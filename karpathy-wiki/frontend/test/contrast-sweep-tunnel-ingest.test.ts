@@ -1,7 +1,7 @@
 // T04449 口径推广·第五组：隧道页（Tunnel.vue）+ 导入页（Ingest.vue）。
 // 与前四组同一缺陷族：为深色霓虹底设计的强调色基名（--neon-cyan / --neon-pink / --neon-magenta /
 // --neon-purple）被直接写进 color / border(-color)，在浅底主题的白卡片与淡 tint 面上跌破 WCAG AA。
-// 本组覆盖 23 处「基色当前景」消费点（隧道 10 / 导入 13）。
+// 本组覆盖 25 处「基色当前景」消费点（隧道 10 / 导入 15）。
 //
 // 本组新暴露的口径缺口：导入页把紫族文字压在 `--accent-purple-a20`（比前四组样本更深一档的 tint）上，
 // ecommerce 的 `--purple-readable: #6354d3` 在该面只有 4.30 < 4.5 → 二次压暗到 #5d4fc6
@@ -60,11 +60,15 @@ const AUDIT: AuditRow[] = [
   { label: '导入页·.url-page-depth [color·accent]', fg: 'var(--accent-readable)', bg: CARD, kind: 'text' },
   { label: '导入页·.url-att-type [color·pink]', fg: 'var(--pink-readable)', bg: CARD, kind: 'text' },
   { label: '导入页·.url-att-group-title [color·accent]', fg: 'var(--accent-readable)', bg: CARD, kind: 'text' },
+  // T04460：诊断横幅两处前景此前引用假 token --accent-red-text（恒等于 fallback #d6336c），
+  // 改接 --pink-readable 后随主题变化；所在面同时换成真 tint --accent-danger-a10
+  { label: '导入页·.url-diagnosis-banner [color·pink]', fg: 'var(--pink-readable)', bg: 'var(--accent-danger-a10)', kind: 'text' },
+  { label: '导入页·.url-diagnosis-banner .el-icon [color·pink]', fg: 'var(--pink-readable)', bg: 'var(--accent-danger-a10)', kind: 'ui' },
 ];
 
 const EXPECTED: Record<string, { n: number; readable: number; fam: Record<string, number>; tint: number }> = {
   'src/views/Tunnel.vue': { n: 10, readable: 10, fam: { accent: 7, pink: 3 }, tint: 4 },
-  'src/views/Ingest.vue': { n: 13, readable: 13, fam: { accent: 7, pink: 2, purple: 4 }, tint: 16 },
+  'src/views/Ingest.vue': { n: 15, readable: 15, fam: { accent: 7, pink: 4, purple: 4 }, tint: 16 },
 };
 
 const readableRefCount = (src: string) => (src.match(/-readable/g) || []).length;
@@ -78,7 +82,7 @@ describe('T04449 推广第五组：逐主题达标', () => {
   });
 
   it('清单规模与两页实现严格对齐（防止清单与代码脱钩空转）', () => {
-    expect(AUDIT.length).toBe(23);
+    expect(AUDIT.length).toBe(25);
     for (const f of FILES) {
       const src = readFileSync(join(ROOT, f), 'utf8');
       const exp = EXPECTED[f];
