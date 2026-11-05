@@ -9,6 +9,8 @@ import { join } from 'node:path';
 export const ROOT = join(__dirname, '..', '..');
 export const THEMES_DIR = join(ROOT, 'src/styles/themes');
 export const STYLE_CSS = join(ROOT, 'src/style.css');
+/** T04469：dark 主题的整套变量写在 tokens.css（不在 styles/themes/ 下），loadThemes() 天然看不见它 */
+export const TOKENS_CSS = join(ROOT, 'src/styles/tokens.css');
 
 /** AA 正常字号文本 4.5:1；WCAG 1.4.11 非文本控件（描边/图标）3:1 */
 export const THRESHOLD = { text: 4.5, ui: 3.0 };
@@ -62,6 +64,48 @@ export function loadThemes(): ThemeTokens[] {
     themes.push({ name: theme, decls: merged });
   }
   return themes;
+}
+
+/** :root 兜底主题的声明（loadThemes() 第一项用的同一份解析） */
+export function parseRootDecls(): Map<string, string> {
+  return parseDecls(stripComments(readFileSync(STYLE_CSS, 'utf8')).match(/:root\s*\{([\s\S]*?)\n\}/)![1]);
+}
+
+/**
+ * 大括号配平取出 CSS 里某个 `[data-theme="X"]` 块的**全部**声明（同名多块合并，先到先得）。
+ * 为什么不用 loadThemes 里的 `\{([\s\S]*?)\n\}`：那条依赖「块体最后一个 } 单独成行」的书写习惯，
+ * 而 tokens.css 的 dark 块中间夹着注释与多行 value，短匹配会在第一个 `}` 处截断 → 漏变量。
+ */
+export function themeBlockDecls(css: string, theme: string): Map<string, string> {
+  const own = new Map<string, string>();
+  const re = new RegExp(`\\[data-theme=["']${theme}["']\\]\\s*\\{`, 'g');
+  const body = stripComments(css);
+  for (const m of body.matchAll(re)) {
+    let i = (m.index ?? 0) + m[0].length;
+    let depth = 1;
+    const start = i;
+    while (i < body.length && depth > 0) {
+      if (body[i] === '{') depth++;
+      else if (body[i] === '}') depth--;
+      i++;
+    }
+    for (const [k, v] of parseDecls(body.slice(start, i - 1))) if (!own.has(k)) own.set(k, v);
+  }
+  return own;
+}
+
+/**
+ * T04469：把「不在 styles/themes/ 下的主题」（目前只有 tokens.css 的 dark）合成成一个可审计主题。
+ * 为什么不直接把它塞进 loadThemes()：那个函数是 14 把对比度锁的共同主题源，
+ * 多一个主题会让 T04449/T04470/T04472 登记死的「8 主题」计数与逐主题最差值同时漂移，
+ * 那是另一单（dark 全量纳入口径）该做的事，不该由画布锁顺带触发。
+ */
+export function loadAuxTheme(name: string, cssFile = TOKENS_CSS, base?: Map<string, string>): ThemeTokens {
+  const own = themeBlockDecls(readFileSync(cssFile, 'utf8'), name);
+  if (own.size === 0) throw new Error(`tokens.css 里没有 [data-theme="${name}"] 块`);
+  const merged = new Map(own);
+  for (const [k, v] of base ?? parseRootDecls()) if (!merged.has(k)) merged.set(k, v);
+  return { name: `${name}(tokens.css)`, decls: merged };
 }
 
 export function hexToRgb(h: string): RGB {

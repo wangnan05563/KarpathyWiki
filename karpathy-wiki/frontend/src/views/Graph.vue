@@ -118,8 +118,43 @@ const DIR_OPTIONS = [
 ];
 
 // Read theme color from CSS variable (theme-aware)
+// T04469：画布配色不走 CSS 声明（JS 读变量后交给 vis-network），所以静态对比度守护扫不到它。
+// 原实现在变量取空时统一静默回落 '#b026ff'（= --graph-comparisons 的 :root 值）：变量名漂移、
+// 新增目录类型漏声明、主题删行这三类错误都会让节点**串成同一个紫**，且不留任何线索。
+// 现在两条改动：① 每个变量用**它自己在 :root 的声明值**兜底（串色不可能发生，最多回到母色板）；
+// ② 缺声明即 console.warn，让「画布颜色不对」在现场可被定位。
+// 兜底表与 style.css 的 :root 逐条比对由 test/contrast-graph-canvas.test.ts 钉住：改名/漏配/值漂移即红。
+const GRAPH_VAR_FALLBACKS: Record<string, string> = {
+  '--graph-entities': '#ff006e',
+  '--graph-concepts': '#00f5ff',
+  '--graph-comparisons': '#b026ff',
+  '--graph-queries': '#ff3ec9',
+  '--graph-entities-border': '#ff4d94',
+  '--graph-concepts-border': '#7afaff',
+  '--graph-comparisons-border': '#d366ff',
+  '--graph-queries-border': '#ff7ad9',
+  '--graph-qa': '#ff9500',
+  '--graph-solutions': '#00ff88',
+  '--graph-qa-border': '#ffb84d',
+  '--graph-solutions-border': '#5fffaa',
+  '--graph-edge': 'rgba(176, 38, 255, 0.45)',
+  '--graph-edge-highlight': '#00f5ff',
+  '--graph-label': '#f3e9ff',
+};
+
+/** 缺声明的变量只提示一次：getThemeVar 在 buildNodes 里是**逐节点**调用的 */
+const warnedMissingVars = new Set<string>();
+
 function getThemeVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#b026ff';
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (value) return value;
+  const fallback = GRAPH_VAR_FALLBACKS[name];
+  // 不去重的话，一个上千节点的图会在控制台刷出上万条同款警告，线索被淹掉
+  if (!warnedMissingVars.has(name)) {
+    warnedMissingVars.add(name);
+    console.warn(`[graph] 主题变量 ${name} 未声明，回落 :root 兜底值 ${fallback ?? '(无)'}——请在当前主题补声明`);
+  }
+  return fallback ?? '';
 }
 // Directory color mapping: read from CSS vars so nodes follow the active theme
 // FR-15-5：补全 6 目录颜色，与 SCHEMA.md type 枚举对齐
