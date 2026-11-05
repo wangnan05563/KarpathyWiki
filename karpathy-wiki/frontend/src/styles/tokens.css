@@ -100,7 +100,10 @@
   --probe-ok-bg: rgba(63, 185, 80, 0.15);
   --probe-warn: #d29922;
   --probe-warn-bg: rgba(210, 153, 34, 0.15);
-  --probe-error: #f85149;
+  /* T04520：原 #f85149（= 本主题 --danger 本体）压自身 0.15 tint 实测 4.35 不达 AA。
+     同族 readable 档 #ff8a80（本主题继承 :root 的 --danger-readable）在这一面 6.39 / 外层 7.58，
+     故前景接 readable 而非再造一个红字面量；--danger 本体与 tint 面保持原样。 */
+  --probe-error: var(--danger-readable);
   --probe-error-bg: rgba(248, 81, 73, 0.15);
 
   /* 渐变 / 阴影：克制深蓝系，避免暗底眩光 */

@@ -60,10 +60,11 @@
   --danger: #dc2626;
   --warning: #d97706;
 
-  /* URL 探测状态三色（保持既有浅色观感） */
-  --probe-ok: #1a7f37;
+  /* URL 探测状态三色（T04520）：原 #1a7f37 / #9a6700 压在本主题 tint 面上实算只有 4.47 / 4.40，
+     跌破 AA → 前景同色相各压深一档（6.28 / 6.19）。只动 probe 这一族，不牵动 --success/--warning 本体 */
+  --probe-ok: #166534;
   --probe-ok-bg: #e6f4ea;
-  --probe-warn: #9a6700;
+  --probe-warn: #854d0e;
   --probe-warn-bg: #fdf3d7;
   --probe-error: #c62828;
   --probe-error-bg: #fdecea;
