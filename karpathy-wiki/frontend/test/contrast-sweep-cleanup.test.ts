@@ -11,9 +11,10 @@
 // ② **同一面在两种口径下结论相反**：危险按钮的描边坐在粉渐变上，`--pink-readable` 实测
 //    非文本口径 3.95~4.39（全档 ≥3.0 过），文字口径却全 8 主题 < 4.5。该点是 1px 描边（WCAG 1.4.11），
 //    按 ui 口径判定成立；若同一表达式被当成文字用就会假绿——故本文件把「这条必须留在 ui 口径」写成断言。
-// ③ **口径外严重隐患留档（本批不修）**：同一按钮的 `color: #fff !important` 是硬编码字面色，
+// ③ **口径外严重隐患留档（本批不修，后续已由 T04472 修）**：同一按钮的 `color: #fff !important` 是硬编码字面色，
 //    不在本单「基色 token」口径内，实测白字 × 粉渐变在 5 个浅底主题只有 **1.08~1.24**（几乎不可见）。
-//    本文件用一条「事实锁」把它钉在测试里，避免只活在工单正文里被遗忘；修它属于字面色口径，另单裁决。
+//    本文件当时用一条「事实锁」把它钉在测试里，避免只活在工单正文里被遗忘；T04472 按字面色口径
+//    以面级配对 token 修掉后，本文件的该条按预告改成「交接守卫」（见文末用例注释）。
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -25,6 +26,7 @@ import {
   formatFailures,
   loadThemes,
   pageOf,
+  ruleBodies,
   worstRatio,
   type AuditRow,
 } from './helpers/contrast';
@@ -82,11 +84,12 @@ const WRAPPED_LINES: Array<{ line: string; count: number }> = [
   { line: '  color: var(--purple-readable, var(--neon-purple));', count: 2 },
   { line: '  color: var(--pink-readable, var(--neon-magenta));', count: 5 },
   { line: '  border: 1px solid var(--pink-readable, var(--neon-magenta));', count: 1 },
-  { line: '  border-color: var(--pink-readable, var(--neon-magenta)) !important;', count: 1 },
+  { line: '  border-color: var(--pink-readable, var(--neon-magenta)) !important;', count: 2 },
 ];
 
 /** 接入后各家族在本文件的出现次数（首组只接了青族 7 处，粉/紫全部来自本批，可整文件核对） */
-const FAMILY_COUNTS: Record<string, number> = { accent: 7, purple: 2, pink: 7 };
+// pink 8 处 = 本批 7 处 + T04472 为危险态 hover 定向钉住配对着色新增的 1 处（见 Cleanup.vue 特异性注释）。
+const FAMILY_COUNTS: Record<string, number> = { accent: 7, purple: 2, pink: 8 };
 /** 装饰性 tint 前景基线（只降不升；是否纳入口径属 T04468） */
 const TINT_BASELINE = 14;
 
@@ -173,17 +176,34 @@ describe('T04470 批次 A5：口径守护（基色不得再裸写进前景）', 
   });
 });
 
-// 事实留档（不是质量门）：本批口径只覆盖「基色 token 裸写进前景」，硬编码字面色不在其中。
-// 危险按钮的 #fff 压粉渐变在浅底主题实测 1.08~1.24，属可见性缺陷，已由 T04470 回传登记另单。
-// ⚠ 若这条将来变红，说明有人把白字接进了某个口径——那是修复，请把本用例改成断言达标，别删掉。
-describe('T04470 批次 A5：口径外隐患留档', () => {
-  it('危险按钮的硬编码白字在浅底主题跌破 AA（事实锁，非达标声明）', () => {
+// 事实留档的后续（原注释③预告的场景已发生）：本批口径只覆盖「基色 token 裸写进前景」，硬编码字面色不在其中，
+// 当时只能登记不能修。T04472 按「面级配对 token」口径把它修掉了——危险按钮的前景/底色改走
+// --on-danger-tint-fg / --on-danger-tint-bg（浅底族换深墨、深底族保持白字）。
+// 按原注释的约定「若这条变红说明有人把它接进了口径——那是修复，请改成断言达标，别删掉」，此处即改为达标断言。
+// 数值主锁与逐主题定调在 test/contrast-sweep-hard-white.test.ts（同一落点同一口径）；本文件留最小回归：
+// 事实证据不许被删（否则后人不知道为什么要配对）+ 前景不许写回硬编码白 + 配对表达式逐主题达 AA。
+describe('T04470 批次 A5：口径外隐患 → 已由 T04472 面级配对修复', () => {
+  it('改前事实永久留档：#fff 压粉渐变在 ≥5 个浅底主题跌破 AA（本单不修，是 T04472 的立项依据）', () => {
     const themes = loadThemes();
     const bad = themes
       .map((t) => ({ th: t.name, v: worstRatio('#fff', PINK_GRADIENT, t.decls, pageOf(t.decls)) }))
       .filter((c) => c.v < THRESHOLD.text);
     expect(bad.length, bad.map((b) => `${b.th}=${b.v.toFixed(2)}`).join(' ')).toBeGreaterThanOrEqual(5);
     expect(Math.min(...bad.map((b) => b.v))).toBeLessThan(1.5);
-    expect(srcOf()).toMatch(/\.cleanup-btn\.danger \{[\s\S]*?color: #fff !important;/);
+  });
+
+  it('危险按钮常规态已交接给配对 token，且配对表达式 8 主题全达 AA', () => {
+    const body = ruleBodies(srcOf(), '.cleanup-btn.danger');
+    expect(body.length).toBe(1);
+    const [b] = body as [string];
+    expect(b).toContain('background: var(--on-danger-tint-bg) !important;');
+    expect(b).toContain('color: var(--on-danger-tint-fg) !important;');
+    // 硬编码白写回来即红：这一句是「修复不回退」的最小守卫
+    expect(/color:\s*#fff/i.test(b), '.cleanup-btn.danger 的前景写回了硬编码白').toBe(false);
+    const failures = auditThemes(
+      [{ label: `${PAGE}·.cleanup-btn.danger [T04472 配对后]`, fg: 'var(--on-danger-tint-fg)', bg: 'var(--on-danger-tint-bg)', kind: 'text' }],
+      loadThemes(),
+    );
+    expect(failures, formatFailures(failures)).toEqual([]);
   });
 });
