@@ -210,9 +210,9 @@ describe('T02836 api 侧固定时长等待防退化守护', () => {
     ] as const) {
       expect(IDLE_RULE_FE.test(src), `${side} helper 的无进展判据不是「${IDLE_RULE}」`).toBe(true);
       expect(OLD_WALL_RULE_FE.test(src), `${side} helper 仍留着旧的纯墙钟判据（T04473 没移植干净）`).toBe(false);
-      // 欠账口径的四件套：健康节拍、实算时间、每轮都判的硬上限、可注入时钟
+      // 欠账口径的四件套：实算时间、每轮都判的硬上限、可注入时钟、欠账起点复位
+      // （健康节拍的**数值**不在这份清单里，见下方按侧事实锁）
       for (const shared of [
-        'export const HEALTHY_POLL_MS = 25;',
         'const ours = elapsed - starveMs;',
         'if (ours > capMs)',
         'options.now ?? Date.now',
@@ -225,6 +225,19 @@ describe('T02836 api 侧固定时长等待防退化守护', () => {
         'NO_TIMER_CHAIN = { floorMs: 1_000, idleMs: 2_000, capMs: 3_000 }',
       );
     }
+    // 健康节拍的阈值数值两侧**刻意不同**，所以不比相等，改为按侧各钉一条事实锁：
+    //  - frontend = 100：T04471 用 4 轮全量并行的实测分位派生（P50=15 / P95=44 / P99=144ms），
+    //    原先钉的 25 会把 14% 的正常轮次记成「调度器欠账」，等于判据自己松掉；
+    //  - api = 25：本侧的分布还没量过（同一句「亚毫秒级」在两套运行时里可以差一个数量级），
+    //    暂存原判据不冒充实测值，重定由派生单 T04514 承接——改数时必须同时改这里。
+    // 任何一侧的数值漂到没在下方写明的值，这条用例就红：比“两边相等”更严，也不会逼着一侧的
+    // 合理调参去动另一侧。
+    expect(feSrc, 'frontend 阈值已偏离 T04471 实测派生的 100（改数请连同本用例一起改）').toContain(
+      'export const HEALTHY_POLL_MS = 100;',
+    );
+    expect(apiSrc, 'api 阈值已偏离暂存值 25（重定见 T04514，改数请连同本用例一起改）').toContain(
+      'export const HEALTHY_POLL_MS = 25;',
+    );
     // 同一组出口名（前端版没有 pollUntil 时也不许 api 侧静默分叉）
     for (const name of ['waitForProgress', 'contractSleep', 'ProgressWaitOptions']) {
       expect(feSrc.includes(name), `frontend helper 缺少 ${name}，两侧出口面已分叉`).toBe(true);
