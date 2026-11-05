@@ -117,7 +117,8 @@ defineEmits<{ (e: 'retry'): void }>();
   line-height: 1.6;
 }
 .state-block[role='alert'] .state-title {
-  color: #f87171;
+  /* T04509：亮红 #f87171 压在卡片底，浅底主题只有 1.44 → 走红族 readable（逐主题实算取值） */
+  color: var(--danger-readable);
 }
 .state-action {
   margin-top: 6px;

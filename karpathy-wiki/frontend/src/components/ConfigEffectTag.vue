@@ -59,19 +59,21 @@ const tip = computed(() => {
   border-radius: 50%;
   background: currentColor;
 }
+/* T04509：生效标记是语义徽章，前景与 tint 面一起走 --on-badge-<色>-* 配对（取值逐主题实算）。
+   描边色属装饰口径（T04468），本单不动。 */
 .effect-tag--instant {
-  color: #1d7a5f;
-  background: rgba(29, 122, 95, 0.08);
+  color: var(--on-badge-green-fg);
+  background: var(--on-badge-green-bg);
   border-color: rgba(29, 122, 95, 0.28);
 }
 .effect-tag--reload {
-  color: #8a5a00;
-  background: rgba(217, 154, 24, 0.1);
+  color: var(--on-badge-amber-fg);
+  background: var(--on-badge-amber-bg);
   border-color: rgba(217, 154, 24, 0.32);
 }
 .effect-tag--restart {
-  color: #b3261e;
-  background: rgba(179, 38, 30, 0.08);
+  color: var(--on-badge-red-fg);
+  background: var(--on-badge-red-bg);
   border-color: rgba(179, 38, 30, 0.3);
 }
 .effect-tag.is-compact .effect-text {

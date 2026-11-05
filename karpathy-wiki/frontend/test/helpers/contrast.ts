@@ -437,3 +437,125 @@ export function listHardWhiteForegroundUses(src: string): string[] {
   return hits;
 }
 
+/**
+ * T04509：把「硬编码前景」判定从「白」泛化为「字面色」。
+ * 缺陷族的真实定义不是「白字」，而是「前景写死字面色 + 所在面由主题决定」——
+ * 深色字（#0b0b12 / #1a1a1a 一类）压 --grad-* / tint / 半透明卡片，在深底主题里同样掉到 1.x:1，
+ * 而只认白的 listHardWhiteForegroundUses 扫不到（product 的 --on-cool-fg: #0b0b12 就是实例）。
+ *
+ * 三条负控制与原扫描器逐条对应（工单第 4 条要求显式保留）：
+ *   ① var() 的 fallback 位不计 —— stripVarGroups 括号配平整组摘除（含嵌套）；
+ *   ② 装饰底不计 —— 只看前景属性（LITERAL_FG_PROPS），background/gradient 里的字面色是装饰；
+ *   ③ 纯深底不计 —— 本扫描器**不判达标**，只出「前景 × 所在面」事实；
+ *      是否算缺陷由调用方按逐主题实算决定（压在 --bg-void 一类主题实底上的深色字合法，实算必过）。
+ *      这条口径不能压进扫描器本身：扫描器一旦内置「哪些面算深底」的白名单，
+ *      就等于把新增主题/改取值的影响面悄悄排除掉，正是本缺陷族最容易被无声吞掉的方式。
+ */
+export const LITERAL_FG_PROPS = HARD_WHITE_PROPS;
+
+/**
+ * 从一条前景声明里取出**完整的**第一个字面色 token。
+ * 不能只拿正则命中的片段：`rgba(` 只是 `rgba(29,122,95,0.28)` 的开头，
+ * 片段喂给 resolve() 必抛 → 普查会把大量合法落点误记成「不可解析」，缺陷矩阵随之失真。
+ * 因此函数式/带括号的写法按括号配平整组取走；同时剥掉 `!important`（它是声明尾巴，不是色）。
+ */
+export function extractLiteralColor(value: string): string | null {
+  const v = value.replace(/!important/i, '');
+  for (let i = 0; i < v.length; ) {
+    const hex = /^#[0-9a-fA-F]{3,8}\b/.exec(v.slice(i));
+    if (hex) return hex[0];
+    const named = /^white\b|^black\b/i.exec(v.slice(i));
+    if (named && (i === 0 || /[\s,(/]/.test(v[i - 1]))) return named[0];
+    if (/^(?:rgb|hsl)a?\s*\(/i.test(v.slice(i))) {
+      let depth = 0;
+      let j = i;
+      for (; j < v.length; j++) {
+        if (v[j] === '(') depth++;
+        else if (v[j] === ')' && --depth === 0) {
+          j++;
+          break;
+        }
+      }
+      return v.slice(i, j).replace(/\s+/g, ' ');
+    }
+    i++;
+  }
+  return null;
+}
+
+export interface LiteralFgSite {
+  /** 所在规则的选择器（@media/@keyframes 前缀保留，便于人肉定位） */
+  sel: string;
+  prop: string;
+  value: string;
+  /** 命中的完整字面色 token（供报告与实算取 fg 用） */
+  literal: string;
+  /** 该规则自声明的底色（没有则为 null，由调用方按「继承所在页底」处理） */
+  ownBg: string | null;
+  /** 选择器里的 `[data-theme="x"]` 限定；有则该落点只在该主题下生效，普查不能拿它去套全主题 */
+  themeScoped: string | null;
+}
+
+/** 大括号配平拆出所有规则（含 at-rule 内层，@media 保留前缀；@keyframes 的帧同样是真的前景色） */
+export function iterRules(css: string): Array<{ sel: string; body: string }> {
+  const out: Array<{ sel: string; body: string }> = [];
+  let i = 0;
+  while (i < css.length) {
+    const open = css.indexOf('{', i);
+    if (open < 0) break;
+    const selRaw = css.slice(i, open).trim().replace(/\s+/g, ' ');
+    let depth = 1;
+    let j = open + 1;
+    while (j < css.length && depth > 0) {
+      if (css[j] === '{') depth++;
+      else if (css[j] === '}') depth--;
+      j++;
+    }
+    const body = css.slice(open + 1, j - 1);
+    if (/^@[\w-]+\s*$/.test(selRaw) || /^@(media|supports|layer)\b/.test(selRaw)) {
+      for (const r of iterRules(body)) out.push({ sel: `${selRaw} ▸ ${r.sel}`, body: r.body });
+    } else if (/^@/.test(selRaw)) {
+      out.push({ sel: selRaw, body });
+    } else {
+      out.push({ sel: selRaw, body });
+    }
+    i = j;
+  }
+  return out;
+}
+
+/** 逐处「字面色前景」事实清单（含所在规则与自声明底色），供普查与实算共用 */
+export function listLiteralForegroundSites(src: string): LiteralFgSite[] {
+  const css = stripComments(styleText(src));
+  const hits: LiteralFgSite[] = [];
+  for (const { sel, body } of iterRules(css)) {
+    const bg = /(?:^|;)\s*(?:background|background-image|background-color)\s*:\s*([^;]+)/i.exec(body);
+    const scoped = /\[data-theme=(?:"|')?([\w-]+)/.exec(sel);
+    for (const seg of body.split(';')) {
+      const colon = seg.indexOf(':');
+      if (colon < 0) continue;
+      const prop = seg.slice(0, colon).trim().replace(/\s+/g, ' ');
+      if (!LITERAL_FG_PROPS.test(prop)) continue;
+      const value = seg.slice(colon + 1).trim().replace(/\s+/g, ' ');
+      const bare = stripVarGroups(value);
+      const literal = extractLiteralColor(bare);
+      if (!literal) continue;
+      hits.push({
+        sel,
+        prop,
+        value,
+        literal,
+        ownBg: bg ? bg[1].trim().replace(/\s+/g, ' ') : null,
+        themeScoped: scoped ? scoped[1] : null,
+      });
+    }
+  }
+  return hits;
+}
+
+/** 与硬白字扫描器同形状的字符串版（基线表/断言消息用） */
+export function listLiteralForegroundUses(src: string): string[] {
+  return listLiteralForegroundSites(src).map((h) => `${h.sel} · ${h.prop} → ${h.value.slice(0, 110)}`);
+}
+
+

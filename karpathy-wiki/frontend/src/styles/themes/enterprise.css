@@ -83,6 +83,11 @@
   --on-danger-bg: var(--danger);
   --on-danger-tint-fg: var(--text-bright);
   --on-tooltip-bg: var(--text-bright);
+  /* T04509：语义徽章面配对取值（浅底主题：tint 合成出亮面 → 前景取该族深档） */
+  --on-badge-green-fg: #12693b;
+  --on-badge-red-fg: #b52e2e;
+  --danger-readable: #b52e2e;
+  --on-danger-hover-fg: #3a0000;
 
   /* 精致阴影 */
   --glow-purple: 0 8px 32px rgba(37, 99, 235, 0.18);

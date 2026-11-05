@@ -389,8 +389,8 @@ onBeforeUnmount(() => {
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid transparent;
-  background: var(--neon-cyan, #00f5ff);
-  color: #04121a;
+  background: var(--on-accent-solid-bg);
+  color: var(--on-accent-solid-fg);
   font-weight: 600;
   cursor: pointer;
   font-size: 13px;
@@ -474,10 +474,11 @@ onBeforeUnmount(() => {
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .delete-btn:hover {
-  background: rgba(255, 80, 80, 0.3);
-  /* SonarQube css:S7924 不合成 alpha 通道，将 rgba(0,0,0,0.4) 当作 RGB(0,0,0) 计算。
-     需要极深的红色 #3a0000 才能在该算法下达到 4.5:1 对比度（实际渲染对比度远超此值） */
-  color: #3a0000; /* NOSONAR - 误报：实际渲染背景为 rgba(255,80,80,0.3)，对比度 10:1+ */
+  /* T04509：该面是 rgba(255,80,80,0.3) 红 wash，合成亮度随主题页底翻向（深底主题需浅墨、
+     浅底主题需深墨）→ 前景与面一起走配对 token，取值在各主题文件里逐主题实算。
+     （原字面 #3a0000 + css:S7924 NOSONAR 一并收进 token，本规则不再含字面色。） */
+  background: var(--on-danger-hover-bg);
+  color: var(--on-danger-hover-fg);
 }
 /* 置顶按钮激活态：与 hover 高亮一致，表示会话已固定（与左侧 pin-icon 状态呼应） */
 .pin-btn.pin-active {

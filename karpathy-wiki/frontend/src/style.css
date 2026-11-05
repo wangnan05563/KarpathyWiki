@@ -139,6 +139,41 @@
   --on-tooltip-fg: #ffffff;
   --on-tooltip-bg: var(--bg-card-solid, rgba(0, 0, 0, 0.75));
 
+  /* ============================================================
+   * T04509：语义徽章面配对 token（--on-badge-<色>-fg / -bg）
+   * 缺陷族与 T04472 同源但方向相反：那边是「白字硬写在强调面上」，这边是
+   * 「语义色字面量（#8a5a00 / #1d7a5f / #f87171 一类）写死在前景点，压在**同族半透明 tint** 面上」。
+   * tint 本身是字面 alpha，真实底由主题页底合成 —— 浅底主题合成出亮面、深底主题合成出暗面，
+   * 于是一份「贴着浅底实算出来的中深字面量」在深底主题只剩 2.1~3.5:1（反之亦然）。
+   * 口径沿用 T04472：一个面给一对 token，取值逐主题实算； tint 强度按语义收成一档（同族多处原本
+   * 是 0.08/0.10/0.12/0.18 四种），观感只动这一族徽章，不牵动任何其他消费点。
+   * 前景优先复用既有 readable 族（--warning-readable / --accent-readable），只有实算不达的主题才给字面量。
+   * ============================================================ */
+  --on-badge-amber-bg: rgba(217, 154, 24, 0.1);
+  --on-badge-amber-fg: var(--warning-readable);
+  --on-badge-green-bg: rgba(74, 222, 128, 0.1);
+  --on-badge-green-fg: #4ade80;
+  --on-badge-red-bg: rgba(220, 76, 90, 0.12);
+  --on-badge-red-fg: #f87171;
+  --on-badge-cyan-bg: rgba(0, 245, 255, 0.1);
+  --on-badge-cyan-fg: var(--accent-readable);
+  /* 语义圆形图标底（感叹号徽片，alpha 0.18）：比徽章 tint 亮一档，同族 readable 字面在这一面反而不达标；
+     实算 9 主题里只有「本主题主墨」两头都过 → 前景统一取 --text-bright（深底主题=白，浅底主题=深墨）。 */
+  --on-disc-amber-bg: rgba(217, 154, 24, 0.18);
+  --on-disc-amber-fg: var(--text-bright);
+  --on-disc-red-bg: rgba(220, 76, 90, 0.18);
+  --on-disc-red-fg: var(--text-bright);
+  /* 危险语义**文字**面（直接压卡片底，无 tint）：T04449 的 *-readable 族缺红族一档，这里补齐同口径 */
+  --danger-readable: #ff8a80;
+  /* 危险 hover 面：alpha 0.3 的红 wash 比徽章 tint 强得多，合成亮度同样随主题翻向 →
+     深底主题该面偏暗（需浅墨），浅底主题该面偏亮（需深墨）。:root 取浅墨，5 个浅底主题各自覆盖。 */
+  --on-danger-hover-bg: rgba(255, 80, 80, 0.3);
+  --on-danger-hover-fg: #ffdcd6;
+  /* 实心主色面（--neon-cyan 直铺）：近黑墨在 7 个主题达标，
+     light-business 的主色是深蓝 #1554d1、portfolio 是灰棕 #8b7355 → 这两主题换白字。 */
+  --on-accent-solid-bg: var(--neon-cyan, #00f5ff);
+  --on-accent-solid-fg: #04121a;
+
   /* URL 探测状态三色（Ingest 代理探测标签） */
   --probe-ok: #4ade80;
   --probe-ok-bg: rgba(74, 222, 128, 0.15);

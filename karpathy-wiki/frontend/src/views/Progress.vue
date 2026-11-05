@@ -813,17 +813,19 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   vertical-align: 2px;
   border: var(--border-glass);
 }
+/* T04509：状态徽章的字面色前景压在语义 tint 面上，tint 合成亮度随主题翻向 →
+   改走面配对 token（一个面一对），取值逐主题实算达标。 */
 .head-status.is-running {
-  color: #00f5ff;
-  background: rgba(0, 245, 255, 0.1);
+  color: var(--on-badge-cyan-fg);
+  background: var(--on-badge-cyan-bg);
 }
 .head-status.is-success {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.1);
+  color: var(--on-badge-green-fg);
+  background: var(--on-badge-green-bg);
 }
 .head-status.is-danger {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.12);
+  color: var(--on-badge-red-fg);
+  background: var(--on-badge-red-bg);
 }
 .head-status.is-idle {
   color: var(--text-muted, #9aa4b2);

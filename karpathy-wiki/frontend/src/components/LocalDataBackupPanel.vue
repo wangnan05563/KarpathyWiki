@@ -225,7 +225,8 @@ defineExpose({ busy });
   color: var(--text-soft);
 }
 .note-warning {
-  color: #d97706;
+  /* T04509：字面橙 #d97706 压在卡片底，浅底主题只剩 3.11 → 走橙族 readable（逐主题实算取值） */
+  color: var(--warning-readable);
 }
 .panel-actions {
   display: flex;

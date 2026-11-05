@@ -5347,21 +5347,23 @@ async function importConfig() {
   cursor: help;
 }
 
+/* T04509：图例三档与 ConfigEffectTag 同一族语义徽章 → 前景/tint 面走 --on-badge-<色>-* 配对。
+   描边色属装饰口径（T04468），本单不动。 */
 .effect-legend-item--instant {
-  color: #1d7a5f;
-  background: rgba(29, 122, 95, 0.08);
+  color: var(--on-badge-green-fg);
+  background: var(--on-badge-green-bg);
   border-color: rgba(29, 122, 95, 0.28);
 }
 
 .effect-legend-item--reload {
-  color: #8a5a00;
-  background: rgba(217, 154, 24, 0.1);
+  color: var(--on-badge-amber-fg);
+  background: var(--on-badge-amber-bg);
   border-color: rgba(217, 154, 24, 0.32);
 }
 
 .effect-legend-item--restart {
-  color: #b3261e;
-  background: rgba(179, 38, 30, 0.08);
+  color: var(--on-badge-red-fg);
+  background: var(--on-badge-red-bg);
   border-color: rgba(179, 38, 30, 0.3);
 }
 
@@ -5407,8 +5409,8 @@ async function importConfig() {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(217, 154, 24, 0.18);
-  color: #8a5a00;
+  background: var(--on-disc-amber-bg);
+  color: var(--on-disc-amber-fg);
   font-size: 12px;
   font-weight: 700;
 }
@@ -5455,8 +5457,8 @@ async function importConfig() {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(220, 76, 90, 0.18);
-  color: #d84c5a;
+  background: var(--on-disc-red-bg);
+  color: var(--on-disc-red-fg);
   font-size: 12px;
   font-weight: 700;
 }
@@ -5485,7 +5487,8 @@ async function importConfig() {
   padding: 2px 8px;
   border: 1px dashed rgba(220, 76, 90, 0.4);  border-radius: 999px;
   background: transparent;
-  color: #c0414e;
+  /* T04509：压在卡片底（含 hover 的红 tint 面）的危险语义文字 → 红族 readable，逐主题实算 */
+  color: var(--danger-readable);
   font-size: 12px;
   cursor: pointer;
 }

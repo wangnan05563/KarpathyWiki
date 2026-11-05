@@ -87,6 +87,12 @@
   --on-danger-bg: var(--danger);
   --on-danger-tint-fg: var(--text-bright);
   --on-tooltip-bg: rgba(17, 17, 17, 0.85);
+  /* T04509：语义徽章面配对取值（浅底主题：tint 合成出亮面 → 前景取该族深档） */
+  --on-badge-green-fg: #15803d;
+  --on-badge-red-fg: #b3261e;
+  --danger-readable: #b3261e;
+  --on-danger-hover-fg: #3a0000;
+  --on-accent-solid-fg: #ffffff;
 
   /* 柔和阴影（浅色主题下克制，避免脏感） */
   --glow-purple: 0 0 20px rgba(21, 84, 209, 0.16);
@@ -351,7 +357,8 @@
 }
 
 [data-theme="light-business"] .el-input__inner::placeholder {
-  color: #9aa0a6 !important;
+  /* T04509：占位灰 #9aa0a6 在白底只有 2.64（WCAG 把占位符计入文本对比度）→ 深一档 #6b7280（4.83） */
+  color: #6b7280 !important;
 }
 
 [data-theme="light-business"] .el-tabs__item {

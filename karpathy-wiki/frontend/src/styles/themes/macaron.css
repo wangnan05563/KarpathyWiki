@@ -96,6 +96,11 @@
   --on-aurora-bg: var(--grad-aurora);
   --on-danger-tint-fg: var(--text-bright);
   --on-tooltip-bg: var(--text-bright);
+  /* T04509：语义徽章面配对取值（浅底主题：tint 合成出亮面 → 前景取该族深档） */
+  --on-badge-green-fg: #2f6f4f;
+  --on-badge-red-fg: #a83a3a;
+  --danger-readable: #a83a3a;
+  --on-danger-hover-fg: #3a0000;
 
   /* Soft shadows (no strong glow) */
   --glow-purple: 0 8px 32px rgba(200, 162, 232, 0.35);
@@ -318,12 +323,14 @@
   color: var(--text-soft) !important;
 }
 
+/* T04509：tabs 压在白卡片底，原浅薄荷 #a8e0d8 / 亮粉 #d4699b 只有 1.46 / 3.33 →
+   同色相取本主题 readable 档（青绿面 #2b7a6e、粉面 #8c6273），观感仍是马卡龙色系的深一档。 */
 [data-theme="macaron"] .el-tabs__item:hover {
-  color: #a8e0d8 !important;
+  color: var(--accent-readable) !important;
 }
 
 [data-theme="macaron"] .el-tabs__item.is-active {
-  color: #d4699b !important;
+  color: var(--pink-readable) !important;
   text-shadow: 0 0 12px rgba(255, 179, 209, 0.5);
 }
 

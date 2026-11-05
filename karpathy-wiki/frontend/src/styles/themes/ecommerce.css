@@ -89,6 +89,11 @@
   --on-danger-bg: var(--danger);
   --on-danger-tint-fg: var(--text-bright);
   --on-tooltip-bg: var(--text-bright);
+  /* T04509：语义徽章面配对取值（浅底主题：tint 合成出亮面 → 前景取该族深档） */
+  --on-badge-green-fg: #15803d;
+  --on-badge-red-fg: #b52e2e;
+  --danger-readable: #b52e2e;
+  --on-danger-hover-fg: #3a0000;
 
   /* 柔和阴影 */
   --glow-purple: 0 4px 16px rgba(0, 102, 204, 0.15);
@@ -325,11 +330,12 @@
 }
 
 [data-theme="ecommerce"] .el-tabs__item:hover {
-  color: #ff6b35 !important;
+  /* T04509：亮橙 #ff6b35 压在白卡片底只有 2.84 → 同色相取本主题 --warning-readable（#9e5d00） */
+  color: var(--warning-readable) !important;
 }
 
 [data-theme="ecommerce"] .el-tabs__item.is-active {
-  color: #ff6b35 !important;
+  color: var(--warning-readable) !important;
   text-shadow: none;
   font-weight: 700;
 }

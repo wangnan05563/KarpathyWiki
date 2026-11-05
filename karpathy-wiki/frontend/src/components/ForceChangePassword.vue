@@ -104,6 +104,7 @@ async function handleSubmit() {
 .fc-error {
   margin: 0 0 8px;
   font-size: 12px;
-  color: #d03050;
+  /* T04509：字面绯红 #d03050 压在卡片底，深底主题只剩 3.48 → 走红族 readable */
+  color: var(--danger-readable);
 }
 </style>

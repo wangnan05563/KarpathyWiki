@@ -92,6 +92,15 @@
   --on-danger-bg: var(--danger);
   --on-danger-tint-fg: var(--text-bright);
   --on-tooltip-bg: var(--text-bright);
+  /* T04509：语义徽章面配对取值（浅底主题：tint 合成出亮面 → 前景取该族深档） */
+  --on-badge-green-fg: #2f5f3f;
+  --on-badge-red-fg: #8c1d1d;
+  --danger-readable: #8c1d1d;
+  --on-danger-hover-fg: #3a0000;
+  /* 本主题实心主色 #8b7355 是中调（相对亮度 ≈0.20）：白字 4.49、深墨 4.23，两头都不达 AA，
+     所以这一面单独压深到 #6d5a42（白字 6.58）；--neon-cyan 本体不动，避免牵动全站强调色身份。 */
+  --on-accent-solid-fg: #ffffff;
+  --on-accent-solid-bg: #6d5a42;
 
   /* 优雅阴影 */
   --glow-purple: 0 8px 32px rgba(26, 26, 26, 0.12);
@@ -333,7 +342,8 @@
 }
 
 [data-theme="portfolio"] .el-tabs__item:hover {
-  color: #c9a961 !important;
+  /* T04509：金棕 #c9a961 压在白卡片底只有 2.20 → 同色相取本主题 --warning-readable（#9e5d00） */
+  color: var(--warning-readable) !important;
 }
 
 [data-theme="portfolio"] .el-tabs__item.is-active {

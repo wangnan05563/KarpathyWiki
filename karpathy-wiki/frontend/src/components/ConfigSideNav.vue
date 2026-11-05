@@ -124,9 +124,10 @@ function tabTip(item: ConfigTabMeta & { locked: boolean }): string {
   background: rgba(21, 84, 209, 0.06);
 }
 .nav-item.is-active {
-  background: rgba(0, 245, 255, 0.08);
+  /* T04509：青 tint 面上的字面蓝 #1554d1 在深底主题只剩 2.23 → 走青徽章面配对 */
+  background: var(--on-badge-cyan-bg);
   border-color: rgba(21, 84, 209, 0.28);
-  color: #1554d1;
+  color: var(--on-badge-cyan-fg);
   font-weight: 600;
 }
 .nav-item.is-locked {
@@ -141,8 +142,8 @@ function tabTip(item: ConfigTabMeta & { locked: boolean }): string {
   line-height: 14px;
   padding: 0 5px;
   border-radius: 999px;
-  color: #8a5a00;
-  background: rgba(217, 154, 24, 0.12);
+  color: var(--on-badge-amber-fg);
+  background: var(--on-badge-amber-bg);
   border: 1px solid rgba(217, 154, 24, 0.28);
   white-space: nowrap;
 }
