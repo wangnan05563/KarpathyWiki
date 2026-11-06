@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { API_BASE } from '../utils/apiBase';
+import { API_BASE, apiFetch } from '../utils/apiBase';
 import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, type Ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
@@ -538,13 +538,25 @@ async function handleRebuildIndex() {
     const embedding = aiForm.value.embeddingModel?.trim() && aiForm.value.apiKey && aiForm.value.baseUrl
       ? { baseUrl: aiForm.value.baseUrl, apiKey: aiForm.value.apiKey, model: aiForm.value.embeddingModel.trim() }
       : undefined;
-    const res = await fetch(`${API_BASE}/search/rebuild`, {
+    // T04531：必须走 apiFetch（注入 Bearer）。后端 POST /api/search/rebuild 挂 guards.requireAdmin，
+    // 裸 fetch 不带凭据 → 服务端把已登录用户当游客 → 401「未登录或会话已过期」，
+    // 文案经 apiErrorMessage 透出后即「索引重建失败：未登录或会话已过期」——用户视角是"会话失效"，
+    // 实为前端未携带 token 的误报（与 T03611 Progress.vue 编译请求同一缺陷类）。
+    // 为什么用 apiFetch 而非本文件其余请求惯用的 authStore.authFetch：authFetch 读 Pinia token.value，
+    // 页面刷新后会话恢复（App.vue restoreSession）尚未完成时该值可能仍为空，会再制造一次假 401；
+    // apiFetch 直读 localStorage 持久化 token，且 401 时统一清理失效会话并广播登录跳转。
+    const res = await apiFetch(`${API_BASE}/search/rebuild`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ embedding }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    // 错误响应体可能不是 JSON（反代 502 返回 HTML 等）：解析失败降级为空对象。
+    // 这是本分支真正的缺陷面——旧写法 `await res.json()` 在非 JSON 上抛 SyntaxError，
+    // 用户看到的失败原因就是「Unexpected token < in JSON…」，真实状态码（网关 502）被彻底盖掉。
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    // 状态码与后端原文一起进消息：apiErrorMessage 靠 "HTTP <code>" 提取状态码，
+    // 后端有 error 文案时透出文案、没有时按状态码映射中文，两条信息都不至于互相顶掉
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${data.error ?? ''}`);
     // 重建响应只有索引侧计数（无分母），统一回读状态端点：展示口径与首屏同一条契约，不在此处拼第二份形状
     await refreshIndexStatus();
     ElMessage.success(`索引重建完成：向量覆盖 ${indexStatus.value.coveredPages}/${indexStatus.value.totalPages} 页，待补 ${indexStatus.value.pendingPages} 页`);

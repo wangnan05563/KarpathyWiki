@@ -14,6 +14,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import ElementPlus, { ElMessage } from 'element-plus';
 import Config from '../src/views/Config.vue';
 import { useAuthStore } from '../src/stores/auth';
+import { STORAGE_KEYS } from '../src/constants/storageKeys';
 import { findTabMeta } from '../src/utils/configTabs';
 import { NO_TIMER_CHAIN, waitForProgress } from './helpers/waitForProgress';
 
@@ -58,12 +59,35 @@ function json(body: unknown, ok = true): Response {
   return { ok, status: ok ? 200 : 500, json: async () => body } as unknown as Response;
 }
 
+// 指定状态码的响应：401/403 的文案区分只能靠真实状态码，用 json(body,false) 会被固化成 500
+function httpJson(body: unknown, status: number, badJson = false): Response {
+  return {
+    ok: status < 400,
+    status,
+    // badJson 复现反向代理/网关返回 HTML 的情形：.json() 抛 SyntaxError，
+    // 用于证明错误分支不会把「解析失败」当成病因（盖掉真实状态码）
+    json: async () => {
+      if (badJson) throw new SyntaxError('Unexpected token < in JSON at position 0');
+      return body;
+    },
+  } as unknown as Response;
+}
+
 let statusUrls: string[] = [];
 let statusFixture: Record<string, unknown> = { ...STATUS_FIXTURE };
+// 重建端点的应答形状（默认成功）：T04531 的 F/G/H/I/J 各按需要改造
+let rebuildResponse: { body: unknown; status: number; badJson?: boolean } = { body: { status: {} }, status: 200 };
+// T04531：重建请求的 Authorization 头实测留痕。
+// 为什么记原始 init.headers 而不是只记 URL：本文件的静态对照测试（auth-guarded-endpoint-fetch）
+// 只能证明 Config.vue 源码写了 apiFetch，证明不了「运行时真的把 Bearer 带上了」——
+// 而用户报的正是运行时 401。故这里抓真实出站的请求头，把最后一环变成行为断言。
+let rebuildRequests: { method: string; authorization: string | null; contentType: string | null }[] = [];
 
 function installFetchStub(): void {
   statusUrls = [];
+  rebuildRequests = [];
   statusFixture = { ...STATUS_FIXTURE };
+  rebuildResponse = { body: { status: {} }, status: 200 };
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -73,7 +97,16 @@ function installFetchStub(): void {
         statusUrls.push(url);
         return json(statusFixture);
       }
-      if (url.includes('/api/search/rebuild') && method === 'POST') return json({ status: {} });
+      if (url.includes('/api/search/rebuild') && method === 'POST') {
+        // apiFetch 传进来的是 Headers 实例；用 new Headers() 归一，裸对象/数组写法也能读
+        const headers = new Headers(init?.headers);
+        rebuildRequests.push({
+          method,
+          authorization: headers.get('authorization'),
+          contentType: headers.get('content-type'),
+        });
+        return httpJson(rebuildResponse.body, rebuildResponse.status, rebuildResponse.badJson);
+      }
       if (url.endsWith('/api/config') && method === 'GET') return json(structuredClone(CONFIG_FIXTURE));
       if (url.endsWith('/api/config/effects')) return json({ items: [] });
       if (url.endsWith('/api/config/mcp')) return json({ enabled: false });
@@ -94,6 +127,12 @@ async function mountConfigOnAiTab(): Promise<VueWrapper> {
   setActivePinia(createPinia());
   const auth = useAuthStore();
   auth.token = 't04073';
+  // T04531：真实登录态必须同时落 localStorage。
+  // 线上「登录 → 刷新页面」后，token 的权威来源是 auth store 持久化的 STORAGE_KEYS.AUTH_TOKEN
+  // （store 里的 ref 只是内存副本）；重建请求走 apiFetch，它只读 localStorage。
+  // 只赋 Pinia token 的旧夹具等于把「已登录」写成半个状态，正好看不见本次缺陷——
+  // 那样 add 出来的 Authorization 断言会在一个不真实的场景里跑。
+  localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, 't04073');
   auth.user = {
     id: 'u-t04073',
     username: 'admin',
@@ -191,5 +230,68 @@ describe('T04073 配置中心向量覆盖展示', () => {
     expect(statusUrls.length).toBeGreaterThan(before);
     const success = vi.mocked(ElMessage.success).mock.calls.at(-1)?.[0] ?? '';
     expect(String(success)).toContain('向量覆盖 4/4 页');
+  }, MOUNT_BUDGET_MS);
+
+  // ── T04531：建索引按钮的登录态误报（已登录点重建 → 「未登录或会话已过期」） ──
+  // 上一条 E 只证明「点按钮会发重建请求」，没证明「请求带凭据」——而这正是缺陷本体。
+  it('F · 重建请求真的携带 Bearer：已登录点按钮不再被后端当游客', async () => {
+    wrapper = await mountConfigOnAiTab();
+    await wrapper.find('[data-testid="rebuild-index-btn"]').trigger('click');
+    await flushPromises();
+    expect(rebuildRequests.length, '点击建索引必须发出 POST /api/search/rebuild').toBe(1);
+    // 回归点：旧写法用裸 fetch，这里读到的是 null —— 后端因此走到 requireAuth/requireAdmin 的
+    // 「无凭据」分支返回 401，前端把服务器真话原样透出成「会话过期」
+    expect(rebuildRequests[0].authorization).toBe('Bearer t04073');
+    // apiFetch 用 new Headers(init.headers) 合并调用方头：Content-Type 不能被注入逻辑吃掉
+    expect(rebuildRequests[0].contentType).toContain('application/json');
+  }, MOUNT_BUDGET_MS);
+
+  it('G · 未登录（无持久化 token）时不带 Authorization：不伪造凭据，也不误报成功', async () => {
+    wrapper = await mountConfigOnAiTab();
+    // 夹具里 localStorage 与 Pinia 同时给了 token；这里只清 localStorage，
+    // 复现「刷新后 restoreSession 还没跑完」的窗口——重建仍应诚实裸发，而不是发出空 Bearer
+    localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+    await wrapper.find('[data-testid="rebuild-index-btn"]').trigger('click');
+    await flushPromises();
+    expect(rebuildRequests.length).toBe(1);
+    expect(rebuildRequests[0].authorization ?? '').not.toMatch(/^Bearer\s*$/);
+  }, MOUNT_BUDGET_MS);
+
+  it('H · 后端 403 权限不足透成「权限不足」，不再冒充会话问题', async () => {
+    wrapper = await mountConfigOnAiTab();
+    // ai 页签对非管理员可见（adminOnly:false），这条路径真实可点。
+    // 本条锁的是需求「返回真实原因」这一验收面：403 文案必须落在权限语义上，
+    // 任何把失败统一说成「会话已过期」的改法都会在这里变红。
+    rebuildResponse = { body: { error: '权限不足' }, status: 403 };
+    await wrapper.find('[data-testid="rebuild-index-btn"]').trigger('click');
+    await flushPromises();
+    const error = vi.mocked(ElMessage.error).mock.calls.at(-1)?.[0] ?? '';
+    expect(String(error)).toContain('索引重建失败：权限不足');
+    expect(String(error)).not.toContain('未登录');
+  }, MOUNT_BUDGET_MS);
+
+  it('I · 真·会话失效（带 token 仍 401）仍如实报会话过期，并清理失效 token', async () => {
+    wrapper = await mountConfigOnAiTab();
+    rebuildResponse = { body: { error: '未登录或会话已过期', code: 'UNAUTHORIZED' }, status: 401 };
+    await wrapper.find('[data-testid="rebuild-index-btn"]').trigger('click');
+    await flushPromises();
+    const error = vi.mocked(ElMessage.error).mock.calls.at(-1)?.[0] ?? '';
+    expect(String(error)).toContain('未登录或会话已过期');
+    // apiFetch 的 401 收口：本次带了 token 却 401 → 本地失效 token 必须被清掉，
+    // 否则刷新后仍拿旧 token 反复撞 401（该清理只在 token 存在时触发，G 条的裸发不会误清）
+    expect(localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN)).toBeNull();
+  }, MOUNT_BUDGET_MS);
+
+  it('J · 错误体不是 JSON（反代 502）：状态码不丢，也不把解析异常当病因', async () => {
+    wrapper = await mountConfigOnAiTab();
+    // 这条才真正锁住「res.json().catch(() => ({})) + HTTP <code> 前缀」这一改动：
+    // 旧写法 await res.json() 在非 JSON 响应上直接抛 SyntaxError，
+    // 用户看到的是「Unexpected token < in JSON…」，真实故障（网关 502）被彻底盖掉
+    rebuildResponse = { body: null, status: 502, badJson: true };
+    await wrapper.find('[data-testid="rebuild-index-btn"]').trigger('click');
+    await flushPromises();
+    const error = vi.mocked(ElMessage.error).mock.calls.at(-1)?.[0] ?? '';
+    expect(String(error)).toContain('网关错误');
+    expect(String(error)).not.toMatch(/Unexpected token|JSON/);
   }, MOUNT_BUDGET_MS);
 });
