@@ -184,18 +184,26 @@ function openBrowser(url: string): void {
 // 日志双写流设置：同时输出到 stdout 和文件
 // 提取为独立函数降低 main 认知复杂度（S3776）
 // 降级策略：目录创建/文件打开失败时降级到仅 stdout，不阻断主服务
+// O9：按块缓冲后再落盘/输出。逐条 write 时 pino 每行都会做一次字符串→Buffer 转换
+//   （分配来源的 88–95%），高频请求下把短命垃圾推高到 GB 级；改成 64 KB/250 ms 批量刷新，
+//   每批只转换一次，同时显著减少 stdout/文件 syscall 次数。
+const LOG_FLUSH_INTERVAL_MS = 250;
+const LOG_FLUSH_BYTES = 64 * 1024;
+
 async function setupLoggerStream(loggingConfig: { level: string; enableRequestLog: boolean; logFilePath?: string }): Promise<{
   loggerStream: NodeJS.WritableStream | undefined;
   logFileStream: fs.WriteStream | undefined;
+  flushLogs: () => Promise<void>;
 }> {
-  if (!loggingConfig.logFilePath) return { loggerStream: undefined, logFileStream: undefined };
+  const noop = async () => {};
+  if (!loggingConfig.logFilePath) return { loggerStream: undefined, logFileStream: undefined, flushLogs: noop };
   const logPath = path.resolve(getApiDir(), '..', loggingConfig.logFilePath);
   try {
     await fs.promises.mkdir(path.dirname(logPath), { recursive: true });
     // 预检：以追加模式同步打开并立即关闭，确认目录/文件可写
     const testFd = fs.openSync(logPath, 'a');
     fs.closeSync(testFd);
-    const fileStream = fs.createWriteStream(logPath, { flags: 'a' });
+    const fileStream = fs.createWriteStream(logPath, { flags: 'a', highWaterMark: LOG_FLUSH_BYTES });
     let fileStreamHealthy = true;
     fileStream.on('error', (err) => {
       if (fileStreamHealthy) {
@@ -203,23 +211,51 @@ async function setupLoggerStream(loggingConfig: { level: string; enableRequestLo
         fileStreamHealthy = false;
       }
     });
-    const logFileStream = fileStream;
+    let pending = '';
+    let flushTimer: NodeJS.Timeout | null = null;
+    const flush = (): void => {
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      if (!pending) return;
+      const chunk = pending;
+      pending = '';
+      process.stdout.write(chunk);
+      if (fileStreamHealthy && !fileStream.destroyed) fileStream.write(chunk);
+    };
     const loggerStream = new Writable({
-      write(chunk, encoding, callback) {
-        process.stdout.write(chunk, encoding);
-        if (fileStreamHealthy && !fileStream.destroyed) {
-          fileStream.write(chunk, encoding, callback);
-        } else {
-          callback();
+      // 保留字符串形态，批量拼接后才在 flush 时一次性转换
+      decodeStrings: false,
+      write(chunk, _encoding, callback) {
+        pending += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        if (pending.length >= LOG_FLUSH_BYTES) {
+          flush();
+        } else if (!flushTimer) {
+          flushTimer = setTimeout(flush, LOG_FLUSH_INTERVAL_MS);
+          flushTimer.unref();
         }
+        callback();
+      },
+      final(callback) {
+        flush();
+        callback();
       },
     });
     loggerStream.on('error', () => {});
     console.log(`[日志] 日志文件：${logPath}`);
-    return { loggerStream, logFileStream };
+    const flushLogs = async (): Promise<void> => {
+      flush();
+      await new Promise<void>((resolve) => {
+        if (fileStream.destroyed) return resolve();
+        const timer = setTimeout(resolve, 1000);
+        fileStream.end(() => { clearTimeout(timer); resolve(); });
+      });
+    };
+    return { loggerStream, logFileStream: fileStream, flushLogs };
   } catch (err) {
     console.warn(`[日志] 日志文件创建失败，降级到仅 stdout：`, err);
-    return { loggerStream: undefined, logFileStream: undefined };
+    return { loggerStream: undefined, logFileStream: undefined, flushLogs: noop };
   }
 }
 
@@ -370,7 +406,7 @@ export async function buildApp(): Promise<BuiltApp> {
   const loggingConfig = config.logging ?? { level: 'info', enableRequestLog: true, logFilePath: '' };
 
   // 日志双写：同时输出到 stdout 和文件（提取为独立函数降低 main 认知复杂度）
-  const { loggerStream, logFileStream } = await setupLoggerStream(loggingConfig);
+  const { loggerStream, flushLogs } = await setupLoggerStream(loggingConfig);
 
   const app = Fastify({
     logger: {
@@ -384,6 +420,9 @@ export async function buildApp(): Promise<BuiltApp> {
       // 双写 stream：stdout + 文件（loggerStream 未创建时省略，用 pino 默认 stdout）
       ...(loggerStream ? { stream: loggerStream } : {}),
     },
+    // O9：Fastify 默认还会打 incoming/completed 两行，与本文件的钩子叠加成每请求 4 行。
+    // 统一由下方钩子输出（可采样、只打 1 行），避免重复分配。
+    disableRequestLogging: true,
     // 50MB：支持多附件上传场景，超过此大小的请求体直接拒绝
     bodyLimit: 50 * 1024 * 1024,
     pluginTimeout: 60000,
@@ -391,27 +430,32 @@ export async function buildApp(): Promise<BuiltApp> {
   // 请求级日志钩子：覆盖 HTTP 层，确保前端报错时后端日志有反馈
 
   if (loggingConfig.enableRequestLog) {
+    // O9：默认只保留 1 行完成日志；入站日志降为 debug（level=info 时零输出）。
+    // 采样率可用 WIKI_REQUEST_LOG_SAMPLE（0–1）临时下调，错误日志不受采样影响。
+    const rawSample = Number(process.env.WIKI_REQUEST_LOG_SAMPLE);
+    const sampleRate = Number.isFinite(rawSample) ? Math.min(1, Math.max(0, rawSample)) : 1;
 
     app.addHook('onRequest', async (request) => {
-      request.log.info({ method: request.method, url: request.url }, 'incoming request');
+      request.log.debug({ method: request.method, url: request.url }, 'incoming request');
     });
 
-
     app.addHook('onResponse', async (request, reply) => {
+      if (sampleRate < 1 && Math.random() >= sampleRate) return;
       const elapsedMs = reply.elapsedTime.toFixed(2);
       request.log.info(
         { method: request.method, url: request.url, statusCode: reply.statusCode, elapsedMs },
         'request completed',
       );
     });
+  }
 
-
-    app.addHook('onError', async (request, reply, error) => {
-      request.log.error(
-        { method: request.method, url: request.url, statusCode: reply.statusCode, err: error },
-        'request error',
-      );
-    });
+  // 错误日志与请求日志开关解耦：即使关闭请求日志，异常也必须留痕
+  app.addHook('onError', async (request, reply, error) => {
+    request.log.error(
+      { method: request.method, url: request.url, statusCode: reply.statusCode, err: error },
+      'request error',
+    );
+  });
 
     // setErrorHandler：兜底所有未处理的错误（包括 reply.send 内部抛出的 FST_ERR_REP_*）
     // 为什么必须：handler 内部 reply.send 抛错（如 FST_ERR_REP_INVALID_PAYLOAD_TYPE）时，
@@ -433,7 +477,6 @@ export async function buildApp(): Promise<BuiltApp> {
         code: error.code || 'INTERNAL_ERROR',
       });
     });
-  }
 
   // process 级兜底：捕获真正逃逸到 node 顶层的事件循环异常与未处理 Promise 拒绝
   // 为什么必须：setErrorHandler 仅覆盖 fastify reply 路径，未捕获的 async 异常 / 不在
@@ -693,16 +736,8 @@ registerDataCleanRoute(app, vault, isolationGuards);
       // § P2-7：关闭 chokidar 监听器，清空 VaultService 缓存
       disposeVault: () => vault.dispose(),
       // 关闭日志文件流，确保缓冲写入落盘（GS-1：长连接资源清理）
-      // 为什么用超时保护：避免文件系统异常导致退出阻塞，1s 足够小体积日志刷新
-      // 为什么用局部变量 stream：闭包内 TS 无法保证 logFileStream 仍非空，局部变量避免 ! 断言
-      flushLogs: async () => {
-        if (!logFileStream) return;
-        const stream = logFileStream;
-        await new Promise<void>((resolve) => {
-          const timer = setTimeout(resolve, 1000);
-          stream.end(() => { clearTimeout(timer); resolve(); });
-        });
-      },
+      // O9：批量缓冲后必须先 flush 再 end，否则最后 250 ms 内的日志会丢
+      flushLogs: () => flushLogs(),
     });
   };
   shutdownOnRestart = () => { void shutdown('restart'); };
