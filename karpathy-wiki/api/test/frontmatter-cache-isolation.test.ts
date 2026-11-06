@@ -206,7 +206,9 @@ describe('源码守护：不允许再就地改写 gray-matter 解析结果', () 
     expect(banned[2].re.test('  parsed.data.entities.push(item);')).toBe(true);
   });
 
-  it('src 下无就地改写 .data. 的写法', async () => {
+  // 全库源码守护：逐文件串行 readFile（api/src 下 ~120 个 .ts），本机实测 3.7 s，
+  //   与其他用例并发跑时会被默认 5 s 预算卡住——按实测值放宽，不设逻辑改动
+  it('src 下无就地改写 .data. 的写法', { timeout: 20_000 }, async () => {
     const entries = await fs.readdir(srcDir, { recursive: true, encoding: 'utf-8' });
     const tsFiles = (entries as string[])
       .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))

@@ -34,7 +34,7 @@ export type PageParse =
 // 用 structuredClone 而非 JSON 往返：js-yaml 会把无引号日期解析成 Date，JSON 会把它压成字符串。
 function detach<T>(value: T): T {
   return value === undefined || value === null
-    ? (value as T)
+    ? value
     : structuredClone(value);
 }
 
