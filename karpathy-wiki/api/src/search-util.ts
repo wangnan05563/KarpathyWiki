@@ -1,6 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import matter from 'gray-matter';
+// T04503：整页解析走收敛层。直连 matter() 时 gray-matter 的内容缓存会把坏页「吃进去」——
+// 同一串字节第一次读抛异常、之后每次「解析成功」并返回空 data，于是坏页在第一轮进 badPageSink 记账、
+// 在第二轮变成「过滤不匹配」静默消失。收敛层显式带 options，绕开缓存，判定只由字节决定。
+import { parsePage } from './utils/frontmatter.js';
 import type { VaultService } from './vault/vault-service.js';
 // T02686：检索侧页面目录取 page-scope 单一来源
 import { PAGE_DIRS } from './vault/page-scope.js';
@@ -77,7 +80,9 @@ function matchSearchFilter(
   filter?: SearchFilter,
 ): { matched: boolean; content?: string } {
   if (!needsFrontmatter(filter)) return { matched: true };
-  const parsed = matter(content);
+  // 故意用严格版 parsePage：坏 YAML 照样抛，让 processSearchFile 外层 catch 把它记进 badPageSink。
+  // 这里不能换成 tryParsePage + 「当空元信息继续」——那正是本单要修的「坏页静默不匹配」。
+  const parsed = parsePage(content);
   const fm = parsed.data;
   if (filter?.source && fm.source !== filter.source) return { matched: false };
   if (filter?.status && fm.status !== filter.status) return { matched: false };
@@ -95,7 +100,7 @@ function matchSearchFilter(
 // 处理单个页面文件：读取内容、过滤、匹配关键词，返回 SearchHit 或 null
 // T04176：badPageSink 收集「frontmatter 解析失败」的页面。为什么必须就地吞掉而不是让它冒出去：
 // gray-matter 对坏 YAML 是抛异常（未闭合 flow collection / 重复键 / 值里裸冒号），而带 source、
-// status、type、tags 任一过滤条件时每个页面都会过 matter() 一次。mapWithConcurrency 的约定是
+// status、type、tags 任一过滤条件时每个页面都会过一次整页解析。mapWithConcurrency 的约定是
 // 「任意一项失败由调用方在 fn 内处理」，此前没人处理——于是全库里只要有一页 frontmatter 写坏，
 // 整次扫描连坐 reject，问答降级链两级同时失败，用户看到的是「知识库未覆盖此问题」，
 // 真实原因却是「有一页 YAML 头坏了」。坏页跳过（无法证明它属于过滤范围），其余页面照常召回。

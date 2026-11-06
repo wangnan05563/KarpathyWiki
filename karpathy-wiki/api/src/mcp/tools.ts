@@ -7,7 +7,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import matter from 'gray-matter';
+import { tryParsePage } from '../utils/frontmatter.js';
 import type { VaultService } from '../vault/vault-service.js';
 import type { EngineAdapter, AppConfig } from '../types.js';
 import { searchPages } from '../search-util.js';
@@ -152,7 +152,11 @@ const definitions: McpTool[] = [
     async handler(args, { vault }) {
       const rel = validateKbPath(requireString(args, 'path'), false);
       const content = await vault.readFile(rel);
-      const parsed = matter(content);
+      // T04503：坏 YAML 要给 MCP 调用方一句可读的话，而不是 js-yaml 的多行原文当错误体。
+      // 直连 matter() 还有一层更坏的分叉：同一页第一轮读报错、第二轮起返回 frontmatter:{} 的「空元信息页」，
+      // 调用方会以为这页真的没有元信息。走收敛层后两轮都判坏。
+      const parsed = tryParsePage(content);
+      if (!parsed.ok) throw new Error(`该页元信息解析失败: ${rel} —— ${parsed.reason}`);
       return { path: rel, frontmatter: parsed.data, body: parsed.content };
     },
   },

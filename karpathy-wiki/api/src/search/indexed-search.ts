@@ -5,7 +5,8 @@
 // 降级：索引不可用/同步失败时由调用方回退 searchPages，行为与改造前一致。
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import matter from 'gray-matter';
+// T04503：整页解析走收敛层（绕开 gray-matter 的内容缓存，坏页判定只由字节决定）
+import { tryParsePage } from '../utils/frontmatter.js';
 import type { VaultService } from '../vault/vault-service.js';
 import type { SearchFilter, SearchHit } from '../search-util.js';
 import { mapWithConcurrency } from '../utils/async-pool.js';
@@ -173,12 +174,24 @@ async function matchesFrontmatter(
   vault: VaultService,
   rel: string,
   filter: SearchFilter | undefined,
+  badPageSink: Array<{ path: string; reason: string }>,
 ): Promise<boolean> {
+  let raw: string;
   try {
-    return matchFilter(matter(await vault.readFile(rel)).data, filter);
+    raw = await vault.readFile(rel);
   } catch {
     return false; // 读取失败：该页不进结果，与改造前口径一致
   }
+  // T04503：坏 YAML 走收敛层判定，并汇入与 legacy 扫描同一条记账口径。
+  // 改造前这里是 try { matter(...) } catch { return false }——冷读抛、热读拿到 data:{}，
+  // 两种读序结论都算「不匹配」，看似无害，实际坏页在索引路径上完全隐形：
+  // 同一次检索在 legacy 与索引两条路上，坏页的记账数不一样。
+  const parsed = tryParsePage(raw);
+  if (!parsed.ok) {
+    badPageSink.push({ path: rel, reason: parsed.reason });
+    return false;
+  }
+  return matchFilter(parsed.data, filter);
 }
 
 function buildSnippet(chunks: PageChunks['chunks'], terms: string[]): string {
@@ -213,6 +226,9 @@ export async function searchPagesIndexed(
 
   const byPage = groupChunksByPage(rows);
 
+  // 与 legacy 扫描（search-util.searchPages）同一条坏页记账口径：一次检索只打一条，
+  // 排查要的是「哪几页坏了 + 一共几页」，而不是逐页刷日志。
+  const badPages: Array<{ path: string; reason: string }> = [];
   const hits: SearchHit[] = [];
   for (const [rel, entry] of byPage) {
     if (filter?.folder && !rel.startsWith(`${filter.folder}/`)) continue;
@@ -220,7 +236,7 @@ export async function searchPagesIndexed(
     const hitCount = terms.filter((t) => combined.includes(t)).length;
     if (hitCount === 0) continue;
 
-    if (needsFrontmatterFilter(filter) && !(await matchesFrontmatter(vault, rel, filter))) continue;
+    if (needsFrontmatterFilter(filter) && !(await matchesFrontmatter(vault, rel, filter, badPages))) continue;
 
     entry.chunks.sort((a, b) => a.index - b.index);
     hits.push({
@@ -229,6 +245,13 @@ export async function searchPagesIndexed(
       snippet: buildSnippet(entry.chunks, terms),
       hits: hitCount,
     });
+  }
+
+  if (badPages.length > 0) {
+    console.warn('[search-scan] frontmatter 解析失败已跳过', JSON.stringify({
+      total: badPages.length,
+      sample: badPages.slice(0, 3),
+    }));
   }
 
   hits.sort((a, b) => (b.hits - a.hits) || a.title.localeCompare(b.title));

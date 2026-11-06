@@ -6,7 +6,7 @@
 // - review 表示是否已人工复核（存在 reviewed_at 字段）
 // - confidence 用"正文非空"作为完整度代理信号（SRS：字段完整数/正文字数阈值的最小实现）
 // - knowledgeStatus 复用 FR-18 的 computeKnowledgeStatus，保证阅读/问答/健康检查三处取值一致
-import matter from 'gray-matter';
+import { parsePage } from './frontmatter.js';
 import type { VaultService } from '../vault/vault-service.js';
 import type { AppConfig, RefSignal } from '../types.js';
 import { computeKnowledgeStatus } from './knowledge-status.js';
@@ -35,14 +35,17 @@ export async function buildRefSignals(
     let updated: unknown;
     try {
       const content = await vault.readFile(p);
-      const parsed = matter(content);
+      // T04503：走收敛层的严格解析。直连 matter() 时坏 YAML 页在第一轮读抛、第二轮起返回 data:{}，
+      // 于是同一页的 confidence 随「本进程第几次读」翻转（正文非空 → true），问答第二遍的信号和第一遍不一样。
+      // 这里保留抛语义：坏页和读失败走同一支——引用照常可见，信号一律 unknown/false（AC-19-6 不许静默丢弃）。
+      const parsed = parsePage(content);
       source = parsed.data.source;
       reviewedAt = parsed.data.reviewed_at;
       knowledgeClass = parsed.data.knowledge_class;
       updated = parsed.data.updated;
       bodyNonEmpty = parsed.content.trim().length > 0;
     } catch {
-      // 读取失败：信号全 unknown/false，但不丢弃引用
+      // 读取失败或元信息解析失败：信号全 unknown/false，但不丢弃引用
       source = undefined;
       bodyNonEmpty = false;
     }
