@@ -18,6 +18,10 @@ import type { PageQualityScore, DuplicatePair, MergeResult, PrecheckResult, Prec
 // O2/O3：全库扫描改为有界并发 + 按页面签名缓存 + 周期性让出事件循环
 import { DEFAULT_SCAN_CONCURRENCY, mapWithConcurrency, yieldToEventLoop } from "../utils/async-pool.js";
 import { computePageSignature, DerivedCache } from "../utils/derived-cache.js";
+// T04502：整页解析一律走收敛层。直连 matter() 不带 options 时会启用 gray-matter 的内容缓存，
+// 而缓存条目在解析前就写入（data:{}），坏 YAML 抛异常后缓存仍收下半成品——同一串字节
+// 第一次读抛、第二次起「解析成功」且 data 为空，坏页判定于是随「本进程第几次读」变脸。
+import { parsePage, tryParsePage } from "../utils/frontmatter.js";
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 500;
@@ -45,6 +49,27 @@ async function vaultRetry<T>(
 
 //  Scoring engine 
 /**
+ * 体检列表里的「不可评分页」占位：读失败与坏 YAML 都落到这一格形状。
+ * 抽出来是为了让两条路径逐字同形——历史上只有 catch 一支构造得出来，
+ * 坏页一旦走了「缓存半成品」就变成低分正常页，列表规模锁随之漂移。
+ */
+function unscoredPage(relPath: string, dir: string, detail: string): PageQualityScore {
+  return {
+    path: relPath,
+    title: relPath.split("/").pop()!.replace(".md", ""),
+    qualityScore: 0,
+    category: { length: 0, links: 0, frontmatter: 0, citations: 0, duplicate: 0, freshness: 0 },
+    metadata: {
+      wordCount: 0, lineCount: 0, internalLinks: 0, inboundLinks: 0,
+      lastModified: new Date().toISOString(), hasFrontmatter: false,
+      isDraft: true, fileSizeBytes: 0, hasBom: false, encoding: "unknown" as any, directory: dir,
+    },
+    issues: [{ code: "SCAN_ERROR", severity: "error", detail }],
+    suggestions: [{ type: "link_suggestion", detail: "Verify file permissions or encoding", actionable: true }],
+  };
+}
+
+/**
  * 处理单个文件的扫描：读取内容、解析 frontmatter、计算质量评分。
  * 提取为独立函数降低 scanVaultRaw 的认知复杂度（S3776）。
  */
@@ -55,14 +80,24 @@ async function processScanFile(
 ): Promise<{ page: PageQualityScore; content: string } | null> {
   if (!isPageFile(file)) return null;
   const relPath = `${dir}/${file}`;
+  let content: string;
   try {
-    const content = await vaultRetry(
+    content = await vaultRetry(
       () => vault.readFile(relPath),
       `scan:${relPath}`
     );
-    const parsed = matter(content);
+  } catch (err) {
+    console.warn(`Failed to process ${dir}/${file}:`, err);
+    return { page: unscoredPage(relPath, dir, `Failed to read: ${err instanceof Error ? err.message : String(err)}`), content: "" };
+  }
+  // T04502：坏 YAML 与读失败分开口径记账，但结论只由字节决定：同一串内容第几次读都是这一格
+  const parsed = tryParsePage(content);
+  if (!parsed.ok) {
+    return { page: unscoredPage(relPath, dir, `Invalid YAML frontmatter: ${parsed.reason}`), content: "" };
+  }
+  try {
     // T02933：双块页面按合并后的元信息判定，否则第一块缺 title 会被误判「缺元信息」
-    const merged = mergeDuplicateFrontmatter(parsed.data as Record<string, unknown>, parsed.content || "");
+    const merged = mergeDuplicateFrontmatter(parsed.data, parsed.content || "");
     return {
       page: {
         path: relPath,
@@ -95,22 +130,7 @@ async function processScanFile(
     };
   } catch (err) {
     console.warn(`Failed to process ${dir}/${file}:`, err);
-    return {
-      page: {
-        path: `${dir}/${file}`,
-        title: file.replace(".md", ""),
-        qualityScore: 0,
-        category: { length: 0, links: 0, frontmatter: 0, citations: 0, duplicate: 0, freshness: 0 },
-        metadata: {
-          wordCount: 0, lineCount: 0, internalLinks: 0, inboundLinks: 0,
-          lastModified: new Date().toISOString(), hasFrontmatter: false,
-          isDraft: true, fileSizeBytes: 0, hasBom: false, encoding: "unknown" as any, directory: dir,
-        },
-        issues: [{ code: "SCAN_ERROR", severity: "error", detail: `Failed to read: ${err instanceof Error ? err.message : String(err)}` }],
-        suggestions: [{ type: "link_suggestion", detail: "Verify file permissions or encoding", actionable: true }],
-      },
-      content: "",
-    };
+    return { page: unscoredPage(relPath, dir, `Failed to read: ${err instanceof Error ? err.message : String(err)}`), content: "" };
   }
 }
 
@@ -319,7 +339,10 @@ export async function fixFrontmatter( // NOSONAR - 认知复杂度由业务逻�
   for (const relPath of paths) {
     try {
       const content = await vaultRetry(() => vault.readFile(relPath), `fm-read:${relPath}`);
-      const parsed = matter(content);
+      // T04502：严格语义——坏 YAML 在这里抛出，由下面既有 catch 记账成 "Fix failed"。
+      // 原来直连 matter() 时，本进程第二次读这串字节会「解析成功」且 data:{}，于是补齐字段后
+      // matter.stringify 把原来那段（虽然写坏但仍是元信息）的 YAML 头整块丢掉再落盘，形成假修复。
+      const parsed = parsePage(content);
       // T02933：历史双块文件先把第二块合并进来，再补齐缺字段；否则第二块会被当正文写回，形成假修复
       const merged = mergeDuplicateFrontmatter(parsed.data as Record<string, unknown>, parsed.content || "");
       const newFm: Record<string, any> = { ...merged.data };
@@ -496,8 +519,11 @@ export async function mergeDuplicatePages( // NOSONAR - 认知复杂度由业务
     // Step 1: Read both files
     const contentA = await vaultRetry(() => vault.readFile(pageA.path), "merge-read-A");
     const contentB = await vaultRetry(() => vault.readFile(pageB.path), "merge-read-B");
-    const parsedA = matter(contentA);
-    const parsedB = matter(contentB);
+    // T04502：两侧都必须解析成功才继续合并（严格语义走外层 catch → 记 "Merge failed"）。
+    // 直连 matter() 时坏页在第二次读会返回空 data，于是「合并成功」把坏页的元信息当空值并走
+    //   updatesApplied+1 —— 同一对页面在第几次读给出两种结果，去重审计无法复现。
+    const parsedA = parsePage(contentA);
+    const parsedB = parsePage(contentB);
 
     // Step 2: Merge frontmatter  prefer pageA values, fill missing from pageB
     const mergedFm: Record<string, any> = { ...parsedA.data };
@@ -575,20 +601,29 @@ interface PrecheckPage {
   path: string;
   title: string;
   content: string;
+  /** T04502：坏 YAML 页的一行原因。有值＝这页元信息解析失败，仍要计入覆盖面并被记 error */
+  badFrontmatter?: string;
 }
 
 async function readPrecheckPage(vault: VaultService, dir: string, file: string): Promise<PrecheckPage | null> {
   const rel = `${dir}/${file}`;
+  let content: string;
   try {
-    // O2：一次读取同时拿到 title 与正文，供后续校验复用——原实现先读一遍取标题、
-    //   校验循环再读一遍（虽命中内容缓存，但 matter() 与链接正则仍各跑两次）。
-    const content = await vaultRetry(() => vault.readFile(rel), `precheck:${rel}`);
-    const title = (matter(content).data.title as string) || file;
-    return { path: rel, title, content };
+    content = await vaultRetry(() => vault.readFile(rel), `precheck:${rel}`);
   } catch {
-    // 与改造前一致：无法解析的页面不进入 scannedFiles/errors（保持既有口径）
+    // 读不到文件（缺失/权限）：与改造前一致，不进入 scannedFiles/errors
     return null;
   }
+  // T04502：解析失败不再丢弃这一页。原实现在这里靠 catch 判坏页，于是冷读（本进程第一次读这串
+  //   字节）抛异常 → 页面不进 scannedFiles，也就永远走不到下面的 frontmatter 检查；
+  //   热读不抛 → 进 precheck 但 title 回退成文件名。两种读法都不会记 error、不会置 blocked——
+  //   「前置校验通过」与「这一页 YAML 坏了」可以同时为真，清洗门形同虚设。
+  //   现在把判定交给 tryParsePage（绕开缓存，结论只由字节决定），坏页带原因留在结果里。
+  const parsed = tryParsePage(content);
+  if (!parsed.ok) {
+    return { path: rel, title: file, content, badFrontmatter: parsed.reason };
+  }
+  return { path: rel, title: (parsed.data.title as string) || file, content };
 }
 
 async function computePrecheck(vault: VaultService): Promise<PrecheckResult> { // NOSONAR - 认知复杂度由业务逻辑决定
@@ -632,11 +667,13 @@ async function computePrecheck(vault: VaultService): Promise<PrecheckResult> { /
       bomCount++;
     }
 
-    // Parse frontmatter  will throw if YAML is broken
-    try {
-      matter(content);
-    } catch (fmErr) { // NOSONAR
-      result.errors.push(`${page.path}: Invalid YAML frontmatter  ${fmErr}`);
+    // T04502：frontmatter 判定来自 readPrecheckPage 的一次解析（绕开缓存，只由字节决定）。
+    // 原来这里再 matter(content) 一遍、靠「抛不抛」记账——而这一页能走到这里就意味着
+    //   readPrecheckPage 已经把它解析成功过，于是同一进程第二次读必然不抛：
+    //   errors 与 blocked 永远不置，坏 YAML 页拦不住清洗/编译门。
+    // 「不抛」不等于「通过」：badFrontmatter 有值即记 error 并 blocked，reason 落进文案。
+    if (page.badFrontmatter) {
+      result.errors.push(`${page.path}: Invalid YAML frontmatter: ${page.badFrontmatter}`);
       result.blocked = true;
     }
 
