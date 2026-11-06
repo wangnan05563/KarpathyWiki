@@ -102,20 +102,25 @@ function onSearchInput() {
     void doSearch(q);
   }, 350);
 }
+// O8：请求序号防乱序——移动端网络更易抖动，旧请求晚到会覆盖新结果
+let searchSeq = 0;
 async function doSearch(q: string) {
+  const seq = ++searchSeq;
   searching.value = true;
   searchError.value = '';
   try {
     const res = await apiFetch(`${API_BASE}/search?q=${encodeURIComponent(q)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = (await res.json()) as SearchResponse;
+    if (seq !== searchSeq) return;
     searchHits.value = data.hits ?? [];
     view.value = 'search';
   } catch (err) {
+    if (seq !== searchSeq) return;
     searchError.value = '搜索失败：' + (err as Error).message;
     searchHits.value = [];
   } finally {
-    searching.value = false;
+    if (seq === searchSeq) searching.value = false;
   }
 }
 function clearSearch() {
