@@ -1,9 +1,53 @@
 ﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import v8 from 'node:v8';
 import type { VaultService } from '../vault/vault-service.js';
 // T02472 L1：目录分布与总页数必须同一口径，否则「目录合计 227 / 总页面 245」在一页内自相矛盾
 import { PAGE_DIRS, isPageFile } from '../vault/page-scope.js';
+// O7：缓存命中率/重算耗时与索引同步情况，让容量问题可在页面上直接定位
+import { getDerivedCacheStats } from '../utils/derived-cache.js';
+import { getIndexSyncInfo } from '../search/indexed-search.js';
+
+// O4：运行态内存快照，供仪表盘/巡检观察驻留内存走向
+// 为什么不用 process.memoryUsage.rss 之类带小数：前端按 MB 展示，保留 1 位小数即可
+const BYTES_PER_MB = 1024 * 1024;
+
+function toMb(bytes: number): number {
+  return Math.round((bytes / BYTES_PER_MB) * 10) / 10;
+}
+
+// 活跃资源按类型计数：定时器/套接字异常堆积是「内存缓慢上涨」之外的另一种泄漏信号
+function countActiveResources(): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const name of process.getActiveResourcesInfo()) {
+    counts[name] = (counts[name] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function collectRuntimeMetrics() {
+  const mem = process.memoryUsage();
+  const heapLimitBytes = v8.getHeapStatistics().heap_size_limit;
+  return {
+    pid: process.pid,
+    nodeVersion: process.version,
+    uptimeSec: Math.round(process.uptime()),
+    memoryMb: {
+      rss: toMb(mem.rss),
+      heapUsed: toMb(mem.heapUsed),
+      heapTotal: toMb(mem.heapTotal),
+      external: toMb(mem.external),
+      arrayBuffers: toMb(mem.arrayBuffers),
+      // V8 堆上限：打包版由 build-exe.ps1 的 max-old-space-size 决定
+      heapLimit: toMb(heapLimitBytes),
+    },
+    // 堆占用比越接近 1 越危险；超过 ~0.8 就应视为「该重启/该降并发」的信号
+    heapUsedRatio: Number((mem.heapUsed / heapLimitBytes).toFixed(3)),
+    resources: countActiveResources(),
+    sampledAt: new Date().toISOString(),
+  };
+}
 
 // 注册统计路由。
 //   GET /api/stats   返回仪表盘汇总数据（页数、目录分布、最近编译记录）
@@ -52,6 +96,9 @@ export function registerStatsRoute(app: FastifyInstance, vault: VaultService) {
         totalLinks: graph.edges.length,
         dirCounts,
         recentLog,
+        process: collectRuntimeMetrics(),
+        caches: getDerivedCacheStats(),
+        searchIndex: getIndexSyncInfo(),
       });
     } catch (err: unknown) {
       return void reply.code(500).send({

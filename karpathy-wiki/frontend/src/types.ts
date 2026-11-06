@@ -381,6 +381,40 @@ export interface StatsData {
   totalLinks: number;
   dirCounts: Record<string, number>;
   recentLog: string;
+  // O4：后端运行态内存快照（可选——老版本后端不返回该字段）
+  process?: {
+    pid: number;
+    nodeVersion: string;
+    uptimeSec: number;
+    memoryMb: {
+      rss: number;
+      heapUsed: number;
+      heapTotal: number;
+      external: number;
+      arrayBuffers: number;
+      heapLimit: number;
+    };
+    heapUsedRatio: number;
+    resources: Record<string, number>;
+    sampledAt: string;
+  };
+  // O7：派生缓存命中率与重算耗时（可选——老版本后端不返回）
+  caches?: Record<string, {
+    hits: number;
+    misses: number;
+    lastComputeMs: number;
+    lastSignature: string;
+    lastComputedAt: number;
+    ttlMs: number;
+  }>;
+  // O7：FTS5 索引最近一次增量同步结果（未同步过时为 null）
+  searchIndex?: {
+    indexedPages: number;
+    updatedPages: number;
+    removedPages: number;
+    durationMs: number;
+    syncedAt: string;
+  } | null;
 }
 
 // ===== SCHEMA 与配置相关类型 =====

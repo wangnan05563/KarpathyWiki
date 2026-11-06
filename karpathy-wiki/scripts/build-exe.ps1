@@ -342,12 +342,15 @@ if ($seaNodePkg) {
     }
 }
 
+# 堆上限 1536 MB（原 512 MB）：压测实测 64 rps 常驻时 512 MB 在约 79 分钟打满并 OOM，
+#   与真实业务量级不符；O9 日志治理（去重 + 缓冲写）已消掉主要的分配 churn，但巡检仍需要
+#   足够余量扛住搜索/全库扫描的峰值。上限不是目标驻留，正常空闲 RSS 仍在百 MB 量级。
 $pkgArgs = @(
     "node_modules\@yao-pkg\pkg\lib-es5\bin.js",
     $bundleFile,
     "--sea",
     "--output", $exePath,
-    "--options", "max-old-space-size=512"
+    "--options", "max-old-space-size=1536"
 )
 if ($seaTarget) {
     $pkgArgs += @("--targets", $seaTarget)
