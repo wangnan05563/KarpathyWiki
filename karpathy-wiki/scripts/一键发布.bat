@@ -19,9 +19,10 @@ if defined NODE_DIR (
 echo ============================================================
 echo   Karpathy-Wiki One-Click Publish
 echo ============================================================
-echo   Builds the SPA, deploys it, restarts prod server.
+echo   Builds the SPA, deploys it, restarts prod server,
+echo   and publishes a GitHub Release by default.
 echo   Options: -SkipInstall -SkipBuild -SkipDeploy
-echo            -SkipRestart -PublishRelease -DryRun
+echo            -SkipRestart -SkipPublish -DryRun
 echo            -ReleaseNotesFile ^<path^>  (formal release notes, T02743)
 echo.
 

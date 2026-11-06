@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 # Karpathy-Wiki 一键发布主逻辑
-# 流程：解析 node -> 安装依赖 -> 构建前端 SPA -> 部署到 live -> 重启生产服务 -> 健康检查
+# 流程：解析 node -> 安装依赖 -> 构建前端 SPA -> 部署到 live -> 重启生产服务 -> 健康检查 -> 发布 GitHub Release
 # 配置驱动：所有命令/路径从 scripts/config.json 的 publish 节读取，无硬编码
 # 分层：本脚本由 一键发布.bat 调用，.bat 仅作纯 ASCII 入口
 
@@ -10,7 +10,8 @@ param(
     [switch]$SkipBuild,
     [switch]$SkipDeploy,
     [switch]$SkipRestart,
-    [switch]$PublishRelease,
+    # 默认发布 GitHub Release；只想部署 SPA（不发 Release）时加 -SkipPublish
+    [switch]$SkipPublish,
     # T02743：显式指定本次发布的正式 Release 说明文件（发布时落地为约定名 release-notes-<版本>.md）
     [string]$ReleaseNotesFile = '',
     [switch]$DryRun
@@ -70,29 +71,30 @@ $deployTargetDir = Join-Path (Join-Path (Join-Path (Split-Path $deployScript) '.
 function Join-Args([array]$a) { return ($a -join ' ') }
 
 # ---- GitHub Release 发布参数解析（dry-run 与真实执行共用，只读不落盘）----
-# token 不在此读取：publish-release.py 自行按 环境变量 GH_TOKEN > 本地 .env > git credential fill 解析
-$pyExe = $null; $relVer = $null; $relAsset = $null
+# 默认发布 Release（-SkipPublish 关闭）；token 不在此读取：publish-release.py 自行按
+# 环境变量 GH_TOKEN > 本地 .env > git credential fill 解析
+$doPublish = -not $SkipPublish
+$pyExe = $null; $relVer = $null; $relAsset = $null; $relAssetIssue = $null
 $pyCands = @($p.python_candidates); if (-not $pyCands -or $pyCands.Count -eq 0) { $pyCands = @('python', 'python3', 'py') }
-if ($PublishRelease) {
+if ($doPublish) {
     foreach ($cand in $pyCands) {
         $c = Get-Command $cand -ErrorAction SilentlyContinue
         if ($c) { $pyExe = $c.Source; break }
     }
-    # 版本：package.json 单一真相源；文件名版本仅作缺失兜底
+    # 版本：package.json 单一真相源
     $pkgPath = Join-Path $Root $p.version_source
     if (Test-Path $pkgPath) {
         try { $relVer = (Get-Content $pkgPath -Raw -Encoding UTF8 | ConvertFrom-Json).version } catch { }
     }
-    # 资产：glob 取最新，优先选与版本匹配的安装包（防 bump 后忘构建、旧包装进新 tag）
-    $allAssets = @(Get-ChildItem (Join-Path $Root $p.release_asset_glob) -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+    # 资产：必须与版本严格匹配；bump 后忘 build-exe 时阻断，绝不把旧包装进新 tag
     if ($relVer) {
-        $relAsset = $allAssets | Where-Object { $_.Name -like "*v$relVer.*" -or $_.Name -like "*-$relVer.*" } | Select-Object -First 1
+        $relAsset = Get-ChildItem (Join-Path $Root $p.release_asset_glob) -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like "*v$relVer.*" -or $_.Name -like "*-$relVer.*" } |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if (-not $relAsset) {
+            $relAssetIssue = "未找到与版本 $relVer 匹配的安装包: $($p.release_asset_glob)（请先运行 scripts\build-exe.bat）"
+        }
     }
-    if (-not $relAsset) {
-        $relAsset = $allAssets | Select-Object -First 1
-        if ($relAsset) { $relAssetNote = "未找到与版本 $relVer 匹配的安装包，使用最新" }
-    }
-    if (-not $relVer -and $relAsset -and $relAsset.Name -match 'v?([0-9][0-9A-Za-z._-]*)\.exe$') { $relVer = $Matches[1] }
 
     # T02743 发布说明解析：显式 -ReleaseNotesFile 优先（真实发布时落地为约定文件名）；
     # 否则只认约定文件 release-notes-<VER>.md——缺失或仅剩 .auto.md（旧 git log 兜底产物）
@@ -122,8 +124,27 @@ Write-Log "项目根: $Root" -Level INFO
 Write-Log "Node: $NodeExe" -Level INFO
 Write-Log "包管理器: $pkgManager" -Level INFO
 
+# 发布前置校验：默认发布时，缺件必须在构建/部署/重启之前阻断，避免服务已重启才发现发不出去
+if ($doPublish) {
+    $relIssues = @()
+    if (-not $pyExe) { $relIssues += "未找到 Python（候选: $($pyCands -join ' / ') 均不可用）" }
+    if (-not $relVer) { $relIssues += "无法推导版本号（检查 $($p.version_source) 的 version 字段）" }
+    if ($relAssetIssue) { $relIssues += $relAssetIssue }
+    if ($relNotesIssue) { $relIssues += $relNotesIssue }
+    if ($relIssues.Count -gt 0) {
+        if ($DryRun) {
+            foreach ($issue in $relIssues) { Write-Log "[DRY-RUN] 发布前置条件不满足: $issue" -Level WARN }
+            Write-Log "[DRY-RUN] 正式发布会在启动前阻断；只想部署可加 -SkipPublish" -Level WARN
+        } else {
+            foreach ($issue in $relIssues) { Write-Log "发布阻断：$issue" -Level ERROR }
+            Write-Log "补齐后重跑；只想部署 SPA 而不发 Release 时加 -SkipPublish" -Level ERROR
+            exit 1
+        }
+    }
+}
+
 if ($DryRun) {
-    Write-Log "[DRY-RUN] 仅打印将执行的命令，不实际构建/部署/重启" -Level WARN
+    Write-Log "[DRY-RUN] 仅打印将执行的命令，不实际构建/部署/重启/发布" -Level WARN
     Write-Log "1) 安装依赖 : $pkgManager $(Join-Args $installArgs)" -Level INFO
     Write-Log "2) 构建前端 : $pkgManager $(Join-Args $buildArgs)" -Level INFO
     Write-Log "3) 部署      : $NodeExe $($p.deploy_script) $deploySrc" -Level INFO
@@ -131,22 +152,19 @@ if ($DryRun) {
     Write-Log "   部署目标  : $dt (每次新建 public_live_<ts>，由 index.ts 自动选用最新)" -Level INFO
     Write-Log "4) 重启生产  : 停止端口 $apiPort -> $pkgManager $(Join-Args $prodStartArgs) (日志 $prodLog)" -Level INFO
     Write-Log "5) 健康检查  : $healthUrl / $spaUrl" -Level INFO
-    if ($PublishRelease) {
+    if ($doPublish) {
         if ($pyExe -and $relAsset -and $relVer) {
             Write-Log "6) 发布 Release: $pyExe publish-release.py $($relAsset.Name) (GH_TAG=$relVer GH_DRY_RUN=1)" -Level INFO
         } else {
-            Write-Log "6) 发布 Release: 解析失败 (python=$pyExe 资产=$(if ($relAsset) { $relAsset.Name } else { '无' }) 版本=$relVer)" -Level WARN
+            Write-Log "6) 发布 Release: 前置条件不满足（详见上方 WARN）" -Level WARN
         }
-        if ($relNotesIssue) {
-            Write-Log "[DRY-RUN] 发布说明未备好: $relNotesIssue" -Level WARN
-            Write-Log "[DRY-RUN] 正式发布将在此处阻断（不再用 git log 兜底）" -Level WARN
-        } elseif ($relNotesNote) {
+        if ($relNotesNote) {
             Write-Log "   发布说明  : $relNotesNote" -Level INFO
         } elseif ($relNotes) {
             Write-Log "   发布说明  : $relNotes" -Level INFO
         }
     } else {
-        Write-Log "6) 发布 Release: 未启用（加 -PublishRelease 开启；资产 $($p.release_asset_glob)）" -Level SKIP
+        Write-Log "6) 发布 Release: 未启用（-SkipPublish）" -Level SKIP
     }
     exit 0
 }
@@ -236,20 +254,10 @@ try {
     Write-Log "SPA 访问失败: $_" -Level WARN -Step "5/6"
 }
 
-# ============ 6) 发布 GitHub Release（可选，-PublishRelease）============
-if ($PublishRelease) {
+# ============ 6) 发布 GitHub Release（默认发布，-SkipPublish 关闭）============
+if ($doPublish) {
     Write-Log "步骤 6/6 发布 GitHub Release..." -Level STEP -Step "6/6"
-    if (-not $pyExe) { Write-Log "未找到 Python（候选: $($pyCands -join ' / ') 均不可用）" -Level ERROR -Step "6/6"; exit 1 }
-    if (-not $relAsset) { Write-Log "未找到安装包资产: $($p.release_asset_glob)（请先运行 scripts\build-exe.bat 打包）" -Level ERROR -Step "6/6"; exit 1 }
-    if (-not $relVer) { Write-Log "无法推导版本号（version_source 与资产文件名均未取到）" -Level ERROR -Step "6/6"; exit 1 }
-    if ($relAssetNote) { Write-Log $relAssetNote -Level WARN -Step "6/6" }
-
-    # T02743：说明未备好一律阻断，不再静默 git log 兜底；显式指定时在此落地为约定文件名
-    if ($relNotesIssue) {
-        Write-Log "发布阻断：$relNotesIssue" -Level ERROR -Step "6/6"
-        Write-Log "请先准备正式 Release 说明后重跑（可先用 -DryRun 预检）" -Level ERROR -Step "6/6"
-        exit 1
-    }
+    # 前置条件已在启动前校验通过；显式指定说明文件时在此落地为约定文件名
     if ($ReleaseNotesFile) {
         Copy-Item -Path $ReleaseNotesFile -Destination $relNotes -Force
         Write-Log "说明文件已落地: $relNotes（来自 -ReleaseNotesFile）" -Level INFO -Step "6/6"
@@ -263,7 +271,7 @@ if ($PublishRelease) {
     if ($LASTEXITCODE -ne 0) { Write-Log "GitHub Release 发布失败（检查 .env 的 GH_TOKEN 或 git 凭据库 github.com 凭证）" -Level ERROR -Step "6/6"; exit 1 }
     Write-Log "GitHub Release 发布完成 (tag=$relVer)" -Level OK -Step "6/6"
 } else {
-    Write-Log "步骤 6/6 跳过 GitHub Release 发布（未加 -PublishRelease）" -Level SKIP -Step "6/6"
+    Write-Log "步骤 6/6 跳过 GitHub Release 发布（-SkipPublish）" -Level SKIP -Step "6/6"
 }
 
 Write-LogBanner -Title "$($Config.project.name) 一键发布完成 [会话: $($script:LogSessionId)]"
