@@ -5,12 +5,13 @@
 //   ③ LLM 失败优雅降级（回退确定性候选）
 //   ④ 畸形 JSON 容错解析
 //   ⑤ quality-scanner 新增：renameFile / batchRename（同目录、目标存在保护、跨目录拒绝）/ batchDedupPages
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { VaultService } from '../src/vault/vault-service.js';
 import type { AppConfig } from '../src/types.js';
+import { resetPageSnapshot } from '../src/utils/derived-cache.js';
 import {
   analyzeVaultForCleanup,
   callLlmForAnalysis,
@@ -29,9 +30,11 @@ import {
 let vaultDir: string;
 // 文件系统支撑的轻量 VaultService fake：提供 mergeDuplicatePages 需要的 readFile / writeFile，
 // 其余方法（rename/archive/delete）走 quality-scanner 内部的 resolveVaultPath + fs，只需 getVaultPath。
+// getChangeRevision 恒 0：fake 不经服务写入路径，签名靠每次重新遍历磁盘（配合下面 beforeEach 的显式失效）
 function makeVault(): VaultService {
   return {
     getVaultPath: () => vaultDir,
+    getChangeRevision: () => 0,
     readFile: (rel: string) => fs.readFile(path.join(vaultDir, rel), 'utf-8'),
     writeFile: (rel: string, content: string) => fs.writeFile(path.join(vaultDir, rel), content, 'utf-8'),
   } as unknown as VaultService;
@@ -70,6 +73,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await fs.rm(vaultDir, { recursive: true, force: true }).catch(() => undefined);
+});
+
+// fake 的读写全部直接落盘，既不经服务 writeFile 也不起 chokidar 监听，不会推进 vault 版本号。
+// 显式让页面快照失效，否则用例会在共享快照的复用窗口里读到上一次的签名。
+beforeEach(() => {
+  resetPageSnapshot();
 });
 
 describe('纯函数：候选判定与命名规范化', () => {

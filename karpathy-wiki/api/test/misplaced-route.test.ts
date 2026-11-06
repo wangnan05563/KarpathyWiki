@@ -17,6 +17,7 @@ import { VaultService } from '../src/vault/vault-service.js';
 import { registerDataCleanRoute } from '../src/routes/data-clean.js';
 import { createIsolationGuards } from '../src/middleware/auth.js';
 import { initAuditLog, resetAuditLog } from '../src/auth/audit-log.js';
+import { resetPageSnapshot } from '../src/utils/derived-cache.js';
 
 let tempDir: string;
 let vaultDir: string;
@@ -28,6 +29,9 @@ async function writeStray(rel: string, title: string, type: string): Promise<str
   const abs = path.join(vaultDir, ...rel.split('/'));
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, matter.stringify(`\n# ${title}\n\n正文\n`, { title, type, updated: '2026-10-21' }), 'utf8');
+  // 直接改盘既不经 writeFile 也不起 chokidar 监听，显式让页面快照失效：
+  //   否则错位检测的缓存键（页面签名）看不到这次改动，本用例验的正是「刚写的页立刻上榜」。
+  resetPageSnapshot();
   return rel;
 }
 

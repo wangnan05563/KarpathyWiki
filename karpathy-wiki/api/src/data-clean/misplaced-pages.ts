@@ -33,6 +33,8 @@ import {
   pageDirsSlash,
 } from '../vault/page-scope.js';
 import { resolveVaultPath } from './vault-path.js';
+import { compareCodeUnit } from '../utils/code-unit-compare.js';
+import { computePageSignature, DerivedCache } from '../utils/derived-cache.js';
 
 /** 列出一个顶层页面目录下的**子目录**名（顶层 .md 是常规页面，不在本模块职责内） */
 async function listSubDirs(vault: VaultService, dirRel: string): Promise<string[]> {
@@ -131,6 +133,19 @@ export async function detectMisplacedPages(vault: VaultService): Promise<Misplac
   return items;
 }
 
+const MISPLACED_CACHE_TTL_MS = 30_000;
+const misplacedCache = new DerivedCache<MisplacedPage[]>(MISPLACED_CACHE_TTL_MS, 'misplacedPages');
+
+/**
+ * GET /api/data-clean/misplaced 的带缓存出口（O2）：口径与 detectMisplacedPages 完全一致，
+ * 只是把「逐子目录 readdir + 每页读 frontmatter」按页面签名与例外清单收拢成一次计算。
+ * 归位入口（promoteMisplacedPages）仍用未缓存的 detectMisplacedPages——破坏性动作的输入必须是现场。
+ */
+export async function detectMisplacedPagesCached(vault: VaultService): Promise<MisplacedPage[]> {
+  const signature = `${misplacedConfigSignature()}|${await computePageSignature(vault.getVaultPath(), vault.getChangeRevision())}`;
+  return misplacedCache.get(signature, () => detectMisplacedPages(vault));
+}
+
 /** 与「页面质量清洗」页那块标题逐字同源的短语（frontend/src/utils/dataCleanPresentation.ts 的 MISPLACED_ISSUE_TEXT） */
 export const MISPLACED_ISSUE_PHRASE = '页面在子目录里，知识库索引不到';
 
@@ -140,6 +155,17 @@ export const MISPLACED_ISSUE_PHRASE = '页面在子目录里，知识库索引�
  */
 export function misplacedPrecheckWarning(misplaced: MisplacedPage[]): string {
   return `${misplaced.length} 个${MISPLACED_ISSUE_PHRASE}`;
+}
+
+/**
+ * 例外清单的稳定签名（O2）：预检结果按「页面签名 + 例外清单」缓存，
+ * 清单是模块级可变配置、改它不会改任何文件，必须参与缓存键，否则登记合法嵌套后
+ * 还要等 TTL 过期才看得到错位页数量变化。
+ * 放在这里而不是让调用方直接读 NESTED_PAGE_DIRS：例外清单仍然只有这一个出口。
+ */
+export function misplacedConfigSignature(): string {
+  // 签名参与缓存键比对，顺序必须与运行环境 locale 无关 → 显式码序比较
+  return [...NESTED_PAGE_DIRS].sort(compareCodeUnit).join(',');
 }
 
 /** 归位后清掉搬空的子目录（从最深一层往上，到顶层页面目录为止——顶层本身永远不动） */

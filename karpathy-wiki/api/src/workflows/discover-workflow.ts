@@ -23,6 +23,8 @@ import type { VaultService } from '../vault/vault-service.js';
 import { extractWikilinkTargets } from '../vault/link-parser.js';
 // T02686：页面目录取 page-scope 单一来源（此前本文件另写了一份同字面 PAGE_DIRS，无引用关系）
 import { PAGE_DIRS } from '../vault/page-scope.js';
+import { DEFAULT_SCAN_CONCURRENCY, mapWithConcurrency } from '../utils/async-pool.js';
+import { computePageSignature, DerivedCache } from '../utils/derived-cache.js';
 
 // 页面目录列表：与 vault-service.ts PAGE_DIRS 对齐
 // 为什么本地复制而不导入：避免跨模块内部常量耦合，目录变更时显式同步
@@ -65,15 +67,15 @@ async function readDirectoryPages(vault: VaultService, vaultPath: string, dir: s
     // 目录不存在或无权访问时跳过，不阻塞整体推荐流程
     return [];
   }
-  const pages: PageMetadata[] = [];
-  for (const f of entries) {
-    if (!f.endsWith('.md')) continue;
+  const files = entries.filter((f) => f.endsWith('.md'));
+  // 有界并发读盘：串行逐个 readFile 在数百页 vault 上要跑数秒
+  const rows = await mapWithConcurrency(files, DEFAULT_SCAN_CONCURRENCY, async (f) => {
     const rel = `${dir}/${f}`;
     const pageName = f.slice(0, -3);
     try {
       const raw = await vault.readFile(rel);
       const parsed = matter(raw);
-      pages.push({
+      return {
         path: rel,
         title: typeof parsed.data.title === 'string' ? parsed.data.title : pageName,
         tags: ensureStringArray(parsed.data.tags),
@@ -81,25 +83,35 @@ async function readDirectoryPages(vault: VaultService, vaultPath: string, dir: s
         dir,
         pageName,
         wikilinks: extractWikilinks(raw),
-      });
+      } satisfies PageMetadata;
     } catch {
-      // 跳过读取失败的页面，不阻塞整体流程
+      // 跳过读取失败的页面，不阻塞整体推荐流程
+      return null;
     }
-  }
-  return pages;
+  });
+  return rows.filter((p): p is PageMetadata => p !== null);
 }
+
+const METADATA_CACHE_TTL_MS = 60_000;
+// 缓存粒度 = 页面集合签名（路径 + mtime + size），而非写入计数器：
+// 测试/外部编辑器会绕开 vault.writeFile 直接落盘，计数器看不见这类变更。
+const metadataCache = new DerivedCache<PageMetadata[]>(METADATA_CACHE_TTL_MS, 'pageMetadata');
 
 // 一次性收集所有页面元数据，供推荐算法使用
 // 为什么一次性收集：避免对每个候选页面都重复扫描整个 vault（O(n²) → O(n)）
+// 为什么加缓存：discover / gaps 每次请求都全量读盘 + 解析 frontmatter，是 O(N) 次串行 IO；
+//   页面未变化时直接复用上一次结果，变化时由签名自动失效。
 export async function collectAllPageMetadata(vault: VaultService): Promise<PageMetadata[]> {
-  const vaultPath = vault.getVaultPath();
-  const pages: PageMetadata[] = [];
+  const signature = await computePageSignature(vault.getVaultPath(), vault.getChangeRevision());
+  return metadataCache.get(signature, () => computeAllPageMetadata(vault));
+}
 
-  for (const dir of PAGE_DIRS) {
-    const dirPages = await readDirectoryPages(vault, vaultPath, dir);
-    pages.push(...dirPages);
-  }
-  return pages;
+async function computeAllPageMetadata(vault: VaultService): Promise<PageMetadata[]> {
+  const vaultPath = vault.getVaultPath();
+  const perDir = await mapWithConcurrency(PAGE_DIRS, DEFAULT_SCAN_CONCURRENCY, (dir) =>
+    readDirectoryPages(vault, vaultPath, dir),
+  );
+  return perDir.flat();
 }
 
 // 提取：计算候选页面与目标页面的匹配维度

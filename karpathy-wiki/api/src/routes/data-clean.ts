@@ -4,7 +4,7 @@ import { VaultService } from '../vault/vault-service.js';
 import { scanVault, archiveFiles, fixFrontmatter, mergeDuplicatePages, deleteFiles, precheckVault, batchRename, batchDedupPages } from '../data-clean/quality-scanner.js';
 import { deduplicatePages } from '../data-clean/dedup-engine.js';
 // T02797：子目录中的页面（存量错位页隐身）——检测只读、归位是破坏性动作
-import { detectMisplacedPages, promoteMisplacedPages } from '../data-clean/misplaced-pages.js';
+import { detectMisplacedPages, detectMisplacedPagesCached, promoteMisplacedPages } from '../data-clean/misplaced-pages.js';
 import { analyzeVaultForCleanup } from '../data-clean/ai-analysis-workflow.js';
 import { compareFiles, isValidVaultPath } from '../data-clean/diff-engine.js';
 import { SchedulerManager } from '../data-clean/scheduler-manager.js';
@@ -128,7 +128,8 @@ export function registerDataCleanRoute(app: FastifyInstance, vault: VaultService
   // GET 只读；POST 是破坏性动作，沿用本页既有约定：requireAdmin + dry_run 预览（默认 true）。
   app.get('/api/data-clean/misplaced', async (_req, reply) => {
     try {
-      return void reply.send(await detectMisplacedPages(vault));
+      // O2：这一类是重扫描（逐子目录 readdir + 每页读 frontmatter），与 precheck/gaps 同一口径缓存
+      return void reply.send(await detectMisplacedPagesCached(vault));
     } catch (err) {
       return void reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
     }

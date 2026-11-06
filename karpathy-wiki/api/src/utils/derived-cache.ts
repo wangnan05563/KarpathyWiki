@@ -9,14 +9,16 @@ import { PAGE_DIRS } from '../vault/page-scope.js';
 import { mapWithConcurrency } from './async-pool.js';
 import { compareCodeUnit } from './code-unit-compare.js';
 
-// 每次缓存查询都要一份签名；数百次 stat 串行走在 Windows 上约 300 ms，
-// 正好吃掉「缓存命中 <300 ms」的预算。stat 之间彼此独立，用并发池重叠 I/O。
+// 签名遍历成本实测（沙箱 405 页副本）：递归 readdir ≈116 ms + 405 次 stat ≈150–270 ms。
+// 关键不是并发度而是频率：libuv 线程池默认只有 4 个 worker，一次遍历就把池占满 0.3–1 s，
+//   期间所有接口的 readFile/stat 都在排队——遍历时机会传导成全局延迟。
 const SIGNATURE_STAT_CONCURRENCY = 16;
 // 快照共享窗口：4 个派生缓存 + 搜索索引同步都要同一份全库 (路径, mtime, size)，
-// 各算各的会在高并发下每 5 s 出现 0.3–1.4 s 的全局静默（压测实测）。
-// 服务写入与 chokidar 监听都会推进 vault 版本号，版本号变化即刻重算；
-// 版本号没变时最多隔这么久再兜一次外部直接改文件的场景。
-const SNAPSHOT_MEMO_TTL_MS = 2_000;
+// 服务写入与 chokidar 监听都推进 vault 版本号，版本号一变立刻重新遍历；
+// 这个窗口只为「监听也看不到」的直接改盘兜底，量级取到与派生缓存 TTL 相同（60 s）。
+// 曾取 2 s 实测过：高并发下每 2 s 一次遍历把 load_core_20 的 /api/tags/pending
+//   服务端 p50 从 0.9 ms 抬到 1205 ms，整阶段吞吐 162 rps → 20 rps（回归轮实测）。
+const SNAPSHOT_MEMO_TTL_MS = 60_000;
 
 // 派生缓存续期的硬龄上限：签名由 (mtime 整秒, size, 路径) 派生，唯一盲区是
 //   「同一秒内且字节数不变的直接改盘」。TTL 到期但签名不变时不再全量重算，

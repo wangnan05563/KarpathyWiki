@@ -6,9 +6,18 @@ import type { VaultService } from "../vault/vault-service.js";
 import { PAGE_DIRS, PAGE_DIR_TO_TYPE, isPageFile } from "../vault/page-scope.js";
 import { resolveVaultPath } from "./vault-path.js";
 // T02843：预检结论必须报出「页面在子目录里索引不到」这一类，与页面质量清洗页下方那块同口径。
-//   检测函数只有 detectMisplacedPages 一份，这里引用它，不重写第二份判断。
-import { detectMisplacedPages, misplacedPrecheckWarning, MISPLACED_ISSUE_PHRASE } from "./misplaced-pages.js";
+//   判断只在 misplaced-pages 里有一份，这里引用它的缓存出口（与 GET /misplaced 同一次计算）。
+//   例外清单也只在那边出口（misplacedConfigSignature），本文件不自持清单。
+import {
+  detectMisplacedPagesCached,
+  misplacedPrecheckWarning,
+  misplacedConfigSignature,
+  MISPLACED_ISSUE_PHRASE,
+} from "./misplaced-pages.js";
 import type { PageQualityScore, DuplicatePair, MergeResult, PrecheckResult, PrecheckWarningCategory } from "../types.js";
+// O2/O3：全库扫描改为有界并发 + 按页面签名缓存 + 周期性让出事件循环
+import { DEFAULT_SCAN_CONCURRENCY, mapWithConcurrency, yieldToEventLoop } from "../utils/async-pool.js";
+import { computePageSignature, DerivedCache } from "../utils/derived-cache.js";
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 500;
@@ -109,26 +118,33 @@ async function processScanFile(
  * 单次扫描 vault：读原文一次，返回「质量评分 + 原文」成对结果。
  * 这是去重引擎的唯一读取入口 —— deduplicatePages 复用此处读到的 content，
  * 避免历史实现中「scanVault 读一遍、dedup 再逐文件 readFile 一遍」导致的 2× 磁盘 I/O。
+ * O2：结果按页面签名缓存 60 s；签名不变直接返回，避免 UI 轮询反复全量读盘+解析。
  */
 export async function scanVaultRaw(
   vault: VaultService
 ): Promise<Array<{ page: PageQualityScore; content: string }>> {
-  const out: Array<{ page: PageQualityScore; content: string }> = [];
-  const dirs = PAGE_DIRS;
+  const signature = await computePageSignature(vault.getVaultPath(), vault.getChangeRevision());
+  return scanRawCache.get(signature, () => computeScanRaw(vault));
+}
 
-  for (const dir of dirs) {
+const SCAN_CACHE_TTL_MS = 60_000;
+const scanRawCache = new DerivedCache<Array<{ page: PageQualityScore; content: string }>>(SCAN_CACHE_TTL_MS, 'dataCleanScan');
+
+async function computeScanRaw(
+  vault: VaultService
+): Promise<Array<{ page: PageQualityScore; content: string }>> {
+  const pairs: Array<{ dir: string; file: string }> = [];
+  for (const dir of PAGE_DIRS) {
     try {
-      const fullPath = path.join(vault.getVaultPath(), dir);
-      const files = await fs.readdir(fullPath);
-      for (const file of files) {
-        const result = await processScanFile(vault, dir, file);
-        if (result) out.push(result);
-      }
+      const files = await fs.readdir(path.join(vault.getVaultPath(), dir));
+      for (const file of files) pairs.push({ dir, file });
     } catch (err) {
       console.warn(`Failed to scan directory ${dir}:`, err);
     }
   }
-  return out;
+  // O3：有界并发读盘；mapWithConcurrency 每 16 个文件让出一次事件循环
+  const results = await mapWithConcurrency(pairs, DEFAULT_SCAN_CONCURRENCY, ({ dir, file }) => processScanFile(vault, dir, file));
+  return results.filter((r): r is { page: PageQualityScore; content: string } => r !== null);
 }
 
 /**
@@ -545,6 +561,37 @@ export async function mergeDuplicatePages( // NOSONAR - 认知复杂度由业务
  * - Returns a pass/fail status with error details
  */
 export async function precheckVault(vault: VaultService): Promise<PrecheckResult> { // NOSONAR - 认知复杂度由业务逻辑决定，重构风险高
+  // O2：预检结果按页面签名缓存；同一秒内的重复点击/多个前端轮询只算一次
+  // 例外清单是模块级可变配置，改它不改文件——必须并入签名，
+  //   否则「登记合法嵌套后错位页应立即可见地减少」会被缓存挡住。
+  const signature = `${misplacedConfigSignature()}|${await computePageSignature(vault.getVaultPath(), vault.getChangeRevision())}`;
+  return precheckCache.get(signature, () => computePrecheck(vault));
+}
+
+const PRECHECK_CACHE_TTL_MS = 60_000;
+const precheckCache = new DerivedCache<PrecheckResult>(PRECHECK_CACHE_TTL_MS, 'dataCleanPrecheck');
+
+interface PrecheckPage {
+  path: string;
+  title: string;
+  content: string;
+}
+
+async function readPrecheckPage(vault: VaultService, dir: string, file: string): Promise<PrecheckPage | null> {
+  const rel = `${dir}/${file}`;
+  try {
+    // O2：一次读取同时拿到 title 与正文，供后续校验复用——原实现先读一遍取标题、
+    //   校验循环再读一遍（虽命中内容缓存，但 matter() 与链接正则仍各跑两次）。
+    const content = await vaultRetry(() => vault.readFile(rel), `precheck:${rel}`);
+    const title = (matter(content).data.title as string) || file;
+    return { path: rel, title, content };
+  } catch {
+    // 与改造前一致：无法解析的页面不进入 scannedFiles/errors（保持既有口径）
+    return null;
+  }
+}
+
+async function computePrecheck(vault: VaultService): Promise<PrecheckResult> { // NOSONAR - 认知复杂度由业务逻辑决定
   const result: PrecheckResult = {
     passed: true,
     scannedFiles: 0,
@@ -553,79 +600,65 @@ export async function precheckVault(vault: VaultService): Promise<PrecheckResult
     blocked: false,
     warningCategories: [],
   };
-  // T02907：分类计数与 warnings 同一次扫描出数（不是事后按前缀解析字符串——
-  // 路径含冒号、文案改动都会让解析悄悄破功）。482 条直出会刷屏，前端只读这里的聚合。
   let bomCount = 0;
   let unresolvedLinkCount = 0;
 
-  const allPages: PageQualityScore[] = [];
-  const dirs = PAGE_DIRS;
-
-  // Scan pages first for link resolution
-  for (const dir of dirs) {
+  const pairs: Array<{ dir: string; file: string }> = [];
+  for (const dir of PAGE_DIRS) {
     try {
-      const fullPath = path.join(vault.getVaultPath(), dir);
-      const files = await fs.readdir(fullPath);
+      const files = await fs.readdir(path.join(vault.getVaultPath(), dir));
       for (const file of files) {
-        if (!isPageFile(file)) continue;
-        try {
-          const rel = `${dir}/${file}`;
-          const content = await vaultRetry(() => vault.readFile(rel), `precheck:${rel}`);
-          allPages.push({ path: rel, title: (matter(content).data.title as string) || file, qualityScore: 100,
-            category: { length: 0, links: 0, frontmatter: 0, citations: 0, duplicate: 0, freshness: 0 },
-            metadata: { wordCount: 0, lineCount: 0, internalLinks: 0, inboundLinks: 0, lastModified: "", hasFrontmatter: true, isDraft: false, fileSizeBytes: 0, hasBom: false, encoding: "utf-8" as any, directory: dir },
-            issues: [],
-            suggestions: [{ type: "link_suggestion", detail: "Verify file permissions or encoding", actionable: true }],
-          });
-        } catch {}
+        if (isPageFile(file)) pairs.push({ dir, file });
       }
-    } catch {}
+    } catch {
+      // 目录不存在：跳过
+    }
   }
+  const scanned = await mapWithConcurrency(pairs, DEFAULT_SCAN_CONCURRENCY, ({ dir, file }) => readPrecheckPage(vault, dir, file));
+  // 兼容历史字段：PageQualityScore 仅保留 path/title，不再构造完整占位对象（减少每轮数百次分配）
+  const allPages = scanned.filter((p): p is PrecheckPage => p !== null);
 
   // Build set of valid page names for link resolution
   const validPageNames = new Set(allPages.map((p) => p.title.toLowerCase()));
 
-  // Now validate each page
-  for (const page of allPages) {
+  for (let i = 0; i < allPages.length; i++) {
+    const page = allPages[i];
     result.scannedFiles++;
+    const content = page.content;
+
+    // Check encoding / BOM
+    if (content.charCodeAt(0) === 0xFEFF) { // NOSONAR
+      result.warnings.push(`${page.path}: Contains UTF-8 BOM`);
+      bomCount++;
+    }
+
+    // Parse frontmatter  will throw if YAML is broken
     try {
-      const content = await vaultRetry(() => vault.readFile(page.path), `precheck:${page.path}`);
-
-      // Check encoding / BOM
-      if (content.charCodeAt(0) === 0xFEFF) { // NOSONAR
-        result.warnings.push(`${page.path}: Contains UTF-8 BOM`);
-        bomCount++;
-        page.metadata.hasBom = true;
-      }
-
-      // Parse frontmatter  will throw if YAML is broken
-      try {
-        matter(content);
-      } catch (fmErr) { // NOSONAR
-        result.errors.push(`${page.path}: Invalid YAML frontmatter  ${fmErr}`);
-        result.blocked = true;
-      }
-
-      // Check internal links resolve
-      const linkMatches = content.match(/\[\[(.*?)\]\]/g) || [];
-      for (const link of linkMatches) {
-        const target = link.slice(2, -2).split("::")[0].trim().toLowerCase();
-        if (target && !validPageNames.has(target)) {
-          // Only warn, not block  dangling links may be intentional placeholders
-          result.warnings.push(`${page.path}: Unresolved link [[${link.slice(2, -2)}]]`);
-          unresolvedLinkCount++;
-        }
-      }
-    } catch (err) {
-      result.errors.push(`${page.path}: ${err instanceof Error ? err.message : String(err)}`);
+      matter(content);
+    } catch (fmErr) { // NOSONAR
+      result.errors.push(`${page.path}: Invalid YAML frontmatter  ${fmErr}`);
       result.blocked = true;
     }
+
+    // Check internal links resolve
+    const linkMatches = content.match(/\[\[(.*?)\]\]/g) || [];
+    for (const link of linkMatches) {
+      const target = link.slice(2, -2).split("::")[0].trim().toLowerCase();
+      if (target && !validPageNames.has(target)) {
+        // Only warn, not block  dangling links may be intentional placeholders
+        result.warnings.push(`${page.path}: Unresolved link [[${link.slice(2, -2)}]]`);
+        unresolvedLinkCount++;
+      }
+    }
+    // O3：校验是纯 CPU 段，周期性让出事件循环，避免一次预检阻塞其他请求数秒
+    if ((i + 1) % 32 === 0) await yieldToEventLoop();
   }
 
   // T02843：预检逐顶层目录 flat readdir，本身就扫不到子目录里的页面——若这里不补一句，
   // 页面上会出现「Vault 预检：通过」与「页面在子目录里，知识库索引不到（3 个）」同屏并存。
   // 归为 warning 而非 error：它不阻断编译（blocked/passed 口径不变），但结论必须看得见、数量同源。
-  const misplaced = await detectMisplacedPages(vault);
+  // 走带缓存的出口（O2）：预检与 GET /misplaced 因此是同一次计算，而不是两份可能不同步的结果。
+  const misplaced = await detectMisplacedPagesCached(vault);
   if (misplaced.length > 0) {
     result.warnings.push(misplacedPrecheckWarning(misplaced));
   }

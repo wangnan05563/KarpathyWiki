@@ -19,6 +19,7 @@ import matter from 'gray-matter';
 import { NESTED_PAGE_DIRS, PAGE_DIRS } from '../src/vault/page-scope.js';
 import { VaultService } from '../src/vault/vault-service.js';
 import { precheckVault } from '../src/data-clean/quality-scanner.js';
+import { resetPageSnapshot } from '../src/utils/derived-cache.js';
 import { detectMisplacedPages, misplacedPrecheckWarning, MISPLACED_ISSUE_PHRASE } from '../src/data-clean/misplaced-pages.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -33,6 +34,9 @@ async function writeStray(rel: string, title: string, type: string): Promise<str
   const abs = path.join(vaultDir, ...rel.split('/'));
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, matter.stringify(`\n# ${title}\n\n正文\n`, { title, type, updated: '2026-10-21' }), 'utf8');
+  // 直接改盘既不经 writeFile 也不起 chokidar 监听，显式让页面快照失效：
+  //   等价于监听器本来会在毫秒内推一次版本号，否则要等满快照复用窗口才看得到这次改动。
+  resetPageSnapshot();
   return rel;
 }
 
@@ -153,6 +157,7 @@ describe('D · 同屏文案同源', () => {
     const content = await vault.readFile(stray);
     await vault.writeFile('solutions/precheck-drop.md', content);
     await fs.rm(path.join(vaultDir, ...stray.split('/')));
+    resetPageSnapshot(); // 直接删盘：同 writeStray，显式失效快照
 
     const after = await detectMisplacedPages(vault);
     expect(after.map((m) => m.path)).not.toContain(stray);
@@ -199,6 +204,7 @@ describe('E · T02907 分类计数（warningCategories）', () => {
       expect(result.warnings.filter((w) => w.includes('Unresolved link'))).toHaveLength(2);
     } finally {
       await fs.rm(path.join(vaultDir, 'entities', 'bom-link-page.md'), { force: true });
+      resetPageSnapshot(); // 直接删盘：同 writeStray，显式失效快照
     }
   });
 

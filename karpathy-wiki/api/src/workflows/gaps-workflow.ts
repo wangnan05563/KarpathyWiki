@@ -26,6 +26,7 @@ import {
 } from '../vault/link-parser.js';
 import { Harness } from '@wiki/harness';
 import type { HarnessConfig } from '@wiki/harness';
+import { computePageSignature, DerivedCache } from '../utils/derived-cache.js';
 
 export type GapResult =
   | { status: 'insufficient-data'; pageCount: number }
@@ -225,9 +226,17 @@ export function computeGaps(pages: PageMeta[], minPages = 20): GapResult {
   };
 }
 
+// 结果缓存：同为只读接口，页面未变时无需重复收集元数据 + 重算拓扑
+// 签名前缀带 minPages：阈值来自配置，不同阈值不能共用一个结果
+const GAP_RESULT_CACHE_TTL_MS = 60_000;
+const gapResultCache = new DerivedCache<GapResult>(GAP_RESULT_CACHE_TTL_MS, 'gapResult');
+
 export async function detectGaps(vault: VaultService, minPages = 20): Promise<GapResult> {
-  const pages = (await collectAllPageMetadata(vault)) as PageMeta[];
-  return computeGaps(pages, minPages);
+  const signature = `${minPages}:${await computePageSignature(vault.getVaultPath(), vault.getChangeRevision())}`;
+  return gapResultCache.get(signature, async () => {
+    const pages = (await collectAllPageMetadata(vault)) as PageMeta[];
+    return computeGaps(pages, minPages);
+  });
 }
 
 // ── T4-2：LLM 缺口建议（SSE 流式，仅展示不落盘）──
