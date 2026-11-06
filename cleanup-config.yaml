@@ -7,7 +7,9 @@
 workspace:
   root: "."
   script_dir: "tooling/scripts"
-  docs_dir: "docs"
+  # 文档目录实际是 karpathy-wiki/docs（仓库根没有 docs/），
+  # 原值 "docs" 已失效，导致 archive.changelog_path 指向不存在的路径
+  docs_dir: "karpathy-wiki/docs"
   logs_dir: "logs"
   frontend_dir: "karpathy-wiki/frontend"
   frontend_src_dir: "src"
@@ -113,9 +115,10 @@ garbage_patterns:
     - "test-batch/"
     - "test-batch2/"
     - "test-sample.docx"
-  # 零字节历史残留（2026-09-10 补；如 data/config.json 曾以 0 字节被跟踪且无任何代码引用）
-  zero_byte_stale:
-    - "data/config.json"
+  # 零字节历史残留（2026-09-10 补）：data/config.json 曾以 0 字节被跟踪且无代码引用。
+  # 2026-10-31 复核：该文件已不在磁盘（应用实际读取 api/config.json），
+  # 保留规则只会让每轮侦察都报一次假漂移，故清空，历史记于 drivers 注释而非规则。
+  zero_byte_stale: []
 
 detection:
   enabled: true
@@ -140,9 +143,11 @@ detection:
   auto_add_inferred_to_gitignore: true
 
 service_indicators:
+  # 只保留服务脚本真实写入的两个 PID 文件（start-service.ps1 写 api.pid / web.pid）。
+  # 原条目 karpathy-wiki/api/logs/app.pid 在全仓无任何代码或脚本引用，属过时配置，已移除。
   pid_files:
     - "karpathy-wiki/logs/web.pid"
-    - "karpathy-wiki/api/logs/app.pid"
+    - "karpathy-wiki/logs/api.pid"
   ports:
     - 3000
     - 8080
@@ -246,16 +251,19 @@ platform:
     macos: ".venv/bin/python"
 
 verification:
-  python_imports:
-    - "import os"
-  command: 'Get-ChildItem -Path "." | Measure-Object | Select-Object -ExpandProperty Count'
+  # 本项目为 Node/TS 工程，没有 Python 包：原 "import os" 是占位检查，永远通过、毫无信息量
+  python_imports: []
+  # 用 api 的 tsc 做 --noEmit 类型检查：不写 release/api-dist，也不依赖全局 PATH。
+  # 相比原来的「统计根目录文件数」，它能真正发现源码缺失、导出断裂与类型引用错误。
+  command: '& "karpathy-wiki/api/node_modules/.bin/tsc.CMD" -p "karpathy-wiki/api/tsconfig.json" --noEmit'
   on_failure:
     - "检查 cleanup-report.md 中的 hash 记录"
     - "从 git 历史恢复：git checkout HEAD -- <file>"
     - "重新生成缓存：npm run build / sonar-scanner"
 
 archive:
-  changelog_path: "docs/CLEANUP-LOG.md"
+  # 仓库根没有 docs/，项目文档实际在 karpathy-wiki/docs；原路径失效，已对齐
+  changelog_path: "karpathy-wiki/docs/CLEANUP-LOG.md"
   gitignore_path: ".gitignore"
   precommit_path: ".pre-commit-config.yaml"
   auto_update_gitignore: true
