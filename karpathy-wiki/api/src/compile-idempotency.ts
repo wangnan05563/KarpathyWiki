@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { compareCodeUnit } from './utils/code-unit-compare.js';
 
 // T03591 编译幂等：按「内容指纹」去重进行中的编译请求。
 //
@@ -54,7 +55,7 @@ export class CompileIdempotency {
   // 进度同步：让后来的去重请求能看到「当前在哪一步」，而不是只有一句「正在编译」。
   touch(key: string, progress: { step?: string; message?: string; runId?: string }): void {
     const entry = this.entries.get(key);
-    if (!entry || entry.state !== 'running') return;
+    if (entry?.state !== 'running') return;
     if (progress.step !== undefined) entry.step = progress.step;
     if (progress.message !== undefined) entry.message = progress.message;
     if (progress.runId !== undefined) entry.runId = progress.runId;
@@ -63,7 +64,7 @@ export class CompileIdempotency {
   // 收口：只有「本次占位仍然有效」时才写终态，避免过期重入的旧任务覆盖新任务状态。
   finish(key: string, token: number, outcome: { status: 'done' | 'failed'; message?: string; runId?: string }): void {
     const entry = this.entries.get(key);
-    if (!entry || entry.state !== 'running' || entry.startedAt !== token) return;
+    if (entry?.state !== 'running' || entry?.startedAt !== token) return;
     this.entries.set(key, {
       state: outcome.status,
       startedAt: entry.startedAt,
@@ -117,7 +118,9 @@ export function rawPathKey(rawPath: string): string {
 export function batchContentKey(fileKeys: string[]): string {
   return crypto
     .createHash('sha256')
-    .update([...fileKeys].sort().join('\u0000'), 'utf8')
+    // 排序结果直接参与哈希：用与运行环境 locale 无关的码序比较，
+    // 换成 localeCompare 时同一文件集合在不同语言环境下可能得到不同幂等键。
+    .update([...fileKeys].sort(compareCodeUnit).join('\u0000'), 'utf8')
     .digest('hex')
     .slice(0, KEY_LENGTH);
 }

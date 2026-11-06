@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { EngineAdapter, CompileInput, BatchCompileConfig, AppConfig } from '../types.js';
+import type { EngineAdapter, CompileInput, BatchCompileConfig, AppConfig, ProgressEvent } from '../types.js';
 import { withCompileLock } from '../compile-queue.js';
 import { createSSESender } from '../utils/sse.js';
 import {
@@ -69,6 +69,137 @@ function isSafeRawPath(p: string): boolean {
   return /^raw\/[^/\\]+\.md$/.test(p);
 }
 
+type CompileRequest =
+  | { ok: true; input: CompileInput; idempotencyKey: string; uploadedFile: UploadedFile | null }
+  | { ok: false; error: string };
+
+// T03591 单文件投递解析：multipart 按上传字节算幂等键，JSON 按 type+正文。
+// 从端点本体抽出来，是因为本体还要管 SSE 头、幂等占位、原件留存与串行队列，复杂度预算已经用完。
+async function readCompileRequest(request: FastifyRequest): Promise<CompileRequest> {
+  const contentType = request.headers['content-type'] ?? '';
+  if (!contentType.startsWith('multipart/form-data')) {
+    // JSON：url 或 text
+    const body = request.body as { type?: string; content?: string; rawPath?: string };
+    if (!body || (body.type !== 'url' && body.type !== 'text') || !body.content) {
+      return { ok: false, error: '请求体须含 type(url|text) 与 content' };
+    }
+    const input: CompileInput = {
+      type: body.type as 'text' | 'url' | 'file',
+      content: body.content ?? '',
+      rawPath: body.rawPath,
+    };
+    return { ok: true, input, idempotencyKey: textContentKey(input.type, input.content), uploadedFile: null };
+  }
+  // multipart 文件上传
+  const file = await request.file();
+  if (!file) return { ok: false, error: '缺少 file 字段' };
+  const buffer = await file.toBuffer();
+  // sanitize filename：防路径穿越，剥离目录前缀并替换非法字符。
+  // 白名单保留 Unicode 字母/数字（含中文），避免中文文件名被替换成下划线。
+  const safeName = path.basename(file.filename).replaceAll(/[^\p{L}\p{N}._-]/gu, '_');
+  // 落盘到临时目录，compile-workflow 会读取后存档到 raw/
+  const tmp = path.join(os.tmpdir(), `wiki-compile-${Date.now()}-${process.pid}-${safeName}`);
+  await fs.writeFile(tmp, buffer);
+  return {
+    ok: true,
+    // 传入原始文件名（已 sanitize），供 compile-workflow 保留原名到 raw/ 存档
+    input: { type: 'file', content: tmp, originalName: safeName },
+    idempotencyKey: fileContentKey(buffer),
+    // 留存用原始文件名（下载时尽量还原用户命名），compile 仍用白名单 safeName
+    uploadedFile: { name: file.filename, buffer, mimeType: file.mimetype },
+  };
+}
+
+// 批量上传收集：字段名约定为 files（复数），忽略其他字段以兼容未来扩展。
+// 「解析失败」和「没上传文件」要回不同的 400 文案，所以用标记位返回而不是抛异常。
+async function collectBatchUploads(
+  request: FastifyRequest,
+): Promise<{ files: UploadedFile[]; parseFailed: boolean }> {
+  const files: UploadedFile[] = [];
+  try {
+    for await (const f of request.files()) {
+      if (f.fieldname !== 'files') continue;
+      files.push({ name: f.filename, buffer: await f.toBuffer(), mimeType: f.mimetype });
+    }
+  } catch (err: unknown) {
+    request.log.error({ err }, 'batch compile multipart parse error');
+    return { files, parseFailed: true };
+  }
+  return { files, parseFailed: false };
+}
+
+// 免上传重试的事件下发上下文：批量分组重试要带 fileIndex/fileCount/fileName，复用前端既有的
+// file_done/file_error 分组处理；单文件重试不带（前端按顶层 done/error 处理）。
+type RetryContext = {
+  fileIndex?: number;
+  fileCount?: number;
+  fileName?: string;
+  rawPath: string;
+  send: (event: string, data: unknown) => boolean;
+};
+
+// fileIndex 缺省时原样透传，避免单文件重试的 data 里多出无意义字段
+function withRetryGroup(ctx: RetryContext, ev: ProgressEvent) {
+  if (ctx.fileIndex === undefined) return ev;
+  return {
+    ...ev,
+    data: { ...ev.data, fileIndex: ctx.fileIndex, fileCount: ctx.fileCount, fileName: ctx.fileName },
+  };
+}
+
+// 转发一条重试进度事件；done 事件按「单文件 / 批量分组」两种语义下发，并回传该事件的终态。
+function emitRetryEvent(ctx: RetryContext, ev: ProgressEvent): 'done' | 'failed' | undefined {
+  const payload = withRetryGroup(ctx, ev);
+  if (ev.step !== 'done') {
+    ctx.send(ev.data?.path && ev.data?.title ? 'page' : 'progress', payload);
+    return undefined;
+  }
+  if (ctx.fileIndex === undefined) {
+    ctx.send('done', payload);
+  } else if (ev.status === 'error') {
+    // 批量分组重试：沿用 file_error，前端既有处理会刷新分组错误态与重试入口
+    ctx.send('file_error', {
+      step: 'finalize',
+      status: 'error',
+      message: ev.message || '编译失败',
+      data: {
+        fileIndex: ctx.fileIndex,
+        fileCount: ctx.fileCount,
+        fileName: ctx.fileName,
+        rawPath: ctx.rawPath,
+        retryable: ev.retryable,
+      },
+      retryable: ev.retryable,
+    });
+  } else {
+    ctx.send('file_done', payload);
+  }
+  return ev.status === 'error' ? 'failed' : 'done';
+}
+
+// 重试流异常：单文件回顶层 error，批量分组回 file_error（前端两套处理）
+function emitRetryFailure(ctx: RetryContext, err: unknown): void {
+  const message = err instanceof Error ? err.message : String(err);
+  const retryable = isRetryableLlmError(err);
+  if (ctx.fileIndex === undefined) {
+    ctx.send('error', { step: 'finalize', status: 'error', message, retryable });
+    return;
+  }
+  ctx.send('file_error', {
+    step: 'finalize',
+    status: 'error',
+    message,
+    data: {
+      fileIndex: ctx.fileIndex,
+      fileCount: ctx.fileCount,
+      fileName: ctx.fileName,
+      rawPath: ctx.rawPath,
+      retryable,
+    },
+    retryable,
+  });
+}
+
 // 注册 POST /api/compile 与 POST /api/compile/batch 路由。
 // 单文件端点接受两种 Content-Type：
 //   - multipart/form-data：file 字段上传单文件
@@ -115,44 +246,9 @@ export function registerCompileRoute(
     // 破坏性端点更严格限流：compile 触发 LLM + 写 vault，10/min 防滥用
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
   }, async (request: FastifyRequest, reply: FastifyReply) => {
-    let input: CompileInput;
-    // T03591 幂等 Key：multipart 按上传字节，JSON 按 type+正文
-    let idempotencyKey: string;
-    // T03611：multipart 上传的原件字节，幂等命中时不重复留存（避免同一文件出现多条投递记录）
-    let uploadedFile: UploadedFile | null = null;
-
-    const contentType = request.headers['content-type'] ?? '';
-    if (contentType.startsWith('multipart/form-data')) {
-      // multipart 文件上传
-      const file = await request.file();
-      if (!file) {
-        return void reply.code(400).send({ error: '缺少 file 字段' });
-      }
-      const buffer = await file.toBuffer();
-      idempotencyKey = fileContentKey(buffer);
-      // sanitize filename：防路径穿越，剥离目录前缀并替换非法字符。
-      // 白名单保留 Unicode 字母/数字（含中文），避免中文文件名被替换成下划线。
-      const safeName = path.basename(file.filename).replaceAll(/[^\p{L}\p{N}._-]/gu, '_');
-      // 留存用原始文件名（下载时尽量还原用户命名），compile 仍用白名单 safeName
-      uploadedFile = { name: file.filename, buffer, mimeType: file.mimetype };
-      // 落盘到临时目录，compile-workflow 会读取后存档到 raw/
-      const tmp = path.join(os.tmpdir(), `wiki-compile-${Date.now()}-${process.pid}-${safeName}`);
-      await fs.writeFile(tmp, buffer);
-      // 传入原始文件名（已 sanitize），供 compile-workflow 保留原名到 raw/ 存档
-      input = { type: 'file', content: tmp, originalName: safeName };
-    } else {
-      // JSON：url 或 text
-      const body = request.body as { type?: string; content?: string; rawPath?: string };
-      if (!body || (body.type !== 'url' && body.type !== 'text') || !body.content) {
-        return void reply.code(400).send({ error: '请求体须含 type(url|text) 与 content' });
-      }
-      input = {
-        type: body.type as 'text' | 'url' | 'file',
-        content: body.content ?? '',
-        rawPath: body.rawPath,
-      };
-      idempotencyKey = textContentKey(input.type, input.content);
-    }
+    const parsed = await readCompileRequest(request);
+    if (!parsed.ok) return void reply.code(400).send({ error: parsed.error });
+    const { input, idempotencyKey, uploadedFile } = parsed;
 
     // SSE headers。Connection: keep-alive 防代理断开，X-Accel-Buffering: no 防 Nginx 缓冲。
     reply.raw.writeHead(200, {
@@ -295,18 +391,12 @@ export function registerCompileRoute(
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     // 收集所有上传的文件：request.files() 是 async iterator
-    const uploaded: UploadedFile[] = [];
-    try {
-      for await (const f of request.files()) {
-        // 字段名约定为 files（复数），忽略其他字段以兼容未来扩展
-        if (f.fieldname !== 'files') continue;
-        uploaded.push({ name: f.filename, buffer: await f.toBuffer(), mimeType: f.mimetype });
-      }
-    } catch (err: unknown) {
-      request.log.error({ err }, 'batch compile multipart parse error');
+    const upload = await collectBatchUploads(request);
+    if (upload.parseFailed) {
       reply.code(400).send({ error: '文件解析失败' });
       return;
     }
+    const uploaded = upload.files;
 
     if (uploaded.length === 0) {
       reply.code(400).send({ error: '缺少 files 字段或文件为空' });
@@ -379,113 +469,22 @@ export function registerCompileRoute(
     const tmpPaths: string[] = [];
     const fileCount = validFiles.length;
 
-    // 单文件编译流式推送：提取为局部函数降低 withCompileLock 回调认知复杂度
-    // 返回值表示该文件是否成功（用于决定是否发送 file_complete 事件）
-    const streamFileCompile = async (
-      input: CompileInput,
-      fileIndex: number,
-      fileName: string,
-    ): Promise<boolean> => {
-      let fileFailed = false;
-      try {
-        for await (const ev of adapter.compile(input, appConfig)) {
-          // 客户端已断开：提前退出迭代，停止当前文件的剩余步骤
-          if (isAborted()) break;
-          // T03591：让后来的重复提交能看到「当前编译到哪个文件/哪一步」
-          idempotency.touch(batchKey, { step: ev.step, message: `${fileName}: ${ev.message}` });
-          // 把 fileIndex/fileCount/fileName 注入到每个事件的 data，前端按 fileIndex 路由到对应分组
-          const evWithData = {
-            ...ev,
-            data: {
-              ...ev.data,
-              fileIndex,
-              fileCount,
-              fileName,
-            },
-          };
-          if (ev.step === 'done') {
-            // 单文件编译失败时，done 事件的 status 为 error，必须转发为 file_error，
-            // 避免前端把失败误标为 DONE（之前 0 页面且显示成功即因此）。
-            // T03591：失败事件透传 rawPath/retryable，前端据此显示「免上传重试」入口。
-            if (ev.status === 'error') {
-              fileFailed = true;
-              send('file_error', {
-                step: 'finalize',
-                status: 'error',
-                message: ev.message || '编译失败',
-                data: {
-                  fileIndex,
-                  fileCount,
-                  fileName,
-                  rawPath: ev.data?.rawPath,
-                  retryable: ev.retryable,
-                },
-                retryable: ev.retryable,
-              });
-            } else {
-              send('file_done', evWithData);
-            }
-          } else if (ev.data?.path && ev.data?.title) {
-            send('page', evWithData);
-          } else {
-            send('progress', evWithData);
-          }
-        }
-      } catch (err: unknown) {
-        fileFailed = true;
-        const errMsg = err instanceof Error ? err.message : String(err);
-        request.log.error(
-          { err, fileName, fileIndex },
-          'batch compile file error',
-        );
-        send('file_error', {
-          step: 'finalize',
-          status: 'error',
-          message: `文件 ${fileName} 编译失败: ${errMsg}`,
-          data: { fileIndex, fileCount, fileName, retryable: isRetryableLlmError(err) },
-          retryable: isRetryableLlmError(err),
-        });
-      }
-      return !fileFailed;
+    const batchCtx: BatchFileContext = {
+      adapter,
+      appConfig,
+      idempotency,
+      batchKey,
+      fileCount,
+      send,
+      isAborted,
+      log: request.log,
     };
 
     let batchHasError = false;
     try {
       // batch 整体作为 withCompileLock 的一个任务，保证与其他 compile/resume 请求串行
       await withCompileLock(async () => {
-        for (let i = 0; i < validFiles.length; i++) {
-          // 客户端已断开：提前退出循环，停止后续文件编译避免无谓 LLM 调用
-          if (isAborted()) break;
-          const f = validFiles[i];
-          // 落盘到临时文件：compile-workflow 通过 fs.readFile 读取后存档到 raw/
-          const tmp = path.join(os.tmpdir(), `wiki-batch-${Date.now()}-${process.pid}-${i}-${f.name}`);
-          await fs.writeFile(tmp, f.buffer);
-          tmpPaths.push(tmp);
-
-          const input: CompileInput = { type: 'file', content: tmp, originalName: f.name };
-
-          // 单文件开始事件：前端据此创建分组容器
-          send('file_start', {
-            step: 'archive',
-            status: 'running',
-            message: `开始编译文件 ${i + 1}/${fileCount}: ${f.name}`,
-            data: { fileIndex: i, fileCount, fileName: f.name },
-          });
-
-          const success = await streamFileCompile(input, i, f.name);
-          if (!success) {
-            batchHasError = true;
-          }
-          // 文件结束事件：标记该分组完成（仅成功时），前端据此切换 UI 状态
-          if (success) {
-            send('file_complete', {
-              step: 'finalize',
-              status: 'done',
-              message: `文件 ${i + 1}/${fileCount} 完成: ${f.name}`,
-              data: { fileIndex: i, fileCount, fileName: f.name },
-            });
-          }
-        }
+        batchHasError = await runBatchFiles(batchCtx, validFiles, tmpPaths);
       });
 
       // 整体完成事件：任一文件失败即标记为 error，让批量结果页正确显示"出错了"
@@ -571,57 +570,20 @@ export function registerCompileRoute(
     let streamStatus: 'done' | 'failed' = 'failed';
     let lastMessage: string | undefined;
 
+    const retryCtx: RetryContext = { fileIndex, fileCount, fileName, rawPath, send };
     try {
       await withCompileLock(async () => {
         for await (const ev of adapter.compileFromRaw!(rawPath)) {
           if (isAborted()) break;
           lastMessage = ev.message;
           idempotency.touch(retryKey, { step: ev.step, message: ev.message });
-          const evWithData = fileIndex === undefined
-            ? ev
-            : { ...ev, data: { ...ev.data, fileIndex, fileCount, fileName } };
-          if (ev.step === 'done') {
-            streamStatus = ev.status === 'error' ? 'failed' : 'done';
-            if (fileIndex === undefined) {
-              send('done', evWithData);
-            } else if (ev.status === 'error') {
-              // 批量分组重试：沿用 file_error，前端既有处理会刷新分组错误态与重试入口
-              send('file_error', {
-                step: 'finalize',
-                status: 'error',
-                message: ev.message || '编译失败',
-                data: { fileIndex, fileCount, fileName, rawPath, retryable: ev.retryable },
-                retryable: ev.retryable,
-              });
-            } else {
-              send('file_done', evWithData);
-            }
-          } else if (ev.data?.path && ev.data?.title) {
-            send('page', evWithData);
-          } else {
-            send('progress', evWithData);
-          }
+          const outcome = emitRetryEvent(retryCtx, ev);
+          if (outcome) streamStatus = outcome;
         }
       });
     } catch (err: unknown) {
       request.log.error({ err, rawPath }, 'compile retry SSE stream error');
-      const message = err instanceof Error ? err.message : String(err);
-      if (fileIndex === undefined) {
-        send('error', {
-          step: 'finalize',
-          status: 'error',
-          message,
-          retryable: isRetryableLlmError(err),
-        });
-      } else {
-        send('file_error', {
-          step: 'finalize',
-          status: 'error',
-          message,
-          data: { fileIndex, fileCount, fileName, rawPath, retryable: isRetryableLlmError(err) },
-          retryable: isRetryableLlmError(err),
-        });
-      }
+      emitRetryFailure(retryCtx, err);
     } finally {
       idempotency.finish(retryKey, idempotencyToken, {
         status: isAborted() ? 'failed' : streamStatus,
@@ -630,4 +592,132 @@ export function registerCompileRoute(
       safeEnd();
     }
   });
+}
+
+// 批量逐文件编译的实现体。刻意放在注册函数之后：批量链的 adapter.compile 消费点
+// 必须出现在首个 `await withCompileLock(` 之后（T02818 源码序守护用例按文本顺序判定
+// 「消费发生在锁内」），且这两个函数只在该锁内被调用。
+// 批量编译的执行上下文：批量端点本体还要做校验、幂等占位与原件留存，
+// 逐文件消费事件流的逻辑按此上下文外提，避免单函数认知复杂度超限。
+type BatchFileContext = {
+  adapter: EngineAdapter;
+  appConfig?: AppConfig;
+  idempotency: CompileIdempotency;
+  batchKey: string;
+  fileCount: number;
+  send: (event: string, data: unknown) => boolean;
+  isAborted: () => boolean;
+  log: FastifyRequest['log'];
+};
+
+// 单个文件的编译流式推送；返回值表示该文件是否成功（用于决定是否发送 file_complete 事件）
+async function streamBatchFileCompile(
+  ctx: BatchFileContext,
+  input: CompileInput,
+  fileIndex: number,
+  fileName: string,
+): Promise<boolean> {
+  let fileFailed = false;
+  const { adapter, appConfig, idempotency, batchKey, fileCount, send, isAborted, log } = ctx;
+  try {
+    for await (const ev of adapter.compile(input, appConfig)) {
+      // 客户端已断开：提前退出迭代，停止当前文件的剩余步骤
+      if (isAborted()) break;
+      // T03591：让后来的重复提交能看到「当前编译到哪个文件/哪一步」
+      idempotency.touch(batchKey, { step: ev.step, message: `${fileName}: ${ev.message}` });
+      // 把 fileIndex/fileCount/fileName 注入到每个事件的 data，前端按 fileIndex 路由到对应分组
+      const evWithData = {
+        ...ev,
+        data: {
+          ...ev.data,
+          fileIndex,
+          fileCount,
+          fileName,
+        },
+      };
+      if (ev.step === 'done') {
+        // 单文件编译失败时，done 事件的 status 为 error，必须转发为 file_error，
+        // 避免前端把失败误标为 DONE（之前 0 页面且显示成功即因此）。
+        // T03591：失败事件透传 rawPath/retryable，前端据此显示「免上传重试」入口。
+        if (ev.status === 'error') {
+          fileFailed = true;
+          send('file_error', {
+            step: 'finalize',
+            status: 'error',
+            message: ev.message || '编译失败',
+            data: {
+              fileIndex,
+              fileCount,
+              fileName,
+              rawPath: ev.data?.rawPath,
+              retryable: ev.retryable,
+            },
+            retryable: ev.retryable,
+          });
+        } else {
+          send('file_done', evWithData);
+        }
+      } else if (ev.data?.path && ev.data?.title) {
+        send('page', evWithData);
+      } else {
+        send('progress', evWithData);
+      }
+    }
+  } catch (err: unknown) {
+    fileFailed = true;
+    const errMsg = err instanceof Error ? err.message : String(err);
+    log.error(
+      { err, fileName, fileIndex },
+      'batch compile file error',
+    );
+    send('file_error', {
+      step: 'finalize',
+      status: 'error',
+      message: `文件 ${fileName} 编译失败: ${errMsg}`,
+      data: { fileIndex, fileCount, fileName, retryable: isRetryableLlmError(err) },
+      retryable: isRetryableLlmError(err),
+    });
+  }
+  return !fileFailed;
+}
+
+// 逐个文件走一遍「落盘 → file_start → 编译推流 → file_complete」，tmpPaths 由调用方负责清理。
+// 返回是否出现失败文件，用于收口 batch_done 与幂等终态。
+async function runBatchFiles(
+  ctx: BatchFileContext,
+  files: ValidatedFile[],
+  tmpPaths: string[],
+): Promise<boolean> {
+  let hasError = false;
+  for (let i = 0; i < files.length; i++) {
+    // 客户端已断开：提前退出循环，停止后续文件编译避免无谓 LLM 调用
+    if (ctx.isAborted()) break;
+    const f = files[i];
+    // 落盘到临时文件：compile-workflow 通过 fs.readFile 读取后存档到 raw/
+    const tmp = path.join(os.tmpdir(), `wiki-batch-${Date.now()}-${process.pid}-${i}-${f.name}`);
+    await fs.writeFile(tmp, f.buffer);
+    tmpPaths.push(tmp);
+
+    // 单文件开始事件：前端据此创建分组容器
+    ctx.send('file_start', {
+      step: 'archive',
+      status: 'running',
+      message: `开始编译文件 ${i + 1}/${ctx.fileCount}: ${f.name}`,
+      data: { fileIndex: i, fileCount: ctx.fileCount, fileName: f.name },
+    });
+
+    const input: CompileInput = { type: 'file', content: tmp, originalName: f.name };
+    if (!(await streamBatchFileCompile(ctx, input, i, f.name))) {
+      hasError = true;
+      continue;
+    }
+    // 文件结束事件：标记该分组完成（仅成功时），前端据此切换 UI 状态
+    ctx.send('file_complete', {
+      step: 'finalize',
+      status: 'done',
+      message: `文件 ${i + 1}/${ctx.fileCount} 完成: ${f.name}`,
+      data: { fileIndex: i, fileCount: ctx.fileCount, fileName: f.name },
+    });
+  }
+  return hasError;
 }

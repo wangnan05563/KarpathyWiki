@@ -575,7 +575,7 @@ export const useCompileStore = defineStore('compile', () => {
   // 事件由服务端注入 fileIndex，复用既有 file_done/file_error 处理，分组状态自然流转。
   async function retryFileGroup(fileIndex: number): Promise<void> {
     const group = batchGroups.value[fileIndex];
-    if (!group || !group.rawPath || !group.retryable) return;
+    if (!group?.rawPath || !group?.retryable) return;
     if (retryingIndexes.value.includes(fileIndex)) return;
     retryingIndexes.value = [...retryingIndexes.value, fileIndex];
     group.attempts = (group.attempts ?? 0) + 1;
@@ -860,6 +860,24 @@ export const useCompileStore = defineStore('compile', () => {
     }
   }
 
+  // T03591 幂等命中事件：不新建任务，只回放进行中任务的进度快照。
+  // 独立成函数：该分支同时负责头部中性提示与分组时间线回放，与事件分发职责不同。
+  function handleBatchDedupedEvent(d: BatchEventData): void {
+    const msg = d.message || '相同内容正在编译中，已复用该任务的进度';
+    dedupeMessage.value = msg;
+    const idx = d.data?.fileIndex;
+    const group = idx === undefined ? undefined : batchGroups.value[idx];
+    if (group) {
+      group.timeline.push({
+        step: (d.data?.step as CompileStep) || 'archive',
+        status: 'running',
+        message: d.data?.message || msg,
+        timestamp: Date.now(),
+      });
+    }
+    isCompiling.value = false;
+  }
+
   // 批量模式事件分发：先处理整体事件，再按 fileIndex 路由到分组
   function handleBatchEvent(eventType: string, data: unknown) {
     const d = data as BatchEventData;
@@ -875,24 +893,9 @@ export const useCompileStore = defineStore('compile', () => {
       return;
     }
 
-    // T03591 幂等命中：不新建任务，只回放进行中任务的进度快照。
     // 不是失败——头部显示中性提示；分组重试时把快照记进该组时间线便于追溯。
     if (eventType === 'deduped' || eventType === 'batch_deduped') {
-      const msg = d.message || '相同内容正在编译中，已复用该任务的进度';
-      dedupeMessage.value = msg;
-      const idx = d.data?.fileIndex;
-      if (idx !== undefined) {
-        const group = batchGroups.value[idx];
-        if (group) {
-          group.timeline.push({
-            step: (d.data?.step as CompileStep) || 'archive',
-            status: 'running',
-            message: d.data?.message || msg,
-            timestamp: Date.now(),
-          });
-        }
-      }
-      isCompiling.value = false;
+      handleBatchDedupedEvent(d);
       return;
     }
 
