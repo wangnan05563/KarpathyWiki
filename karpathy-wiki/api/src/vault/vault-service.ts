@@ -1,6 +1,6 @@
 ﻿import fs from 'node:fs/promises';
 import path from 'node:path';
-import matter from 'gray-matter';
+import { tryParsePage } from '../utils/frontmatter.js';
 import { watch, type FSWatcher } from 'chokidar';
 // T02472 L1：页面口径（目录白名单 + 页面文件判定）单点定义，与数据清洗/统计接口共用
 import { PAGE_DIRS, isPageFile, WRITABLE_DIRS, INIT_DIRS, pageDepthError } from './page-scope.js';
@@ -480,7 +480,10 @@ export class VaultService {
       const rel = `${dir}/${f}`;
       try {
         const content = await this.readFile(rel);
-        const parsed = matter(content);
+        // T04504：走收敛层。坏 YAML 直连解析时第一轮抛、第二轮起返回空 data，同一页两种结论；
+        // 这里统一成「读不出 title 就跳过」——比对基准只由字节决定。
+        const parsed = tryParsePage(content);
+        if (!parsed.ok) continue;
         const existingTitle = typeof parsed.data.title === 'string' ? parsed.data.title : '';
         if (!existingTitle) continue;
         const existingKeys = normalizeTitle(existingTitle);
@@ -489,7 +492,7 @@ export class VaultService {
           return rel;
         }
       } catch {
-        // 读取/解析失败跳过该文件
+        // 读取失败跳过该文件
       }
     }
     return null;
@@ -577,9 +580,12 @@ export class VaultService {
       let frontmatter: Record<string, unknown> = {};
       try {
         const content = await this.readFile(rel);
-        frontmatter = matter(content).data;
+        // T04504：走收敛层。返回的 data 是与 gray-matter 内容缓存脱钩的副本——
+        // 原来直连解析时字节相同的两页会共用同一个 data 对象，调用方给一页加字段就串到另一页。
+        const parsed = tryParsePage(content);
+        if (parsed.ok) frontmatter = parsed.data;
       } catch {
-        // 解析失败时返回空 frontmatter，不阻断整体列表
+        // 读取失败时返回空 frontmatter，不阻断整体列表
       }
       return {
         path: rel,
@@ -699,8 +705,9 @@ export class VaultService {
   async getPageUpdated(rel: string): Promise<string | null> {
     try {
       const content = await this.readFile(rel);
-      const parsed = matter(content);
-      const updated = parsed.data?.updated;
+      const parsed = tryParsePage(content);
+      if (!parsed.ok) return null; // T04504：坏页两轮都判「读不出时间」，不再随第几次读翻转
+      const updated = parsed.data.updated;
       if (typeof updated === 'string') return updated;
       if (updated instanceof Date) return Number.isNaN(updated.getTime()) ? null : updated.toISOString();
       return null;
@@ -759,11 +766,13 @@ export class VaultService {
         batch.map(async ({ rel, file }) => {
           try {
             const raw = await this.readFile(rel);
-            const m = matter(raw);
-            const aiTags = ensureStringArray(m.data.ai_tags);
+            // T04504：走收敛层（副本 data + 与读序无关的解析结论）
+            const parsed = tryParsePage(raw);
+            if (!parsed.ok) return null;
+            const aiTags = ensureStringArray(parsed.data.ai_tags);
             if (aiTags.length === 0) return null;
-            const existingTags = ensureStringArray(m.data.tags);
-            const title = typeof m.data.title === 'string' ? m.data.title : file.slice(0, -3);
+            const existingTags = ensureStringArray(parsed.data.tags);
+            const title = typeof parsed.data.title === 'string' ? parsed.data.title : file.slice(0, -3);
             return { path: rel, title, aiTags, existingTags };
           } catch {
             return null;

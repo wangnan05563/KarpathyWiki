@@ -225,13 +225,14 @@ function normalizeInlineSequenceMappings(block: string): string {
 }
 
 function parseYamlBlock(block: string): Record<string, unknown> | null {
-  // 传 options 绕过 gray-matter 全局缓存：缓存是在解析前写入的，解析失败也会留下坏条目，
-  // 后续同字符串的解析会直接拿到空 data（表现为「第一次能合并、第二次突然合并不了」）。
+  // T04504：整块解析一律走收敛层。原来靠显式传 options 绕开 gray-matter 的内容缓存
+  // （缓存在解析前写入，失败也会留下 data:{} 的半成品，同串字节第二次读就「成功」并返回空 data）；
+  // 现在口径统一由 utils/frontmatter 一处保证，本文件不再自带私有绕法。
   try {
-    return matter(`---\n${block}\n---\n`, {}).data as Record<string, unknown>;
+    return parsePage(`---\n${block}\n---\n`).data;
   } catch {
     try {
-      return matter(`---\n${normalizeInlineSequenceMappings(block)}\n---\n`, {}).data as Record<string, unknown>;
+      return parsePage(`---\n${normalizeInlineSequenceMappings(block)}\n---\n`).data;
     } catch {
       return null;
     }

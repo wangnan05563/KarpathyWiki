@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import matter from 'gray-matter';
+import { tryParsePage } from '../utils/frontmatter.js';
 import type { VaultService } from '../vault/vault-service.js';
 import path from 'node:path';
 import { type IsolationGuards, createIsolationGuards } from '../middleware/auth.js';
@@ -265,8 +265,20 @@ export function registerFilesRoutes(
         return void reply.send(buffer);
       }
       const content = await vault.readFile(query.path);
-      // gray-matter 分离 frontmatter 与正文，前端可分别渲染元信息与 Markdown 正文
-      const parsed = matter(content);
+      // 分离 frontmatter 与正文，前端据此分别渲染元信息与 Markdown 正文。
+      // 走收敛层的容错入口：直连解析时坏 YAML 第一轮抛（落到下面 mapVaultReadError 的兜底分支
+      // → 500 + js-yaml 原文，含行列号，对用户没有意义）、第二轮起返回空 data（→ 200「打开了但
+      // 没有元信息」），同一页两种结论。坏页的正文本身可读，故两轮都回 200 原文并显式标注
+      // frontmatter_error：与「文件不存在 / 路径越界」的 error 可区分，用户也能在详情页看到坏头自行修正。
+      const parsed = tryParsePage(content);
+      if (!parsed.ok) {
+        return void reply.send({
+          content,
+          frontmatter: {},
+          body: content,
+          frontmatter_error: parsed.reason,
+        });
+      }
       return void reply.send({
         content,
         frontmatter: parsed.data,

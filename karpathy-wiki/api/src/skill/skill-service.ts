@@ -3,6 +3,7 @@ import fsSync from 'node:fs';
 import path from 'node:path';
 import AdmZip from 'adm-zip';
 import matter from 'gray-matter';
+import { tryParsePage } from '../utils/frontmatter.js';
 import type { SkillMeta, SkillDetail, SkillImportResult } from '../types.js';
 // 路径解析统一走 runtime.ts，兼容开发模式与 SEA 打包模式
 // 为什么移除 fileURLToPath + import.meta.url：SEA 模式下 __filename 指向构建时 bundle.cjs，
@@ -114,8 +115,10 @@ function parseSkillMetadata(content: string, fallbackName: string): { name: stri
   let description = '';
   let enabled = true;
 
-  try {
-    const parsed = matter(content);
+  // T04504：走收敛层。直连 matter() 时坏 YAML 第一轮抛、第二轮起返回空 data，
+  // 于是同一份 SKILL.md 的描述在「重启后第一次列表」和「之后每次列表」之间换内容。
+  const parsed = tryParsePage(content);
+  if (parsed.ok) {
     if (parsed.data.name && typeof parsed.data.name === 'string') {
       name = parsed.data.name;
     }
@@ -127,7 +130,7 @@ function parseSkillMetadata(content: string, fallbackName: string): { name: stri
     if (!description) {
       description = extractFirstParagraph(parsed.content.trim());
     }
-  } catch {
+  } else {
     // gray-matter 解析失败时用纯文本提取首段
     description = extractFirstParagraph(content.trim());
   }
@@ -482,16 +485,17 @@ export async function setSkillEnabled(skillId: string, enabled: boolean): Promis
   // importedAt 是由目录 mtime 派生的：写 SKILL.md 会刷新目录 mtime，
   // 不还原就会让「导入时间」变成「最近一次切换开关的时间」，列表还按它倒序跳到最前。
   const before = await fs.stat(skillDir);
-  let data: Record<string, unknown>;
-  let body: string;
-  try {
-    const parsed = matter(raw);
-    data = { ...(parsed.data as Record<string, unknown>) };
-    body = parsed.content;
-  } catch {
+  // T04504：必须走收敛层。直连 matter(raw) 时只有第一轮会抛并走到下面的拒绝分支；
+  // 第二轮起命中 gray-matter 内容缓存里的半成品（不抛、data:{}），于是带着空 data 继续往下，
+  // matter.stringify(body, {enabled}) 把整份 frontmatter 重写成只剩 enabled ——
+  // 用户第二次点开关，丢掉的是技能的 name/description 等全部元信息。
+  const parsed = tryParsePage(raw);
+  if (!parsed.ok) {
     // frontmatter 解析失败：不猜测结构、不覆盖正文，直接拒绝
     return null;
   }
+  const data: Record<string, unknown> = { ...parsed.data };
+  const body = parsed.content;
   data.enabled = enabled;
 
   const next = matter.stringify(body, data);

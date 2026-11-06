@@ -23,7 +23,7 @@ import {
 } from '../utils/harness-dirs.js';
 import { suggestTagsForPage } from './tag-suggest-workflow.js';
 import { mergeDuplicateFrontmatter } from '../data-clean/quality-scanner.js';
-import { parsePage, stringifyPage } from '../utils/frontmatter.js';
+import { parsePage, stringifyPage, tryParsePage } from '../utils/frontmatter.js';
 
 // §12.3-6：compile 中途失败时，给已生成的页面标记 status: draft。
 // 决策不回滚——LLM 编译成本高（token 已消耗），半成品保留供用户决策。
@@ -48,16 +48,12 @@ async function markPagesAsDraft(vault: VaultService, pagePaths: string[]): Promi
 // 落盘前按 T02933 的读侧合并口径收敛为单块；否则双块 + 非法内联 YAML 会随文件落盘，
 // 之后任何「读→改→写」都会在重解析正文时抛 YAMLException（表现为页面改不动）。
 function collapseDuplicateFrontmatter(content: string): string {
-  let parsed;
-  try {
-    parsed = matter(content);
-  } catch {
-    return content; // 首块本身非法：保持原样，由 health-check 兜底
-  }
-  const merged = mergeDuplicateFrontmatter(
-    parsed.data as Record<string, unknown>,
-    parsed.content ?? '',
-  );
+  // T04504：走收敛层。直连 matter() 时坏首块只在第一轮抛（→ 原样落盘、双块保留），
+  // 第二轮起拿到缓存里的空 data 继续合并（→ 塌成单块且只剩块 2 字段）：同一份 LLM 输出
+  // 重编译/重试两次会落出两种文件。解析失败一律保持原样，由 health-check 兜底。
+  const parsed = tryParsePage(content);
+  if (!parsed.ok) return content;
+  const merged = mergeDuplicateFrontmatter(parsed.data, parsed.content);
   if (!merged.hadDuplicateBlock) return content;
   // 对象形式传正文：避免 matter.stringify 对正文再做一次 YAML 解析
   return matter.stringify({ content: merged.content }, merged.data);
@@ -241,18 +237,16 @@ export function createCompileTools(vault: VaultService): ToolDefinition[] {
         const topDir = p.split('/')[0]?.toLowerCase() ?? '';
         let targetPath = p;
         if (TITLE_DEDUPE_DIRS.includes(topDir)) {
-          try {
-            const parsed = matter(singleBlockContent);
-            const title = typeof parsed.data.title === 'string' ? parsed.data.title : '';
-            if (title) {
-              const existing = await vault.findPageByTitle(title, topDir);
-              // 命中且非当前路径本身：重定向（避免 LLM 用不同 slug 新建同实体重复页）
-              if (existing && existing !== p) {
-                targetPath = existing;
-              }
+          // T04504：走收敛层——解析结论只由字节决定，与「本进程第几次读这串内容」无关
+          const parsed = tryParsePage(singleBlockContent);
+          // frontmatter 解析失败时读不出 title，自然跳过去重、按原路径写入（不阻断）
+          const title = parsed.ok && typeof parsed.data.title === 'string' ? parsed.data.title : '';
+          if (title) {
+            const existing = await vault.findPageByTitle(title, topDir);
+            // 命中且非当前路径本身：重定向（避免 LLM 用不同 slug 新建同实体重复页）
+            if (existing && existing !== p) {
+              targetPath = existing;
             }
-          } catch {
-            // frontmatter 解析失败时跳过去重，按原路径写入（不阻断）
           }
         }
         // FR-15-4 兜底：LLM 漏写或写错 type 字段时，按目录路径自动推断回写

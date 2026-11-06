@@ -22,7 +22,7 @@
 import fs from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import path from 'node:path';
-import matter from 'gray-matter';
+import { tryParsePage } from '../utils/frontmatter.js';
 import type { VaultService } from '../vault/vault-service.js';
 import type { MisplacedPage, MisplacedPromoteResult } from '../types.js';
 import {
@@ -64,11 +64,14 @@ async function collectPagesUnder(vault: VaultService, dirRel: string, out: strin
   }
 }
 
-/** 读 frontmatter 的 title/type；读不出来（权限/编码）时退回文件名，仍把这一页列出来 */
+/** 读 frontmatter 的 title/type；读不出来（权限/编码/元信息解析失败）时退回文件名，仍把这一页列出来 */
 async function readPageMeta(vault: VaultService, rel: string): Promise<{ title: string; type: string }> {
   const fallbackTitle = path.posix.basename(rel, '.md');
   try {
-    const data = matter(await vault.readFile(rel)).data as Record<string, unknown>;
+    // T04504：走收敛层。这里 catch 与「解析失败」原本都落到同一个兜底值，分叉不可直接观测；
+    // 接入是为了全站口径统一（守护锁）+ 与 gray-matter 内容缓存脱钩（拿到的 data 是副本）。
+    const parsed = tryParsePage(await vault.readFile(rel));
+    const data: Record<string, unknown> = parsed.ok ? parsed.data : {};
     const title = typeof data.title === 'string' && data.title.trim() !== '' ? data.title : fallbackTitle;
     const type = typeof data.type === 'string' ? data.type.trim() : '';
     return { title, type };

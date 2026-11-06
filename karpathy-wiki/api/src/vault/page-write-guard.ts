@@ -1,4 +1,4 @@
-import matter from 'gray-matter';
+import { tryParsePage } from '../utils/frontmatter.js';
 import type { VaultService } from './vault-service.js';
 
 // T02923：LLM 修复写入的收窄与护栏。
@@ -59,14 +59,13 @@ export function splitFrontmatter(raw: string): SplitPage {
   if (!m) return { header: '', body: raw, data: {} };
   const header = raw.slice(0, m[0].length);
   const body = raw.slice(m[0].length);
-  let data: Record<string, unknown> = {};
-  try {
-    data = (matter(header).data ?? {}) as Record<string, unknown>;
-  } catch {
-    // frontmatter 解析失败时退化为「无字段可比对」，正文仍受护栏保护
-    data = {};
-  }
-  return { header, body, data };
+  // T04504：走收敛层，拿到的 data 是与 gray-matter 内容缓存脱钩的副本。
+  // 原来直连 matter(header) 时，热读返回的 data 就是缓存条目本体（Object.assign 只浅拷贝 File，
+  // 不动 data），任何一次就地改写都会渗进后续所有同字节的读取——而这份 data 正是写守卫
+  // 「旧值 → 新值」的差分基线：基线被污染后，守卫记录的变更与放行/拦截结论都不再是原页真相。
+  // 解析失败仍退化为「无字段可比对」，正文照旧受护栏保护。
+  const parsed = tryParsePage(header);
+  return { header, body, data: parsed.ok ? parsed.data : {} };
 }
 
 // 字段值统一转成可读文本：日志里要写「旧值 → 新值」，Date 必须稳定成 ISO 串

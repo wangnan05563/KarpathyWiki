@@ -16,8 +16,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import matter from 'gray-matter';
-import { parsePage, stringifyPage } from '../utils/frontmatter.js';
+import { parsePage, stringifyPage, tryParsePage } from '../utils/frontmatter.js';
 import type { VaultService } from '../vault/vault-service.js';
 // T02921：wikilink 解析唯一实现（拆别名/锚点），discover 与 gaps/体检共用同一口径
 import { extractWikilinkTargets } from '../vault/link-parser.js';
@@ -74,7 +73,11 @@ async function readDirectoryPages(vault: VaultService, vaultPath: string, dir: s
     const pageName = f.slice(0, -3);
     try {
       const raw = await vault.readFile(rel);
-      const parsed = matter(raw);
+      // T04504：走收敛层。直连 matter() 时同一页第一轮抛（→ 跳过）、第二轮拿到缓存里的空 data
+      // 反而「读成功」并以文件名兜底进入集合——推荐列表里的页数随进程重启翻转。
+      // 统一成：元信息读不出来就不参与推荐（与原有「跳过读不出的页」同口径）。
+      const parsed = tryParsePage(raw);
+      if (!parsed.ok) return null;
       return {
         path: rel,
         title: typeof parsed.data.title === 'string' ? parsed.data.title : pageName,
