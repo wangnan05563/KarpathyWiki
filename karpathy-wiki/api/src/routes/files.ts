@@ -13,6 +13,7 @@ import { NESTED_PAGE_DIRS } from '../vault/page-scope.js';
 import { awaitCleanupIdle } from '../cleanup-mutex.js';
 // RFC 5987 Content-Disposition：与投递原件下载（/api/uploads/:id/download）共用同一套文件名语义
 import { buildAttachmentHeader } from '../utils/attachment.js';
+import { DerivedCache } from '../utils/derived-cache.js';
 
 // 注册文件管理路由。
 //   GET  /api/files/tree          获取 Vault 目录树
@@ -21,12 +22,12 @@ import { buildAttachmentHeader } from '../utils/attachment.js';
 //   PUT  /api/files?path=xxx      写入文件内容
 // path 由 query 参数避免 URL 编码问题（L-5）。
 
-// 目录树缓存（listTree 结果不变，可缓存）
-const FILES_TREE_CACHE_TTL_MS = 30 * 1000; // 30秒
-let filesTreeCache: { tree: unknown; cachedAt: number } | null = null;
-
-// 页面扁平列表缓存（listAllPages 结果不变，可缓存）
-let filesPagesCache: { pages: unknown; cachedAt: number } | null = null;
+// O5：缓存键 = vault 路径 + 变更版本号（+ 失效天数），同一键的并发请求共享一次扫描。
+// 为什么不是裸 TTL：写盘后目录树/页面列表必须立刻反映新文件，裸 TTL 会给出最长 30 s 的
+//   陈旧窗口；键里带上 vault 路径是为了不同实例（测试/多库）之间不串缓存。
+const FILES_TREE_CACHE_TTL_MS = 30 * 1000; // 30 秒
+const filesTreeCache = new DerivedCache<Awaited<ReturnType<VaultService['listTree']>>>(FILES_TREE_CACHE_TTL_MS, 'filesTree');
+const filesPagesCache = new DerivedCache<Awaited<ReturnType<VaultService['listAllPages']>>>(FILES_TREE_CACHE_TTL_MS, 'filesPages');
 
 // 只读 GET 路由的统一限流配置（P1-4）：
 // 全局默认 60 req/min 兜底写操作，这里覆盖为 300 req/min 提升浏览体验
@@ -212,16 +213,11 @@ export function registerFilesRoutes(
   const readPreHandler = opts?.filesReadAuthRequired && guards.enabled ? guards.requireAuth : undefined;
   // 目录树：返回 Vault 内所有文件与目录的嵌套结构，供前端 el-tree 渲染。
   app.get('/api/files/tree', { config: { rateLimit: READ_RATE_LIMIT }, preHandler: readPreHandler }, async (_request, reply) => {
-    const now = Date.now();
-    // 检查缓存
-    if (filesTreeCache && (now - filesTreeCache.cachedAt) < FILES_TREE_CACHE_TTL_MS) {
-      return void reply.send({ tree: filesTreeCache.tree });
-    }
-
     try {
-      const tree = await vault.listTree();
-      // 写入缓存
-      filesTreeCache = { tree, cachedAt: now };
+      const tree = await filesTreeCache.get(
+        `${vault.getVaultPath()}|${vault.getChangeRevision()}`,
+        () => vault.listTree(),
+      );
       return void reply.send({ tree });
     } catch (err: unknown) {
       return void reply.code(500).send({
@@ -233,18 +229,18 @@ export function registerFilesRoutes(
   // 页面扁平列表：返回所有正式页面（含 frontmatter），供看板/日历视图分组。
   // 为什么单独端点：el-tree 是嵌套结构，看板/日历需要扁平 + frontmatter，复用不划算
   app.get('/api/files/pages', { config: { rateLimit: READ_RATE_LIMIT }, preHandler: readPreHandler }, async (_request, reply) => {
-    const now = Date.now();
-    if (filesPagesCache && (now - filesPagesCache.cachedAt) < FILES_TREE_CACHE_TTL_MS) {
-      return void reply.send({ pages: filesPagesCache.pages });
-    }
     try {
-      const pages = await vault.listAllPages();
-      // FR-18 时效角标：为每页注入派生 knowledge_status，前端据此渲染绿/橙/灰点
-      const withStatus = pages.map((p) => ({
-        ...p,
-        knowledge_status: computeKnowledgeStatus(p.frontmatter, knowledgeStaleDays),
-      }));
-      filesPagesCache = { pages: withStatus, cachedAt: now };
+      const withStatus = await filesPagesCache.get(
+        `${vault.getVaultPath()}|${vault.getChangeRevision()}|${knowledgeStaleDays}`,
+        async () => {
+          const pages = await vault.listAllPages();
+          // FR-18 时效角标：为每页注入派生 knowledge_status，前端据此渲染绿/橙/灰点
+          return pages.map((p) => ({
+            ...p,
+            knowledge_status: computeKnowledgeStatus(p.frontmatter, knowledgeStaleDays),
+          }));
+        },
+      );
       return void reply.send({ pages: withStatus });
     } catch (err: unknown) {
       return void reply.code(500).send({
@@ -331,9 +327,7 @@ export function registerFilesRoutes(
       // 不再依赖 days 过滤（mtime 恰好挡住）这条时间边界。
       await awaitCleanupIdle();
       await vault.writeFile(query.path, body.content);
-      // 文件变更后使目录树与页面列表缓存同时失效（写后即刷）
-      filesTreeCache = null;
-      filesPagesCache = null;
+      // O5：writeFile 已自增 vault 变更版本号，目录树/页面列表缓存自动失效，无需手工清空
       return void reply.send({ ok: true, path: query.path });
     } catch (err: unknown) {
       return void reply.code(403).send({
