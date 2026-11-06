@@ -51,6 +51,9 @@ import FollowupsChips from '../FollowupsChips.vue';
 import SessionStatusIcon from '../SessionStatusIcon.vue';
 // 意图澄清卡片：问题有歧义时后端中断提问，列出解读选项供用户确认后继续（复用桌面组件）
 import ClarifyCard from '../ClarifyCard.vue';
+// T04453：上下文占用徽章（含「压缩上下文」入口）——复用桌面同一组件，
+// 其浮层已改为 click 触发，触屏点按可用；移动端此前完全没有占用与压缩入口
+import ContextUsageBadge from '../ContextUsageBadge.vue';
 import type { ChatMessage, Reference, ConversationRecord } from '../../types';
 
 const emit = defineEmits<{ (e: 'open-me'): void }>();
@@ -478,6 +481,19 @@ function pickModel(key: string) {
   modelStore.switchModel(key);
   modelSheet.value = false;
 }
+
+// ===== 上下文占用（T04453）=====
+// 与桌面同源：SSE done 事件把 governor 统计写进「按会话」缓冲（bufSetContextUsage）。
+// 这里按当前会话 id 取缓冲，而不是读 store 的扁平 computed——移动端支持多会话并行流式，
+// 后台会话的 done 只写它自己的缓冲；按 convId 取才能保证「切会话时占用指示跟着变」。
+const contextUsage = computed(() => {
+  const buf = store.getSessionBuffer(store.activeId);
+  return {
+    threadId: buf?.currentThreadId ?? null,
+    inputTokens: buf?.contextInputTokens ?? 0,
+    maxTokens: buf?.contextMaxTokens ?? 0,
+  };
+});
 
 // ===== 发送 / 流式 =====
 function handleSubmit() {
@@ -997,6 +1013,13 @@ onBeforeUnmount(() => {
         <button class="mq-model" title="切换模型" @click="modelSheet = true">
           <span class="mq-model-label">{{ displayModel }}</span>
         </button>
+        <!-- T04453：上下文占用指示 + 压缩入口（复用桌面组件、同数据源）。
+             徽章自带「没拿到 governor 统计就不渲染」，未提问过的会话不会出现空壳 -->
+        <ContextUsageBadge
+          :thread-id="contextUsage.threadId"
+          :input-tokens="contextUsage.inputTokens"
+          :max-tokens="contextUsage.maxTokens"
+        />
         <button
           v-if="store.isLoading"
           class="mq-send mq-stop"
@@ -1594,8 +1617,16 @@ onBeforeUnmount(() => {
 .mq-mic:disabled { opacity: 0.4; cursor: not-allowed; }
 .mq-model { padding: 0 10px; font-size: 12.5px; max-width: 92px; overflow: hidden; }
 .mq-model-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* T04453：发送行加入上下文徽章后的两处排布收口——
+   1) textarea 的 flex min-width:auto 会按「不换行文本固有宽度」顶住，375px 屏上
+      多一颗控件就整行溢出，故显式允许收缩；
+   2) 容器抬到与本行控件同高（38px）只解决排布对齐；实测承接点按的内部 button 仍是
+      51.5×26px（组件本体 align-items:center，拉伸要改组件），已达 WCAG 2.5.8 的 24×24
+      下限，375px 触屏点按实测可弹开浮层；目标尺寸要不要再抬另见派生单。 */
+.mq-inputbar :deep(.context-usage-badge) { height: 38px; align-self: flex-end; }
 .mq-input {
   flex: 1;
+  min-width: 0;
   min-height: 38px;
   max-height: 110px;
   resize: none;

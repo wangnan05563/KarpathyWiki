@@ -17,6 +17,10 @@ const props = defineProps<{
 
 const compacting = ref(false);
 
+// T04453：浮层开合状态。改成 click 触发后开合不再只由鼠标决定（键盘 Enter/Space、触屏点按
+// 都会开），状态需要进 aria-label —— EP 会把 reference 上的 aria-expanded 克隆掉，见模板注释。
+const popOpen = ref(false);
+
 // 使用率百分比（0~100，上限截断）；maxTokens 未就绪时徽章隐藏（父组件 v-if）
 const percent = computed(() => {
   if (props.maxTokens <= 0) return 0;
@@ -26,6 +30,10 @@ const percent = computed(() => {
 // 圆环周长 = 2πr ≈ 2*3.1416*15.5 ≈ 97.4；strokeDasharray 按百分比映射到周长
 const RING_CIRCUMFERENCE = 97.4;
 const ringDash = computed(() => `${(percent.value / 100) * RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`);
+
+// T04453：读屏标签。旧实现是 div，读屏念不出这是什么；EP 克隆 #reference 时又会丢掉
+// aria-haspopup/aria-expanded（实测只剩 type/class/title/aria-label），故开合态并进文案播报。
+const badgeLabel = computed(() => `上下文占用 ${percent.value}%，${popOpen.value ? '浮层已展开，点击可关闭' : '点击查看明细并压缩上下文'}`);
 
 // 压缩上下文：触发后端存储层折叠；persist=false（默认）后端返回 ok 但无持久化记忆可压，
 // 提示用户下次问答自动更新；persist=true 时实际压缩并随下次问答刷新显示
@@ -45,36 +53,28 @@ async function compactContext() {
 </script>
 
 <template>
-  <!-- 仅在有上下文数据时显示 -->
+  <!-- T04453：入口可达性。旧实现是「hover 触发的 el-tooltip + 不可聚焦的 div」——键盘 Tab
+       到不了徽章、触屏没有 hover 弹不出浮层，「压缩上下文」这颗按钮等于只对鼠标用户存在。
+       新实现：徽章本体是原生 button，明细与压缩动作放进 trigger="click" 的 el-popover，
+       鼠标点按、触屏点按、键盘 Enter/Space 同样可用（hover 说明文字保留在 title 上）。 -->
   <div v-if="maxTokens > 0" class="context-usage-badge">
-    <el-tooltip placement="top" :show-after="250" :hide-after="0" popper-class="ctx-tooltip-popper">
-      <template #content>
-        <div class="ctx-tip">
-          <div class="ctx-tip-row"><span>当前上下文</span><strong>{{ inputTokens }} tokens</strong></div>
-          <div class="ctx-tip-row"><span>最大上下文</span><strong>{{ maxTokens }} tokens</strong></div>
-          <div class="ctx-tip-row"><span>使用率</span><strong>{{ percent }}%</strong></div>
-          <el-button
-            size="small"
-            type="primary"
-            class="ctx-compact-btn"
-            :loading="compacting"
-            @click.stop="compactContext"
-          >压缩上下文</el-button>
-        </div>
+    <el-popover v-model:visible="popOpen" trigger="click" placement="top" :width="220" popper-class="ctx-tooltip-popper">
+      <template #reference>
+        <button type="button" class="ctx-badge-inner" :aria-label="badgeLabel" title="上下文占用，点击查看明细并压缩">
+          <svg class="ctx-ring" width="20" height="20" viewBox="0 0 36 36">
+            <circle cx="18" cy="18" r="15.5" class="ctx-ring-bg" />
+            <circle cx="18" cy="18" r="15.5" class="ctx-ring-fg" :class="{ warn: percent >= 75 && percent < 90, danger: percent >= 90 }" :style="{ strokeDasharray: ringDash }" />
+          </svg>
+          <span class="ctx-pct" :class="{ warn: percent >= 75 && percent < 90, danger: percent >= 90 }">{{ percent }}%</span>
+        </button>
       </template>
-      <div class="ctx-badge-inner" title="上下文占用">
-        <svg class="ctx-ring" width="20" height="20" viewBox="0 0 36 36">
-          <circle cx="18" cy="18" r="15.5" class="ctx-ring-bg" />
-          <circle
-            cx="18" cy="18" r="15.5"
-            class="ctx-ring-fg"
-            :class="{ warn: percent >= 75 && percent < 90, danger: percent >= 90 }"
-            :style="{ strokeDasharray: ringDash }"
-          />
-        </svg>
-        <span class="ctx-pct" :class="{ warn: percent >= 75 && percent < 90, danger: percent >= 90 }">{{ percent }}%</span>
+      <div class="ctx-tip">
+        <div class="ctx-tip-row"><span>当前上下文</span><strong>{{ inputTokens }} tokens</strong></div>
+        <div class="ctx-tip-row"><span>最大上下文</span><strong>{{ maxTokens }} tokens</strong></div>
+        <div class="ctx-tip-row"><span>使用率</span><strong>{{ percent }}%</strong></div>
+        <el-button size="small" type="primary" class="ctx-compact-btn" :loading="compacting" @click.stop="compactContext">压缩上下文</el-button>
       </div>
-    </el-tooltip>
+    </el-popover>
   </div>
 </template>
 
@@ -104,9 +104,17 @@ async function compactContext() {
   transition: all 0.2s ease;
 }
 
-.ctx-badge-inner:hover {
+.ctx-badge-inner:hover, .ctx-badge-inner:focus-visible {
   border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   box-shadow: 0 0 10px var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
+}
+
+/* T04453：徽章本体是原生 button（键盘/触屏可达是本级需求），需要抹掉规则没覆盖的 UA 默认：
+   button 字体不继承、原生 appearance 在部分内核会加内阴影。不新增任何颜色声明。 */
+button.ctx-badge-inner {
+  font: inherit;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 /* 圆环：背景环 + 前景进度环（旋转 -90° 从顶部开始，长度变化平滑过渡） */
