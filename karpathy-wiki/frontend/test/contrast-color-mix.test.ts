@@ -8,8 +8,10 @@
 //   M1 混合语义：srgb 按 gamma 编码分量插值、alpha **预乘**（否则 12% tint 会被 transparent 的黑底拉暗成假色）；
 //   M2 口径纪律：认不出的写法必须抛，不许静默回落成某个颜色——猜错一个色就是假达标进主锁；
 //   M3 源码事实：仓库里 4 处 color-mix 全部进得了解析器（混色面从此可实算）；
-//   M4 顺带照亮：解析器一旦认得混色面，Dashboard 三枚状态徽标的 tint 面就有数了——
-//      实测 14/24 组合不达 AA，本单只冻结事实不改色（改色归派生单）。
+//   M4 徽标面主锁（T04521）：解析器认得混色面后，Dashboard 三枚状态徽标进数值口径——
+//      T04510 当年只冻结「14/24 不达」的事实（改色归派生单），派生单修完后本腿已翻成
+//      「9 主题 × 3 徽标 = 27 组 0 未达标」硬锁，原 FAIL_BASELINE 整张删除，另留 M4e 取证腿
+//      复现改前的 14 条（保证这锁判的是真实落点，不是被口径放过）。
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -17,10 +19,13 @@ import {
   ROOT,
   THRESHOLD,
   composite,
+  loadAuxTheme,
   loadThemes,
   pageOf,
+  parseRootDecls,
   resolve,
   ruleBodies,
+  themeBlockDecls,
   worstRatio,
   type RGB,
   type ThemeTokens,
@@ -179,39 +184,145 @@ describe('T04510 · M3 源码事实：仓库里的 color-mix 全部进得了解�
   });
 });
 
-describe('T04510 · M4 解析器顺带照亮的既有面（测量并冻结，不在本单改色）', () => {
+describe('T04521 · M4 徽标面主锁：解析器照亮之后，三面 27 组必须 0 未达标', () => {
   /**
-   * 补上 color-mix 后，Dashboard 三枚状态徽标第一次进得了数值口径：
-   * 「本色文字压自己的 12% tint」在浅底主题里大面积不达 AA（实测 14/24 组合，最差 macaron·running 2.20）。
-   * 本单只登记事实、不改色（改色与配对 token 归派生单）；基线只降不升——
-   * 新增未达标组合即红，修好了要同步把对应行删掉，否则「已修」会被过期基线掩盖。
+   * T04510 落地时，这一腿只做「冻结事实」（14 条 FAIL_BASELINE，不改色），改色归派生单。
+   * 派生单 T04521 已按 T04472 的「一个面给一对 token」口径收口：面保持本色的 12% tint
+   * （淡底徽标是设计语义），只把前景换成 --on-status-<态>-fg，逐主题实算到 ≥4.5。
+   * 原 FAIL_BASELINE 表随本单整张删除 —— 0 未达标才是这条腿现在的判据。
+   *
+   * 定调时试过复用既有族，实测不过才落字面量（口径见 style.css:150）：
+   * - failed 复用 --danger-readable：9 主题全达标（5.13~7.30）→ :root 直接接族，无人需要覆盖；
+   * - running 复用 --warning-readable：3 个浅底主题 4.41~4.49 差一口气 → 那 5 主题给字面量 #854d0e；
+   * - done 复用同族 --on-badge-green-fg：本面是 color-mix(--success 12%)、徽章面是
+   *   rgba(74,222,128,.1)，两张面不同，实算只有 4.20~4.43 → 必须另给 token。
    */
-  const BADGES = ['.status-done', '.status-failed', '.status-running'];
-  const FAIL_BASELINE = [
+  const BADGES = ['.status-done', '.status-failed', '.status-running'] as const;
+  const LIGHT = ['ecommerce', 'enterprise', 'light-business', 'macaron', 'portfolio'];
+  /** 主题全集（含 tokens.css 的辅助暗色主题：徽标在它下面同样要读得清） */
+  const ALL_THEMES: ThemeTokens[] = [...loadThemes(), loadAuxTheme('dark')];
+
+  /** 定调表：逐主题「解析后的前景色」。记解析结果而不是声明原文 —— 未覆盖的主题必须真的取到那个色 */
+  const FG_VALUES: Record<string, Record<(typeof BADGES)[number], string>> = {
+    'default(:root)': { '.status-done': '#4ade80', '.status-failed': '#ff8a80', '.status-running': '#ffb347' },
+    creative: { '.status-done': '#4ade80', '.status-failed': '#ff8a80', '.status-running': '#ffb347' },
+    product: { '.status-done': '#4ade80', '.status-failed': '#ff8a80', '.status-running': '#ffb347' },
+    'dark(tokens.css)': { '.status-done': '#3fb950', '.status-failed': '#ff8a80', '.status-running': '#ffb347' },
+    ecommerce: { '.status-done': '#166534', '.status-failed': '#b52e2e', '.status-running': '#854d0e' },
+    enterprise: { '.status-done': '#166534', '.status-failed': '#b52e2e', '.status-running': '#854d0e' },
+    'light-business': { '.status-done': '#166534', '.status-failed': '#b3261e', '.status-running': '#854d0e' },
+    macaron: { '.status-done': '#166534', '.status-failed': '#a83a3a', '.status-running': '#854d0e' },
+    portfolio: { '.status-done': '#166534', '.status-failed': '#8c1d1d', '.status-running': '#854d0e' },
+  };
+
+  /** 改前写法（前景 = 与面同源的本色）：只用于取证腿，证明主锁判的是真实落点而不是被口径放过 */
+  const BEFORE_FG: Record<(typeof BADGES)[number], string> = {
+    '.status-done': 'var(--success, #22c55e)',
+    '.status-failed': 'var(--danger, #ef4444)',
+    '.status-running': 'var(--warning, #f59e0b)',
+  };
+  /** T04510 当年实测、并被本单修掉的 14 条（8 主题口径，dark(tokens.css) 当时三面都过） */
+  const BEFORE_FAILED = [
     '.status-done × ecommerce', '.status-done × enterprise', '.status-done × light-business', '.status-done × macaron', '.status-done × portfolio',
     '.status-failed × ecommerce', '.status-failed × enterprise', '.status-failed × light-business', '.status-failed × macaron',
     '.status-running × ecommerce', '.status-running × enterprise', '.status-running × light-business', '.status-running × macaron', '.status-running × portfolio',
   ];
 
-  function badgeFailures(): string[] {
-    const dash = readFileSync(join(ROOT, 'src/views/Dashboard.vue'), 'utf8');
-    const out: string[] = [];
-    for (const sel of BADGES) {
-      const body = ruleBodies(dash, sel);
-      expect(body.length, `Dashboard 找不到 ${sel} 规则（徽标改名的同时要更新本腿）`).toBe(1);
-      const fg = /(?:^|;)[ \t\r\n]*color[ \t]*:[ \t]*([^;]+)/.exec(body[0])![1].trim();
-      const bg = /(?:^|;)[ \t\r\n]*background[ \t]*:[ \t]*([^;]+)/.exec(body[0])![1].trim();
-      for (const t of loadThemes()) {
-        if (worstRatio(fg, bg, t.decls, pageOf(t.decls)) < THRESHOLD.text) out.push(`${sel} × ${t.name}`);
-      }
-    }
-    return out;
+  const dash = readFileSync(join(ROOT, 'src/views/Dashboard.vue'), 'utf8');
+
+  function face(sel: string): { fg: string; bg: string } {
+    const bodies = ruleBodies(dash, sel);
+    expect(bodies.length, `Dashboard 找不到 ${sel} 规则（徽标改名的同时要更新本腿）`).toBe(1);
+    const fg = /(?:^|;)[ \t\r\n]*color[ \t]*:[ \t]*([^;]+)/.exec(bodies[0]);
+    const bg = /(?:^|;)[ \t\r\n]*background[ \t]*:[ \t]*([^;]+)/.exec(bodies[0]);
+    expect(fg, `${sel} 规则里没有 color`).not.toBeNull();
+    expect(bg, `${sel} 规则里没有 background`).not.toBeNull();
+    return { fg: fg![1].trim(), bg: bg![1].trim() };
   }
 
-  it('M4 · 未达标组合必须与基线逐条相同（多了=新缺陷即红，少了=已修要同步删行）', () => {
-    const got = badgeFailures();
-    expect(got.filter((k) => !FAIL_BASELINE.includes(k)), `基线外的新未达标组合`).toEqual([]);
-    expect(FAIL_BASELINE.filter((k) => !got.includes(k)), `这些组合已达标，要从 FAIL_BASELINE 删掉（防止「已修」被过期基线掩盖）`).toEqual([]);
-    expect(got.sort()).toEqual([...FAIL_BASELINE].sort());
+  /** 一次实算全部「徽标 × 主题」，把每条的比值都带回去（不返回精简数组，避免口径被压缩后看不见） */
+  function measure(fgOf: (sel: (typeof BADGES)[number]) => string, themes: ThemeTokens[]) {
+    return BADGES.flatMap((sel) => {
+      const { bg } = face(sel);
+      const fg = fgOf(sel);
+      return themes.map((t) => ({
+        key: `${sel} × ${t.name}`,
+        theme: t.name,
+        sel,
+        ratio: worstRatio(fg, bg, t.decls, pageOf(t.decls)),
+      }));
+    });
+  }
+
+  it('M4 · 27 个「徽标 × 主题」组合全部 ≥ 4.5（不达即红，不再走「冻结基线」）', () => {
+    const bad = measure((sel) => face(sel).fg, ALL_THEMES).filter((r) => r.ratio < THRESHOLD.text);
+    expect(bad.map((b) => `${b.key} → ${b.ratio.toFixed(2)}`)).toEqual([]);
+  });
+
+  it('M4b · 规模锁：9 主题 × 3 徽标 = 27 次实算，主题清单逐字（少一个不是「更严」，是清单失守）', () => {
+    const rows = measure((sel) => face(sel).fg, ALL_THEMES);
+    expect(ALL_THEMES.map((t) => t.name)).toEqual([
+      'default(:root)', 'creative', 'ecommerce', 'enterprise', 'light-business', 'macaron', 'portfolio', 'product', 'dark(tokens.css)',
+    ]);
+    expect(rows.length).toBe(27);
+    // 每条都必须是可判定的有限数：解析器出问题时产 NaN 会让上面那条「全部 ≥4.5」无声通过
+    for (const r of rows) {
+      expect(Number.isFinite(r.ratio) && r.ratio >= 1 && r.ratio <= 21, `${r.key} 比值异常`).toBe(true);
+    }
+  });
+
+  it('M4c · 定调表：逐主题解析后的前景色必须与登记一致（表与代码脱钩即红）', () => {
+    for (const t of ALL_THEMES) {
+      const want = FG_VALUES[t.name];
+      expect(want, `${t.name} 不在定调表里：新增主题要显式登记三面取值`).toBeDefined();
+      for (const sel of BADGES) {
+        const tok = `--on-status-${sel.replace('.status-', '')}-fg`;
+        const r = resolve(`var(${tok})`, t.decls);
+        expect('stops' in r, `${t.name} 的 ${tok} 解析成了渐变`).toBe(false);
+        const solid = (r as { solid: RGB }).solid;
+        expect(Math.round(solid.a * 100), `${t.name} 的 ${tok} 不该是半透明`).toBe(100);
+        const got = `#${[solid.r, solid.g, solid.b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+        expect(got, `${t.name} · ${tok}`).toBe(want![sel]);
+      }
+    }
+  });
+
+  it('M4d · 面口径前提：三面仍是「本色 12% 混透明」（比例按数值解析，换面即点名）', () => {
+    for (const sel of BADGES) {
+      const { fg, bg } = face(sel);
+      const base = BEFORE_FG[sel];
+      expect(fg, `${sel} 的前景不再是 token 供给（改回本色前景就是本单的回退）`).toContain('--on-status-');
+      const m = /^color-mix\(\s*in\s+srgb\s*,\s*(.+?)\s+([\d.]+)%\s*,\s*transparent\s*\)$/.exec(bg);
+      expect(m, `${sel} 的混色面写法变了：口径（压 tint 面）要跟着重定，不能留这条腿假绿`).not.toBeNull();
+      expect(m![1].trim(), `${sel} 的面不再是前景那个本色`).toBe(base);
+      // 「12.0%」与「12%」是同一个口径：只改比例写法不该误伤，改数值才是换面
+      expect(Number(m![2]), `${sel} 的 tint 比例被改了`).toBe(12);
+    }
+  });
+
+  it('M4e · 取证腿：把改前写法喂进同一口径，恰好复现当年的 14 条不达（证明 M4 有牙齿）', () => {
+    const got = measure((sel) => BEFORE_FG[sel], loadThemes()).filter((r) => r.ratio < THRESHOLD.text);
+    expect(got.map((r) => r.key).sort()).toEqual([...BEFORE_FAILED].sort());
+    expect(Math.min(...got.map((r) => r.ratio))).toBeCloseTo(2.203, 2);
+    // dark(tokens.css) 三面当时就达标 —— 所以当年那份基线不是「漏了一个主题」，而是口径本就没含它
+    const darkRows = measure((sel) => BEFORE_FG[sel], [loadAuxTheme('dark')]);
+    expect(darkRows.filter((r) => r.ratio < THRESHOLD.text)).toEqual([]);
+    expect(darkRows.map((r) => Number(r.ratio.toFixed(2))).sort((a, b) => a - b)).toEqual([4.53, 5.64, 5.68]);
+  });
+
+  it('M4f · 五个浅底主题各自自带 done/running 覆盖（漏一个会静默继承 :root 本色，要点名到主题）', () => {
+    // 判「这个主题块里真的声明了这个 token」，不判「文件里出现过这个色」——
+    // #854d0e 在浅底主题里同时是 T04520 三态探测标签 warn 前景的取值，按色文搜索会假绿。
+    const OVERRIDE: Record<string, string> = { '--on-status-done-fg': '#166534', '--on-status-running-fg': '#854d0e' };
+    for (const name of LIGHT) {
+      const own = themeBlockDecls(readFileSync(join(ROOT, 'src/styles/themes', `${name}.css`), 'utf8'), name);
+      for (const [tok, hex] of Object.entries(OVERRIDE)) {
+        expect(own.get(tok), `${name}.css 的 [data-theme="${name}"] 块缺 ${tok} 覆盖（会静默继承 :root 的本色前景）`).toBe(hex);
+      }
+      // failed 全域不覆盖：它靠 :root 接 --danger-readable，各主题那份族成员本就达标
+      expect(own.has('--on-status-failed-fg'), `${name}.css 不该给 failed 另起取值（会把 --danger-readable 族绕过去）`).toBe(false);
+    }
+    expect(parseRootDecls().get('--on-status-failed-fg'), ':root 的 failed 前景必须接 --danger-readable 族').toMatch(/^var\(--danger-readable/);
   });
 });
+

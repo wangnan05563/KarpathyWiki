@@ -98,6 +98,11 @@
   --on-badge-red-fg: #8c1d1d;
   --danger-readable: #8c1d1d;
   --on-danger-hover-fg: #3a0000;
+  /* T04521 Dashboard 运行状态徽标前景：面仍是「本色 12% tint」（淡底徽标是设计语义），只配前景。
+     本色字压本面只有 done 4.14 / running 3.77 → 各压深一档为 #166534 / #854d0e（实算 5.97 / 5.78）；
+     failed 不覆盖：继承 :root 的 var(--danger-readable)，压本面 7.30 已达标。取值逐条锁在 contrast-color-mix M4。 */
+  --on-status-done-fg: #166534;
+  --on-status-running-fg: #854d0e;
   /* 本主题实心主色 #8b7355 是中调（相对亮度 ≈0.20）：白字 4.49、深墨 4.23，两头都不达 AA，
      所以这一面单独压深到 #6d5a42（白字 6.58）；--neon-cyan 本体不动，避免牵动全站强调色身份。 */
   --on-accent-solid-fg: #ffffff;

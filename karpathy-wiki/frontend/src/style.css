@@ -174,6 +174,20 @@
   --on-accent-solid-bg: var(--neon-cyan, #00f5ff);
   --on-accent-solid-fg: #04121a;
 
+  /* ============================================================
+   * T04521：Dashboard 运行状态徽标面配对前景（--on-status-<态>-fg）
+   * 徽标底色是「本色的 12% tint」（color-mix），前景原本也取本色 —— 同条规则里字与底同源，
+   * 浅底主题合成出亮面 + 中亮字 = 2.20~4.27:1（实测 14/24 组合不达 AA），深底主题反而达标。
+   * 口径同 T04472/T04509：面不动（淡底徽标是设计语义），只给前景配 token，逐主题实算。
+   * :root 走既有 readable / 本色族；只有实算不达的主题才给字面量（浅底五主题的 done/running）。
+   * failed 不在浅底覆盖：各主题 --danger-readable 压本面已 5.13~7.30。
+   * 注：done 不能复用同族 --on-badge-green-fg —— 徽章面是 rgba(74,222,128,.1)，本面是
+   *     color-mix(--success 12%)（各主题 --success 不同），实算只有 4.20~4.43 不达。
+   * ============================================================ */
+  --on-status-done-fg: var(--success, #22c55e);
+  --on-status-failed-fg: var(--danger-readable, #ff8a80);
+  --on-status-running-fg: var(--warning-readable, #fbbf24);
+
   /* URL 探测状态三色（Ingest 代理探测标签） */
   --probe-ok: #4ade80;
   --probe-ok-bg: rgba(74, 222, 128, 0.15);

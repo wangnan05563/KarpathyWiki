@@ -642,17 +642,17 @@ onMounted(() => {
 }
 
 .status-done {
-  color: var(--success, #22c55e);
+  color: var(--on-status-done-fg, var(--success, #22c55e));
   background: color-mix(in srgb, var(--success, #22c55e) 12%, transparent);
 }
 
 .status-failed {
-  color: var(--danger, #ef4444);
+  color: var(--on-status-failed-fg, var(--danger, #ef4444));
   background: color-mix(in srgb, var(--danger, #ef4444) 12%, transparent);
 }
 
 .status-running {
-  color: var(--warning, #f59e0b);
+  color: var(--on-status-running-fg, var(--warning, #f59e0b));
   background: color-mix(in srgb, var(--warning, #f59e0b) 12%, transparent);
   animation: pulse 1.5s ease-in-out infinite;
 }
