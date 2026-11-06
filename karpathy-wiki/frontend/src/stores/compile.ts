@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { consumeSSE } from '../utils/sse';
+import { saveBatchSnapshot, loadBatchSnapshot } from '../utils/compile-batch-snapshot';
 import type {
   CompileStep,
   DoneData,
@@ -129,6 +130,21 @@ export const useCompileStore = defineStore('compile', () => {
   // T03591：重试流的取消句柄。与主编译流分开持有——用户切走页面时两者都要中止
   let retryAbortController: AbortController | null = null;
 
+  // ===== T04508：编译 SSE 流由 store 持有 =====
+  // 为什么从 Progress.vue 提到这里：App.vue 用 v-if 切换视图，切走即卸载组件，
+  //   旧实现在 onBeforeUnmount 里 abort() 这条 fetch 流——后端把「客户端断连」当成
+  //   「取消编译」直接中断任务（routes/compile.ts 的 isAborted() break），于是切回来
+  //   只剩 localStorage 快照，只能标成「已中断」。流一旦归 store 持有，卸载组件不
+  //   abort，浏览器侧这条请求就还活着：编译继续跑、事件继续写进下面的响应式字段，
+  //   切回来看到的是实时进度而不是残影。同一手法见 draftAbortController。
+  // 为什么非响应式：AbortController 是运行时句柄，放 ref 内会被 Pinia 深度代理
+  let streamAbortController: AbortController | null = null;
+  // 是否有一条在途的编译/续传流：Progress.vue 据此决定「原地续显」而不是重发请求
+  const streamActive = ref(false);
+  // T04508：批量快照的「已中断」标识。放 store 而非组件局部：整页刷新后重新进入
+  //   进度页时它要和恢复出来的分组一起存活，组件卸载再挂载不该把它丢掉。
+  const batchInterrupted = ref(false);
+
   // ===== 草稿批量发布状态（Browse.vue 业务）=====
   // 为什么放在 store 而非 Browse.vue 局部 ref：App.vue 用 v-if 切换视图，
   //   切走时 Browse.vue 会被卸载，导致 batchItems/compiling/progressMessage 全部丢失
@@ -249,6 +265,9 @@ export const useCompileStore = defineStore('compile', () => {
     currentStepStartedAt.value = 0;
     compileStartedAt.value = 0;
     currentRunId.value = '';
+    // T04508：新一轮投递/重置必须收掉上一在途流，否则两条流同时往同一批字段写事件
+    stopStream();
+    batchInterrupted.value = false;
     // 重置时同步清除持久化状态，避免切回时误恢复已主动重置的编译
     clearPersistedState();
   }
@@ -490,9 +509,10 @@ export const useCompileStore = defineStore('compile', () => {
   }
 
   // 中止当前编译：仅复位 isCompiling，保留 pendingPayload/isDone/errorMessage
-  // 为什么需要：Progress.vue 在 onBeforeUnmount 或 fetch AbortError 时调用，
-  //   让 store 状态与实际编译流保持一致。否则 prepareCompile 设置的 isCompiling=true
-  //   会在切走后持续为 true，切回时 onMounted 误判为"正在编译"导致进度条卡死
+  // 为什么需要：编译流被中止（AbortError）时调用，让 store 状态与实际编译流保持一致。
+  //   否则 prepareCompile 设置的 isCompiling=true 会在流已结束后持续为 true，
+  //   进度条卡死在转圈
+  // T04508：切页不再走这里——流归 store 持有后卸载组件不会中止请求，也就不需要复位状态
   function abortCompile() {
     if (isCompiling.value) {
       isCompiling.value = false;
@@ -501,12 +521,16 @@ export const useCompileStore = defineStore('compile', () => {
   }
 
   // 用户主动取消编译：标记 isCancelled 让进度条组件切换到"取消态"视觉
-  // 与 abortCompile 的区别：abortCompile 是切走页面时的隐式中止，不设置取消标识；
+  // 与 abortCompile 的区别：abortCompile 是流被中止后的隐式复位，不设置取消标识；
   //   cancelCompile 是用户显式点击"取消编译"按钮，需要在 UI 上展示取消态
   // 为什么不复位 batchGroups：保留已完成进度供用户查看（"已完成 3/10"）
+  // T04508：取消要真的断掉在途流（组件已不再持有句柄），先落取消态再 stopStream，
+  //   让被中止那一侧的 catch 走「自己不是当前流」分支，不会覆盖掉刚写的取消态
   function cancelCompile() {
     isCancelled.value = true;
     isCompiling.value = false;
+    stopStream();
+    persistProgress();
   }
 
   // 编译流在「未收到终止事件」的情况下结束：代理空闲断流、网络中断、服务端重启
@@ -611,6 +635,8 @@ export const useCompileStore = defineStore('compile', () => {
       await consumeSSE(res, (eventType, parsed) => {
         if (eventType === 'deduped' || eventType === 'batch_deduped') deduped = true;
         handleEvent(eventType, parsed);
+        // T04508：重试流同样逐事件落盘，切页/刷新后分组进度与重试结果不丢
+        persistProgress();
       }, retryAbortController?.signal);
       // 流结束仍停在 running：没有终止事件，按「可重试的失败」收口（与 T03438 同口径）
       if (group.status === 'running') {
@@ -631,6 +657,167 @@ export const useCompileStore = defineStore('compile', () => {
       retryingIndexes.value = retryingIndexes.value.filter((i) => i !== fileIndex);
       refreshBatchOutcome();
     }
+  }
+
+  // ===== T04508：编译流生命周期归 store =====
+
+  // 收掉在途流：先摘句柄再 abort，让被中止那一侧的 catch 认不出「自己还是当前流」
+  // 为什么先置 null：abort() 是同步触发 signal 的，紧跟着的 catch 里若还能读到同一句柄，
+  //   就会把「新一轮投递顶掉旧流」误判成「用户取消」而复位 isCompiling，新编译起不来
+  function stopStream(): void {
+    const controller = streamAbortController;
+    streamAbortController = null;
+    streamActive.value = false;
+    controller?.abort();
+  }
+
+  // 逐事件落盘：单文件走 persistState（localStorage），批量走可序列化快照
+  // 为什么在 store：组件卸载后事件仍在进这里，落盘也必须继续——否则刷新后连快照都没有
+  function persistProgress(): void {
+    if (isBatchMode.value) {
+      persistBatchSnapshot();
+      return;
+    }
+    persistState();
+  }
+
+  // 批量编译 UI 快照：只含可序列化字段，FormData（pendingBatchPayload）不落盘
+  function persistBatchSnapshot(): void {
+    if (!isBatchMode.value) return;
+    saveBatchSnapshot({
+      groups: batchGroups.value,
+      fileCount: pendingBatchFileCount.value,
+      rejected: batchRejected.value,
+      isCompiling: isCompiling.value,
+      isDone: isDone.value,
+      isCancelled: isCancelled.value,
+      errorMessage: errorMessage.value,
+      doneMessage: doneMessage.value,
+    });
+  }
+
+  // 从快照恢复批量进度；返回「是否处于已中断」
+  // 为什么分两支：同会话切页时 store 内存还在（实时流或刚跑完），只能用快照补中断标记，
+  //   覆盖了会丢更新的分组状态；整页刷新/重开时内存为空，才需要从快照重建容器
+  function restoreBatchSnapshot(): boolean {
+    const snapshot = loadBatchSnapshot();
+    if (isBatchMode.value) {
+      // 内存里还有批量状态：流是否还活着由 streamActive 决定，不在此处判断
+      return snapshot !== null && snapshot.isCompiling && !snapshot.isDone && !snapshot.isCancelled;
+    }
+    if (!snapshot) return false;
+    if (isCompiling.value || isDone.value || isCancelled.value || errorMessage.value || pendingPayload.value) return false;
+    isBatchMode.value = true;
+    pendingBatchFileCount.value = snapshot.fileCount || snapshot.groups.length;
+    batchRejected.value = snapshot.rejected ?? [];
+    batchGroups.value = snapshot.groups;
+    isCompiling.value = false;
+    isDone.value = snapshot.isDone;
+    isCancelled.value = snapshot.isCancelled;
+    errorMessage.value = snapshot.errorMessage;
+    doneMessage.value = snapshot.doneMessage;
+    return snapshot.isCompiling && !snapshot.isDone && !snapshot.isCancelled;
+  }
+
+  // 消费一条 SSE 事件：先分发状态，再落盘
+  function handleStreamEvent(eventType: string, parsed: unknown): void {
+    handleEvent(eventType, parsed);
+    persistProgress();
+  }
+
+  // 发起编译（单文件 payload 或批量 FormData）：原 Progress.vue startCompile 整体搬入
+  // 为什么搬：句柄留在组件里，切页卸载就必然 abort；归 store 后组件卸载与流无关
+  // 为什么返回错误文案而不是在 store 里弹 toast：store 不做 UI 副作用（同 stores/health.ts
+  //   口径），请求级失败的提示仍由组件决定；errorMessage 状态位已经落好，调用方不接返回值
+  //   也不会丢信息——切回页面照样看得到失败原因
+  async function runCompileStream(payload: IngestPayload): Promise<string | null> {
+    const controller = new AbortController();
+    streamAbortController = controller;
+    streamActive.value = true;
+    const isFormData = payload instanceof FormData;
+    const endpoint = isBatchMode.value ? `${API_BASE}/compile/batch` : `${API_BASE}/compile`;
+    let fatal: string | null = null;
+    try {
+      // 必须走 apiFetch：T03611 原件留存按登录用户归属，裸 fetch 不带 Bearer 时
+      // 后端 currentUser 为空，auth 启用部署下留存记录 ownerId=null，本人列表永远看不到。
+      // 为什么用 API_BASE 拼接：vite.config.ts 的 base 为 '/wiki/'，API_BASE='/wiki/api'，
+      // 仅 '/api/compile' 会绕过 vite proxy 的 '/wiki/api' 规则导致 dev 模式 404
+      const response = await apiFetch(endpoint, {
+        method: 'POST',
+        headers: isFormData ? {} : { 'Content-Type': 'application/json' },
+        body: isFormData ? payload : JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      await consumeSSE(response, handleStreamEvent, controller.signal);
+      // T03438：流「干净结束」但不含终止事件时 fetch 不抛错，isCompiling 会永远留在 true。
+      // handleStreamEnd 内部只在仍在编译时兜底，正常完成/已取消时是空操作。
+      handleStreamEnd();
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        // 中止仅在「自己仍是当前流」时才复位编译态：用户取消/重新投递都各自落过状态，
+        // 被旧流残留的 reject 污染会盖掉新一轮的 isCompiling
+        if (streamAbortController === controller) abortCompile();
+        return null;
+      }
+      fatal = (err as Error).message;
+      handleEvent('error', { message: fatal });
+    } finally {
+      if (streamAbortController === controller) {
+        streamAbortController = null;
+        streamActive.value = false;
+      }
+      persistProgress();
+    }
+    return fatal;
+  }
+
+  // 断点续传（单文件 runId）：原 Progress.vue startResume 整体搬入
+  async function runResumeStream(runId: string): Promise<string | null> {
+    // §优化方案3：resume 前保留已恢复的 stageTimings/compileStartedAt，避免 reset 清空
+    // 为什么需要保留：后端 resume 从断点继续，已完成阶段的耗时不会重新产生，
+    //   若不保留则切回后 stage-timings 面板为空，无法体现完整耗时分布
+    const preservedTimings = { ...stageTimings.value };
+    const preservedStartedAt = compileStartedAt.value;
+    reset();
+    stageTimings.value = preservedTimings;
+    compileStartedAt.value = preservedStartedAt;
+    isCompiling.value = true;
+    const controller = new AbortController();
+    streamAbortController = controller;
+    streamActive.value = true;
+    let fatal: string | null = null;
+    try {
+      // 无 body 的 POST 不能声明 JSON content-type：Fastify 对空 JSON body 直接回 400
+      // （FST_ERR_CTP_EMPTY_JSON_BODY），用户看到的就是「点击恢复报 HTTP 400」。
+      const response = await apiFetch(`${API_BASE}/compile/resume/${runId}`, {
+        method: 'POST',
+        signal: controller.signal,
+      });
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      await consumeSSE(response, handleStreamEvent, controller.signal);
+      handleStreamEnd();
+      // T04094：续传结束后立即刷新历史列表，返回列表时状态已是后端落盘的最新值
+      await loadRuns();
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        if (streamAbortController === controller) abortCompile();
+        return null;
+      }
+      fatal = (err as Error).message;
+      handleEvent('error', { message: fatal });
+    } finally {
+      if (streamAbortController === controller) {
+        streamAbortController = null;
+        streamActive.value = false;
+      }
+      persistState();
+    }
+    return fatal;
   }
 
   // 批量编译预存：FormData 包含多个 files 字段
@@ -1010,6 +1197,14 @@ export const useCompileStore = defineStore('compile', () => {
     batchGroups,
     batchRejected,
     isCancelled,
+    // T04508：编译流句柄与跨切页存活的在途/中断标识
+    streamActive,
+    batchInterrupted,
+    runCompileStream,
+    runResumeStream,
+    restoreBatchSnapshot,
+    persistBatchSnapshot,
+    stopStream,
     // T03591 幂等/重试
     dedupeMessage,
     retryingIndexes,

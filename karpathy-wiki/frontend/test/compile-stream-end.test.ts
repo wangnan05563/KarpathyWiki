@@ -91,13 +91,14 @@ describe('compile store - 流静默断开兜底 (T03438)', () => {
     expect(store.isCancelled).toBe(false);
   });
 
-  it('Progress.vue 的首连与 resume 两条消费路径都接了兜底', () => {
-    const src = fs.readFileSync(path.resolve(__dirname, '../src/views/Progress.vue'), 'utf8');
-    const parts = src.split('await consumeCompileSSE(response);');
-    // 两条消费路径：startCompile（首次投递）与 startResume（断点续传）
+  it('首连与 resume 两条消费路径都接了兜底', () => {
+    // T04508：两条消费路径从 Progress.vue 搬进 stores/compile.ts（流归 store 才不被切页杀掉）
+    const src = fs.readFileSync(path.resolve(__dirname, '../src/stores/compile.ts'), 'utf8');
+    const parts = src.split('await consumeSSE(response, handleStreamEvent, controller.signal);');
+    // 两条消费路径：runCompileStream（首次投递）与 runResumeStream（断点续传）
     expect(parts).toHaveLength(3);
     for (const after of parts.slice(1)) {
-      expect(after.slice(0, 400)).toContain('store.handleStreamEnd()');
+      expect(after.slice(0, 400)).toContain('handleStreamEnd()');
     }
   });
 });

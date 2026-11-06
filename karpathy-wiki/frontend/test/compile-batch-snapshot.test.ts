@@ -30,6 +30,18 @@ function progressSource(): string {
   return fs.readFileSync(path.resolve(__dirname, '../src/views/Progress.vue'), 'utf8');
 }
 
+function storeSource(): string {
+  return fs.readFileSync(path.resolve(__dirname, '../src/stores/compile.ts'), 'utf8');
+}
+
+/** 取某个函数/语句块在源码里的片段：从 anchor 起，到下一个 `\n  }` 结束（顶层缩进 2 空格） */
+function sliceFn(src: string, anchor: string): string {
+  const start = src.indexOf(anchor);
+  expect(start).toBeGreaterThan(-1);
+  const end = src.indexOf('\n  }', start);
+  return src.slice(start, end < 0 ? src.length : end);
+}
+
 function mountProgress() {
   return mount(Progress, {
     global: {
@@ -150,20 +162,19 @@ describe('Progress 恢复批量快照 (T04095)', () => {
     wrapper.unmount();
   });
 
-  it('同会话切页回归：内存状态仍在时也标记中断，且不重复请求', async () => {
+  it('同会话切页但流已不在（如服务端重启）：标记中断且不重复请求', async () => {
+    // T04508 改了这里的语义前提：正常切页不再中止在途流，也就不会走到「已中断」。
+    // 仍然会标中断的，是「快照记着在编译、但 store 里这条流已经没了」——
+    // 例如服务端重启把连接断了而终止事件没送到。这条腿锁的就是该兜底分支。
     const store = useCompileStore();
     store.prepareBatchCompile(new FormData());
     store.handleEvent('batch_start', { data: { fileCount: 1, rejected: [] } });
     store.handleEvent('file_start', {
       step: 'archive', status: 'running', data: { fileIndex: 0, fileCount: 1, fileName: 'a.doc' },
     });
-    // 模拟 onBeforeUnmount：先落盘（快照记录 isCompiling=true），再复位编译态
-    saveBatchSnapshot({
-      ...runningSnapshot,
-      groups: [store.batchGroups[0]],
-      fileCount: 1,
-      rejected: [],
-    });
+    // 落一份「当时还在编译」的快照，再把流收掉（模拟流已死、状态停在 running）
+    store.persistBatchSnapshot();
+    store.stopStream();
     store.abortCompile();
 
     const wrapper = mountProgress();
@@ -206,20 +217,21 @@ describe('Progress 切走/重置的快照生命周期 (T04095)', () => {
     localStorage.clear();
   });
 
-  it('onBeforeUnmount 对批量模式也是先落盘再标记中断', () => {
-    const src = progressSource();
-    const start = src.indexOf('onBeforeUnmount(() =>');
-    const body = src.slice(start, src.indexOf('});', start));
-    expect(body).toContain('persistBatchSnapshot()');
-    expect(body).toContain('batchInterrupted.value = true');
-    expect(body).not.toContain('if (store.isCompiling && !store.isBatchMode)');
+  it('切页不再靠卸载钩落盘：进度归 store 逐事件持久化 (T04508)', () => {
+    // 旧口径是「onBeforeUnmount 先落盘再标记中断」；T04508 后切页根本不中止流，
+    // 落盘时机提前到每条事件，卸载钩里再补一次反而会把在途状态误标成中断。
+    // 锁的是「用法」而不是这个词：Progress.vue 的注释里还要解释旧实现为什么被删掉
+    expect(progressSource()).not.toMatch(/onBeforeUnmount\s*\(/);
+    const body = sliceFn(storeSource(), 'async function runCompileStream(');
+    expect(body).toContain('consumeSSE(response, handleStreamEvent');
+    expect(storeSource()).toMatch(/function handleStreamEvent\([\s\S]*?persistProgress\(\);/);
   });
 
   it('批量事件逐条落盘，而不是交给不落盘的 store.persistState', () => {
-    const src = progressSource();
-    const start = src.indexOf('function handleSSE(');
-    const body = src.slice(start, src.indexOf('\n}', start));
+    // T04508：这段判断从 Progress.vue 的 handleSSE 搬进 store 的 persistProgress
+    const body = sliceFn(storeSource(), 'function persistProgress()');
     expect(body).toContain('persistBatchSnapshot()');
+    expect(body).toContain('persistState()');
   });
 
   it('重置入口清掉批量快照，避免下次刷新复活旧批次', () => {
@@ -232,11 +244,12 @@ describe('Progress 切走/重置的快照生命周期 (T04095)', () => {
   });
 
   it('已取消的批量仍保留快照，刷新后能看到成果与取消说明', () => {
-    const src = progressSource();
-    const start = src.indexOf('function handleBatchCancel()');
-    const body = src.slice(start, src.indexOf('\n}', start));
-    expect(body).toContain('store.cancelCompile()');
-    expect(body).toContain('persistBatchSnapshot()');
+    // T04508：取消动作本身中止在途流，并把取消态落进快照
+    const src = storeSource();
+    const body = sliceFn(src, 'function cancelCompile()');
+    expect(body).toContain('stopStream()');
+    expect(body).toContain('persistProgress()');
+    expect(sliceFn(progressSource(), 'function handleBatchCancel()')).toContain('store.cancelCompile()');
   });
 });
 

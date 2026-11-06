@@ -31,6 +31,10 @@ function progressSource(): string {
   return fs.readFileSync(path.resolve(__dirname, '../src/views/Progress.vue'), 'utf8');
 }
 
+function storeSource(): string {
+  return fs.readFileSync(path.resolve(__dirname, '../src/stores/compile.ts'), 'utf8');
+}
+
 describe('compile 恢复成功后的列表闭环 (T04094)', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -62,14 +66,14 @@ describe('compile 恢复成功后的列表闭环 (T04094)', () => {
   });
 
   it('续传成功路径在终态处理之后刷新 runs', () => {
-    const src = progressSource();
-    const start = src.indexOf('async function startResume(');
-    const end = src.indexOf('async function backToRuns()');
+    // T04508：续传改由 stores/compile.ts 的 runResumeStream 发起（切页不再杀掉这条流）
+    const src = storeSource();
+    const start = src.indexOf('async function runResumeStream(');
+    const end = src.indexOf('async function handleStreamEnd(');
     expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
-    const body = src.slice(start, end);
-    const doneIdx = body.indexOf('store.handleStreamEnd()');
-    const refreshIdx = body.indexOf('await store.loadRuns()');
+    const body = end > start ? src.slice(start, end) : src.slice(start);
+    const doneIdx = body.indexOf('handleStreamEnd()');
+    const refreshIdx = body.indexOf('await loadRuns()');
     expect(doneIdx).toBeGreaterThan(-1);
     expect(refreshIdx).toBeGreaterThan(doneIdx);
   });
