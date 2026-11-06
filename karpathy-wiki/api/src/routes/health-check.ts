@@ -15,6 +15,68 @@ function withoutItems<T extends { items: unknown[] }>(snapshot: T): Omit<T, 'ite
   return rest;
 }
 
+// 单修复流程的采集态：抛异常时调用方 finally 仍要拿到已采集到的部分样本，故外提为可变对象
+type FixStreamState = { doneEvent: FixProgressEvent | null; harnessSteps: number; tokens: number };
+
+// T02954：done 只代表引擎流程无报错，成功终态要等定点复检裁定后再下发，故这里只暂存 done 事件。
+// 同时与耗时同源采集 step/token 用量（T02924），供批量修复启动前的量化估算复用。
+async function streamFixEvents(
+  adapter: EngineAdapter,
+  body: FixInput,
+  send: (event: string, data: unknown) => boolean,
+  isAborted: () => boolean,
+  state: FixStreamState,
+): Promise<void> {
+  for await (const ev of adapter.healthCheckFix(body)) {
+    // 客户端已断开：提前退出迭代避免继续触发 LLM 调用与 vault 写入
+    if (isAborted()) break;
+    if (typeof ev.data?.harnessSteps === 'number') state.harnessSteps = ev.data.harnessSteps;
+    if (typeof ev.data?.tokens === 'number') state.tokens = ev.data.tokens;
+    if (ev.step === 'done') {
+      state.doneEvent = ev;
+    } else if (ev.step === 'fixed') {
+      send('fixed', ev);
+    } else {
+      send('progress', ev);
+    }
+  }
+}
+
+// T02954：复用 T02922 的定点复检（确定性、零 LLM），流程成功但问题未消解时
+// 不再复用「已修复」语义；复检自身异常按未消解如实上报（与批量作业同口径）。
+async function recheckAfterFix(
+  adapter: EngineAdapter,
+  body: FixInput,
+): Promise<{ resolved: boolean; note: string }> {
+  try {
+    return { resolved: (await adapter.recheckIssueResolved?.(body)) ?? true, note: '' };
+  } catch (err: unknown) {
+    return { resolved: false, note: `复检失败: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+async function concludeFix(
+  adapter: EngineAdapter,
+  body: FixInput,
+  doneEvent: FixProgressEvent,
+  send: (event: string, data: unknown) => boolean,
+): Promise<void> {
+  if (doneEvent.status !== 'done') {
+    send('done', doneEvent);
+    return;
+  }
+  const { resolved, note } = await recheckAfterFix(adapter, body);
+  if (resolved) {
+    send('done', doneEvent);
+    return;
+  }
+  send('ineffective', {
+    ...doneEvent,
+    resolved: false,
+    message: note || '流程完成但问题未消解（已处理，需复核）',
+  });
+}
+
 // 注册健康检查路由。
 //   POST /api/health-check                 体检（确定性逻辑，JSON 响应）
 //   POST /api/health-check/fix             一键修复单个问题（走 LLM，SSE 流式响应）
@@ -62,53 +124,17 @@ export function registerHealthCheckRoute(
     // T02922 样本口径：只要 LLM 流程跑过就计入（含流程报错/中断），
     // 与批量作业一致——否则估算拿到的只是「成功项」耗时，越跑越乐观
     let flowRan = false;
-    // T02924：与耗时同源采集 step/token 用量，供估算给出「往返次数/tokens」而非按项数估算
-    let harnessSteps = 0;
-    let tokens = 0;
+    // T02924：与耗时同源采集 step/token 用量，供估算给出「往返次数/tokens」而非按项数估算。
+    // 采集态放在 try 之外：流程中途抛异常时 finally 仍要交回已采集到的部分样本。
+    const fixState: FixStreamState = { doneEvent: null, harnessSteps: 0, tokens: 0 };
 
     try {
       // 串行队列保护：fix 可能调用 write_file，与 compile 共享 vault 写入
       await withCompileLock(async () => {
         flowRan = true;
-        let doneEvent: FixProgressEvent | null = null;
-        for await (const ev of adapter.healthCheckFix(body as FixInput)) {
-          // 客户端已断开：提前退出迭代避免继续触发 LLM 调用与 vault 写入
-          if (isAborted()) break;
-          if (typeof ev.data?.harnessSteps === 'number') harnessSteps = ev.data.harnessSteps;
-          if (typeof ev.data?.tokens === 'number') tokens = ev.data.tokens;
-          if (ev.step === 'done') {
-            // T02954：done 只代表引擎流程无报错，成功终态等定点复检裁定后再下发
-            doneEvent = ev;
-          } else if (ev.step === 'fixed') {
-            send('fixed', ev);
-          } else {
-            send('progress', ev);
-          }
-        }
-        if (isAborted() || !doneEvent) return;
-        if (doneEvent.status !== 'done') {
-          send('done', doneEvent);
-          return;
-        }
-        // T02954：复用 T02922 的定点复检（确定性、零 LLM），流程成功但问题未消解时
-        // 不再复用「已修复」语义；复检自身异常按未消解如实上报（与批量作业同口径）。
-        let resolved = true;
-        let recheckNote = '';
-        try {
-          resolved = (await adapter.recheckIssueResolved?.(body as FixInput)) ?? true;
-        } catch (err: unknown) {
-          resolved = false;
-          recheckNote = `复检失败: ${err instanceof Error ? err.message : String(err)}`;
-        }
-        if (resolved) {
-          send('done', doneEvent);
-        } else {
-          send('ineffective', {
-            ...doneEvent,
-            resolved: false,
-            message: recheckNote || '流程完成但问题未消解（已处理，需复核）',
-          });
-        }
+        await streamFixEvents(adapter, body as FixInput, send, isAborted, fixState);
+        if (isAborted() || !fixState.doneEvent) return;
+        await concludeFix(adapter, body as FixInput, fixState.doneEvent, send);
       });
     } catch (err: unknown) {
       request.log.error(
@@ -125,7 +151,7 @@ export function registerHealthCheckRoute(
         try {
           // 下限钳 1ms：recordDuration 拒绝 <=0，而瞬时完成的流程 Date.now() 差可能为 0，
           // 整条样本会被静默丢弃（与 batch-fix-job 的单批量路径同一口径）。
-          await batchJobs.recordDuration(Math.max(1, Date.now() - fixStartedAt), { steps: harnessSteps, tokens });
+          await batchJobs.recordDuration(Math.max(1, Date.now() - fixStartedAt), { steps: fixState.harnessSteps, tokens: fixState.tokens });
         } catch {
           // 统计失败不影响修复结果
         }
