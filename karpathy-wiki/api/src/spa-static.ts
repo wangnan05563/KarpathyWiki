@@ -16,6 +16,15 @@ const HOP_BY_HOP = new Set([
   'upgrade',
 ]);
 
+// 已有解析器（json/urlencoded）吃掉流的请求：用 request.body 重新取字节；
+// 没有解析器的（multipart）body 为 undefined，返回 null 由调用方 pipe 原始请求流。
+function serializeForwardedBody(body: unknown): Buffer | null {
+  if (body === undefined || body === null) return null;
+  if (Buffer.isBuffer(body)) return body;
+  if (typeof body === 'string') return Buffer.from(body, 'utf8');
+  return Buffer.from(JSON.stringify(body), 'utf8');
+}
+
 // T03646：/wiki/api* 转发必须字节级透传 + 保持流式，app.inject 做不到这两点：
 //   - inject 把响应体解码成字符串（binary 经 utf8 往返体积与内容都变），且只回 content-type
 //   - inject 要等整条响应结束才 resolve（SSE 实测被整体缓冲，进度/日志不再增量）
@@ -42,16 +51,8 @@ async function forwardApiViaLoopback(
     headers[lower] = value;
   }
 
-  // 已有解析器（json/urlencoded）吃掉流的请求：用 request.body 重新取字节；
-  // 没有解析器的（multipart）body 为 undefined，直接 pipe 原始请求流。
-  const parsedBody = request.body as unknown;
-  let payload: Buffer | null = null;
-  if (parsedBody !== undefined && parsedBody !== null) {
-    payload = Buffer.isBuffer(parsedBody)
-      ? parsedBody
-      : Buffer.from(typeof parsedBody === 'string' ? parsedBody : JSON.stringify(parsedBody), 'utf8');
-    headers['content-length'] = String(payload.length);
-  }
+  const payload = serializeForwardedBody(request.body);
+  if (payload) headers['content-length'] = String(payload.length);
 
   let hijacked = false;
   const upstream = http.request(
