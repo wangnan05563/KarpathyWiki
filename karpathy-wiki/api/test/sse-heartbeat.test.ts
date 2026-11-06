@@ -13,6 +13,10 @@ interface FakeRaw extends EventEmitter {
   destroyed: boolean;
   writableEnded: boolean;
   writes: string[];
+  // write/end 是真实 socket 流的方法，这里由 makeStream 现场挂上：
+  //   不声明它们，下面 `as FakeRaw['write']` 就无从取值。
+  write(chunk: string): boolean;
+  end(): void;
 }
 
 function makeStream(): { raw: FakeRaw; reply: FastifyReply; request: FastifyRequest } {

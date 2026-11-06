@@ -126,7 +126,7 @@ describe('T03612 /wiki/api 注入桥的 multipart 透传', () => {
     const events = parseSSEEvents(res.body);
     const start = events.find((e) => e.event === 'batch_start');
     expect(start).toBeTruthy();
-    expect(start.data.data.fileCount).toBe(2);
+    expect(start!.data.data.fileCount).toBe(2);
     expect(events.filter((e) => e.event === 'file_start')).toHaveLength(2);
     expect(events.some((e) => e.event === 'batch_done')).toBe(true);
   });
@@ -179,9 +179,10 @@ describe('T03612 /wiki/api 注入桥的 multipart 透传', () => {
     });
 
     const start = parseSSEEvents(res.body).find((e) => e.event === 'batch_start');
-    expect(start.data.data.rejected).toHaveLength(1);
-    expect(start.data.data.rejected[0].name).toBe('big.md');
-    expect(start.data.data.fileCount).toBe(1);
+    expect(start, 'batch_start 事件必须在场').toBeTruthy();
+    expect(start!.data.data.rejected).toHaveLength(1);
+    expect(start!.data.data.rejected[0].name).toBe('big.md');
+    expect(start!.data.data.fileCount).toBe(1);
   });
 
   it('非 multipart 仍走原 body 分支：经 /wiki/ 的 JSON 投递正常编译', async () => {
