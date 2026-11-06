@@ -410,82 +410,121 @@ export function registerCleanupRoute(
     }
   }
 
+  // O6：磁盘占用部分的短 TTL 缓存（5 s）+ 单飞。
+  // 为什么只缓存这部分：`active` 是并发守卫的判据，缓存它会让页面把「刚起跑的编译」
+  //   看成空闲、把按钮留在可点状态——实时性比省几次 readdir 重要得多。
+  // 为什么需要：前端会轮询该接口，每次都要逐目录 readdir + stat + 读 compile-cache.json；
+  //   串行/重复扫描在并发轮询下把这些可缓存的只读数字放大成 CPU 与 IO 压力。
+  const STORAGE_STATUS_TTL_MS = 5_000;
+  type StorageStatusPayload = Omit<CleanupStorageStatus, 'active'>;
+  let storageStatusCache: { at: number; value: StorageStatusPayload } | null = null;
+  let storageStatusInFlight: Promise<StorageStatusPayload> | null = null;
+
+  async function computeStorageStatusPayload(): Promise<StorageStatusPayload> {
+    // 编译缓存：逐根统计（T02809 合并 + T02887 目录清单）。
+    // 写入侧历史上按进程 CWD 落盘，只认一个根时「缓存卡显示 0MB、磁盘上另有一处」
+    // 与 T02772 的运行状态卡是同一形态的缺陷。
+    const compileCacheStats = await Promise.all(harnessDirs.map((dir) => statCompileCacheRow(dir)));
+    const compileCacheRows: CleanupRunStateDir[] = compileCacheStats.map(toPublicRow);
+    const compileCacheExists = compileCacheStats.some((s) => s.exists);
+    const compileCacheSize = compileCacheStats.reduce((n, s) => n + s.sizeBytes, 0);
+    const compileCacheEntries = compileCacheStats.reduce((n, s) => n + s.fileCount, 0);
+
+    // 运行状态：逐目录统计后合并（T02772 合并计数 + T02808 目录清单随状态返回）。
+    // 只报规范目录会显示 0 个，用户据此认为「无需清理」，而真实文件在另一个目录无限增长。
+    // 清单顺序与 getRunStateDirs() 一致（首项 = 写入侧规范目录），前端不做重排也不改写路径，
+    // 页面显示的路径与后端真正扫的路径因此是同一个字符串。
+    const runStateStats = await Promise.all(
+      runStateDirs.map((dir) => statDirRow(dir, RUN_STATE_FILE_PATTERN, isLegacyStateDir)),
+    );
+    const runStateDirsResult: CleanupRunStateDir[] = runStateStats.map(toPublicRow);
+    const runStateMerged = mergeDirStats(runStateStats);
+    // 运行日志：同编译缓存逐根统计（T02887 补目录清单）。
+    // 角色判的是「这一行所属的 .harness 根」而不是 logs 子目录本身——
+    // logs 永远是根的子目录，直接比根会整列误判成遗留。
+    const logsStats = await Promise.all(
+      logsDirs.map((dir) => statDirRow(dir, RUN_LOG_FILE_PATTERN, (d) => isLegacyHarnessDir(path.dirname(d)))),
+    );
+    const logsRows: CleanupRunStateDir[] = logsStats.map(toPublicRow);
+    const logsStat = mergeDirStats(logsStats);
+    // 原始资料存档（仅清理内部临时前缀文件，避免误删用户命名的源文件）。
+    // raw 目录只有一份写入口径，没有历史落点，清单恒为单项 canonical（T02887）。
+    const rawStat = await statDir(rawDir, RAW_ARCHIVE_PATTERN);
+    const rawRows: CleanupRunStateDir[] = [
+      {
+        path: rawDir,
+        fileCount: rawStat.fileCount,
+        sizeMb: bytesToMb(rawStat.sizeBytes),
+        role: 'canonical',
+        exists: await directoryExists(rawDir),
+      },
+    ];
+
+    return {
+      compileCache: {
+        exists: compileCacheExists,
+        sizeMb: bytesToMb(compileCacheSize),
+        entryCount: compileCacheEntries,
+        // T02887：entryCount = dirs 各项之和（同一批逐根统计求和得出）
+        dirs: compileCacheRows,
+      },
+      runState: {
+        fileCount: runStateMerged.fileCount,
+        sizeMb: bytesToMb(runStateMerged.sizeBytes),
+        oldest: runStateMerged.oldest,
+        dirs: runStateDirsResult,
+      },
+      runLogs: {
+        fileCount: logsStat.fileCount,
+        sizeMb: bytesToMb(logsStat.sizeBytes),
+        oldest: logsStat.oldest,
+        // T02887：fileCount = dirs 各项之和（同一批逐根统计求和得出）
+        dirs: logsRows,
+      },
+      rawArchive: {
+        fileCount: rawStat.fileCount,
+        sizeMb: bytesToMb(rawStat.sizeBytes),
+        oldest: rawStat.oldest,
+        // T02887：raw 目录单一口径，清单恒单项 canonical
+        dirs: rawRows,
+      },
+    };
+  }
+
+  async function getStorageStatusPayload(): Promise<StorageStatusPayload> {
+    if (storageStatusCache && Date.now() - storageStatusCache.at < STORAGE_STATUS_TTL_MS) {
+      return storageStatusCache.value;
+    }
+    // 单飞：缓存过期瞬间的并发轮询共享同一次扫描，而不是各扫一遍
+    if (storageStatusInFlight) return storageStatusInFlight;
+    storageStatusInFlight = computeStorageStatusPayload()
+      .then((value) => {
+        storageStatusCache = { at: Date.now(), value };
+        return value;
+      })
+      .finally(() => {
+        storageStatusInFlight = null;
+      });
+    return storageStatusInFlight;
+  }
+
+  // 真删完成后立刻失效：否则用户点完「清理」再刷新，5 s 内看到的还是删除前的数字
+  function invalidateStorageStatus(): void {
+    storageStatusCache = null;
+  }
+
   // ===== GET /api/cleanup/status =====
 
   app.get('/api/cleanup/status', async (_req, reply) => {
     try {
-      // 编译缓存：逐根统计（T02809 合并 + T02887 目录清单）。
-      // 写入侧历史上按进程 CWD 落盘，只认一个根时「缓存卡显示 0MB、磁盘上另有一处」
-      // 与 T02772 的运行状态卡是同一形态的缺陷。
-      const compileCacheStats = await Promise.all(harnessDirs.map((dir) => statCompileCacheRow(dir)));
-      const compileCacheRows: CleanupRunStateDir[] = compileCacheStats.map(toPublicRow);
-      const compileCacheExists = compileCacheStats.some((s) => s.exists);
-      const compileCacheSize = compileCacheStats.reduce((n, s) => n + s.sizeBytes, 0);
-      const compileCacheEntries = compileCacheStats.reduce((n, s) => n + s.fileCount, 0);
-
-      // 运行状态：逐目录统计后合并（T02772 合并计数 + T02808 目录清单随状态返回）。
-      // 只报规范目录会显示 0 个，用户据此认为「无需清理」，而真实文件在另一个目录无限增长。
-      // 清单顺序与 getRunStateDirs() 一致（首项 = 写入侧规范目录），前端不做重排也不改写路径，
-      // 页面显示的路径与后端真正扫的路径因此是同一个字符串。
-      const runStateStats = await Promise.all(
-        runStateDirs.map((dir) => statDirRow(dir, RUN_STATE_FILE_PATTERN, isLegacyStateDir)),
-      );
-      const runStateDirsResult: CleanupRunStateDir[] = runStateStats.map(toPublicRow);
-      const runStateMerged = mergeDirStats(runStateStats);
-      // 运行日志：同编译缓存逐根统计（T02887 补目录清单）。
-      // 角色判的是「这一行所属的 .harness 根」而不是 logs 子目录本身——
-      // logs 永远是根的子目录，直接比根会整列误判成遗留。
-      const logsStats = await Promise.all(
-        logsDirs.map((dir) => statDirRow(dir, RUN_LOG_FILE_PATTERN, (d) => isLegacyHarnessDir(path.dirname(d)))),
-      );
-      const logsRows: CleanupRunStateDir[] = logsStats.map(toPublicRow);
-      const logsStat = mergeDirStats(logsStats);
-      // 原始资料存档（仅清理内部临时前缀文件，避免误删用户命名的源文件）。
-      // raw 目录只有一份写入口径，没有历史落点，清单恒为单项 canonical（T02887）。
-      const rawStat = await statDir(rawDir, RAW_ARCHIVE_PATTERN);
-      const rawRows: CleanupRunStateDir[] = [
-        {
-          path: rawDir,
-          fileCount: rawStat.fileCount,
-          sizeMb: bytesToMb(rawStat.sizeBytes),
-          role: 'canonical',
-          exists: await directoryExists(rawDir),
-        },
-      ];
-
-      const status: CleanupStorageStatus = {
+      const [storage, active] = await Promise.all([
+        getStorageStatusPayload(),
         // T02655：活跃任务快照。前端据此逐卡置灰；口径与 POST 守卫同源（cleanup-guard）。
         // T02817：并上其它进程的声明——用户在 A 实例的页面上要能看到 B 实例正在跑编译，
         // 否则置灰形同虚设（他看不到，也就不知道自己为什么被 409）。
-        active: await activeStateAcrossProcesses(),
-        compileCache: {
-          exists: compileCacheExists,
-          sizeMb: bytesToMb(compileCacheSize),
-          entryCount: compileCacheEntries,
-          // T02887：entryCount = dirs 各项之和（同一批逐根统计求和得出）
-          dirs: compileCacheRows,
-        },
-        runState: {
-          fileCount: runStateMerged.fileCount,
-          sizeMb: bytesToMb(runStateMerged.sizeBytes),
-          oldest: runStateMerged.oldest,
-          dirs: runStateDirsResult,
-        },
-        runLogs: {
-          fileCount: logsStat.fileCount,
-          sizeMb: bytesToMb(logsStat.sizeBytes),
-          oldest: logsStat.oldest,
-          // T02887：fileCount = dirs 各项之和（同一批逐根统计求和得出）
-          dirs: logsRows,
-        },
-        rawArchive: {
-          fileCount: rawStat.fileCount,
-          sizeMb: bytesToMb(rawStat.sizeBytes),
-          oldest: rawStat.oldest,
-          // T02887：raw 目录单一口径，清单恒单项 canonical
-          dirs: rawRows,
-        },
-      };
+        activeStateAcrossProcesses(),
+      ]);
+      const status: CleanupStorageStatus = { active, ...storage };
       return void reply.send(status);
     } catch (err: unknown) {
       return void reply.code(500).send({
@@ -712,6 +751,9 @@ export function registerCleanupRoute(
       if (markerClaimed && lockFile) await releaseCleanupMarker(lockFile);
       cleanupHandle?.release();
     }
+
+    // O6：真删改变了磁盘占用，立刻失效 5 s 的统计缓存，用户刷新即见新数字
+    if (!dryRun) invalidateStorageStatus();
 
     // 审计写入（dry_run 模式也记录，便于回溯预览操作）。
     // 位置在 try 之后：deferredTasks() 只有等 release() 放行排队任务之后才是完整计数，
