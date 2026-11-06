@@ -4,6 +4,7 @@ import matter from 'gray-matter';
 import type { VaultService } from './vault/vault-service.js';
 // T02686：检索侧页面目录取 page-scope 单一来源
 import { PAGE_DIRS } from './vault/page-scope.js';
+import { DEFAULT_SCAN_CONCURRENCY, mapWithConcurrency } from './utils/async-pool.js';
 
 // 全文检索命中结果
 export interface SearchHit {
@@ -94,10 +95,10 @@ function matchSearchFilter(
 // 处理单个页面文件：读取内容、过滤、匹配关键词，返回 SearchHit 或 null
 // T04176：badPageSink 收集「frontmatter 解析失败」的页面。为什么必须就地吞掉而不是让它冒出去：
 // gray-matter 对坏 YAML 是抛异常（未闭合 flow collection / 重复键 / 值里裸冒号），而带 source、
-// status、type、tags 任一过滤条件时每个页面都会过 matter() 一次。此前没人接这个异常——
-// 于是全库里只要有一页 frontmatter 写坏，整次扫描连坐中断，问答降级链两级同时失败，
-// 用户看到的是「知识库未覆盖此问题」，真实原因却是「有一页 YAML 头坏了」。
-// 坏页跳过（无法证明它属于过滤范围），其余页面照常召回；无论扫描是串行还是并发池，口径一致。
+// status、type、tags 任一过滤条件时每个页面都会过 matter() 一次。mapWithConcurrency 的约定是
+// 「任意一项失败由调用方在 fn 内处理」，此前没人处理——于是全库里只要有一页 frontmatter 写坏，
+// 整次扫描连坐 reject，问答降级链两级同时失败，用户看到的是「知识库未覆盖此问题」，
+// 真实原因却是「有一页 YAML 头坏了」。坏页跳过（无法证明它属于过滤范围），其余页面照常召回。
 async function processSearchFile(
   vault: VaultService,
   rel: string,
@@ -163,9 +164,8 @@ export async function searchPages(
   // 只传 tags 的范围限定 + 空关键词于是被提前 return []，用户看到的「没有结果」根本不是检索结果。
   if (terms.length === 0 && !narrowsToScope(filter)) return [];
 
-  const results: SearchHit[] = [];
-  const badPages: Array<{ path: string; reason: string }> = [];
-
+  // 候选清单按「目录序 + readdir 序」收集，读取阶段交给并发池
+  const candidates: Array<{ dir: string; file: string }> = [];
   for (const d of pageDirs) {
     const dirFull = path.join(vault.getVaultPath(), d);
     let entries: string[] = [];
@@ -174,11 +174,18 @@ export async function searchPages(
     } catch {
       continue;
     }
-    for (const f of entries) {
-      const hit = await processSearchFile(vault, `${d}/${f}`, d, f, terms, filter, badPages);
-      if (hit) results.push(hit);
-    }
+    for (const f of entries) candidates.push({ dir: d, file: f });
   }
+
+  // 这条兜底路径服务「纯过滤查询」与索引不可用时的降级：串行读全库是秒级队头阻塞，
+  // 与索引路径同口径走有界并发（O3）
+  const badPages: Array<{ path: string; reason: string }> = [];
+  const hits = await mapWithConcurrency(
+    candidates,
+    DEFAULT_SCAN_CONCURRENCY,
+    ({ dir, file }) => processSearchFile(vault, `${dir}/${file}`, dir, file, terms, filter, badPages),
+  );
+  const results = hits.filter((hit): hit is SearchHit => hit !== null);
 
   // 一次扫描只打一条：坏页多时逐页 warn 会把日志刷满，排查要的只是「哪几页坏了 + 一共几页」
   if (badPages.length > 0) {

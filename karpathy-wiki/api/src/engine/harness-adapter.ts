@@ -26,6 +26,8 @@ import {
   type LinkResolver,
   type PageNameIndex,
 } from '../vault/link-parser.js';
+// O3：体检的全库读盘改为有界并发 + 周期性让出事件循环
+import { DEFAULT_SCAN_CONCURRENCY, mapWithConcurrency } from '../utils/async-pool.js';
 
 // BYOK per-user 配置覆盖纯函数（轻量模块，运行时零依赖，便于单测）。
 import { applyPerRequestOverride } from './byok-override.js';
@@ -270,36 +272,37 @@ export class HarnessAdapter implements EngineAdapter {
     const pageDirs = PAGE_DIRS;
     const resolver = this.buildNameResolverFromGraph(graph);
 
-    // §11.2：页面目录（PAGE_DIRS，6 个）并行扫描断链，Promise.all 等待全部完成
+    // §11.2：页面目录（PAGE_DIRS，6 个）并行扫描断链；目录内文件读盘再按 O3 改为有界并发
     const scanDir = async (d: string): Promise<Array<{ from: string; to: string }>> => {
-      const results: Array<{ from: string; to: string }> = [];
       const dirFull = path.join(this.vault.getVaultPath(), d);
       let entries: string[] = [];
       try {
         entries = await fs.readdir(dirFull);
       } catch {
-        return results;
+        return [];
       }
-      for (const f of entries) {
-        // T02686：与链接图同口径——联调遗留的 test-*.md / proxy-test*.md 不是页面，不产断链
-        if (!isPageFile(f)) continue;
+      // T02686：与链接图同口径——联调遗留的 test-*.md / proxy-test*.md 不是页面，不产断链
+      const files = entries.filter((f) => isPageFile(f));
+      const perFile = await mapWithConcurrency(files, DEFAULT_SCAN_CONCURRENCY, async (f) => {
         const fromRel = `${d}/${f}`;
         let content = '';
         try {
           content = await this.vault.readFile(fromRel);
         } catch {
-          continue;
+          return [];
         }
+        const broken: Array<{ from: string; to: string }> = [];
         for (const target of extractWikilinkTargets(content)) {
           if (!resolver.resolve(target)) {
-            results.push({ from: fromRel, to: target });
+            broken.push({ from: fromRel, to: target });
           }
         }
-      }
-      return results;
+        return broken;
+      });
+      return perFile.flat();
     };
 
-    // 过期检测也并行：每个节点独立 getPageUpdated
+    // 过期检测也并行：每个节点独立 getPageUpdated（同样改为有界并发）
     const now = Date.now();
     const thresholdMs = this.staleDays * 24 * 60 * 60 * 1000;
     const checkStale = async (node: string): Promise<string | null> => {
@@ -314,7 +317,7 @@ export class HarnessAdapter implements EngineAdapter {
     // 两类检测并行执行
     const [brokenByDir, staleResults] = await Promise.all([
       Promise.all(pageDirs.map(scanDir)),
-      Promise.all(graph.nodes.map(checkStale)),
+      mapWithConcurrency(graph.nodes, DEFAULT_SCAN_CONCURRENCY, checkStale),
     ]);
 
     const brokenLinks = brokenByDir.flat();
