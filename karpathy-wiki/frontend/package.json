@@ -26,6 +26,7 @@
     "@vitejs/plugin-vue": "^5.0.0",
     "@vitest/coverage-v8": "^1.6.1",
     "@vue/test-utils": "^2.4.11",
+    "fake-indexeddb": "^6.2.7",
     "happy-dom": "^20.11.0",
     "jsdom": "^29.1.1",
     "typescript": "^5.4.0",
