@@ -188,6 +188,24 @@
   --on-status-failed-fg: var(--danger-readable, #ff8a80);
   --on-status-running-fg: var(--warning-readable, #fbbf24);
 
+  /* ============================================================
+   * T04524：引用溯源命中高亮面（--cite-hit-bg / --cite-hit-fg）
+   * 这对 token 此前只在 tokens.css 的 dark 块里声明过，其余 8 套主题全部走 CitationModal.vue
+   * 的字面 fallback `rgba(255,213,79,.55)` —— 于是它从没进过任何对比度锁：themes/ 里没有它
+   * （token 级实算锁按声明扫描，未声明的 token 看不见），页面清单里也没有（它在弹窗内，普查只看页面级规则）。
+   * 它的面也不是页底：弹窗底下是 modal.css 覆盖过的 .el-overlay 遮罩 rgba(4, 2, 12, .58)，
+   * 对话框再取半透明 --bg-card-solid 盖在遮罩上 → 两张落点（遮罩压卡片 / 遮罩压页底）都要算，
+   * 口径见 test/helpers/contrast.ts 的 modalFaces()。
+   * 实测 alpha .55 时 3 套深底主题（default/creative/product）两张落点 3.94~4.07，全部不达 AA；
+   * 其余 6 套主题 7.08~9.99 达标 —— 失败方是深底（黑字压半透明黄，黄底被深页底拉暗），别记反成「深底更亮」。
+   * 修法沿用 tokens.css 里 dark 那一档：:root 提到 .9（与 --cite-hit-fg #1a1a1a 配对实算 9.92 以上），
+   * 5 套浅底主题各自把面覆盖回 .55（它们本就达标，观感逐字节不变）；不动 --bg-card-solid 本体。
+   * light-business 那份覆盖看着多余（其遮罩在 modal.css 里已减淡到 .34，.55 档实算 9.77）：
+   * 留着是为了「浅底=淡黄片」这条观感口径不随主题数量漂移。
+   * ============================================================ */
+  --cite-hit-bg: rgba(255, 213, 79, 0.9);
+  --cite-hit-fg: #1a1a1a;
+
   /* URL 探测状态三色（Ingest 代理探测标签） */
   --probe-ok: #4ade80;
   --probe-ok-bg: rgba(74, 222, 128, 0.15);

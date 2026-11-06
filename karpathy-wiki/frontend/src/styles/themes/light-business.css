@@ -98,6 +98,8 @@
      failed 不覆盖：继承 :root 的 var(--danger-readable)，压本面 5.42 已达标。取值逐条锁在 contrast-color-mix M4。 */
   --on-status-done-fg: #166534;
   --on-status-running-fg: #854d0e;
+  /* T04524：浅底主题在遮罩后仍是亮面，0.55 的黄片实测 9.77 达标（其遮罩在 modal.css 里减淡到 .34） → 覆盖回 :root 的 0.9，观感不变 */
+  --cite-hit-bg: rgba(255, 213, 79, 0.55);
   --on-accent-solid-fg: #ffffff;
 
   /* 柔和阴影（浅色主题下克制，避免脏感） */

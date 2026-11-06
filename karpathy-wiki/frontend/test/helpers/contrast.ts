@@ -11,6 +11,8 @@ export const THEMES_DIR = join(ROOT, 'src/styles/themes');
 export const STYLE_CSS = join(ROOT, 'src/style.css');
 /** T04469：dark 主题的整套变量写在 tokens.css（不在 styles/themes/ 下），loadThemes() 天然看不见它 */
 export const TOKENS_CSS = join(ROOT, 'src/styles/tokens.css');
+/** T04524：模态面口径需要 EP 遮罩色——从安装副本现读，不写死数值（升版改了遮罩必须让锁跟着变） */
+export const NODE_MODULES = join(ROOT, 'node_modules');
 
 /** AA 正常字号文本 4.5:1；WCAG 1.4.11 非文本控件（描边/图标）3:1 */
 export const THRESHOLD = { text: 4.5, ui: 3.0 };
@@ -621,6 +623,82 @@ export function listLiteralForegroundSites(src: string): LiteralFgSite[] {
 /** 与硬白字扫描器同形状的字符串版（基线表/断言消息用） */
 export function listLiteralForegroundUses(src: string): string[] {
   return listLiteralForegroundSites(src).map((h) => `${h.sel} · ${h.prop} → ${h.value.slice(0, 110)}`);
+}
+
+/**
+ * T04524：模态面口径。
+ * pageOf() 算的是「卡片压在页面底上」——对嵌在页面里的元素正确，但弹窗里的元素不是这个落点：
+ * `.el-overlay` 是一层半透明遮罩压住页面，`.el-dialog` 又取半透明的 `--bg-card-solid` 盖在遮罩上。
+ * 于是同一个高亮片底下实际有两张面：遮罩合成后的**卡片**（对话框覆盖处）与遮罩合成后的**页底**
+ * （卡片没铺满的边角 / 圆角外沿）。两张都算取最差 —— 只算其一会让另一半落点无人管。
+ *
+ * 遮罩色按「哪条规则真的生效」现读，不在本文件里写死数值：
+ *   1. src/styles/modal.css 把 EP 的 `.el-overlay` 底色整个覆盖成 `var(--modal-mask, rgba(4,2,12,.58))`，
+ *      而 main.ts 里 modal.css 是最后导入的 —— 同特异性后来者胜，所以渲染出来的**不是** EP 那份
+ *      `--el-overlay-color-lighter`（取证时照抄 EP 默认值会把整族判定算偏）。
+ *   2. 只有 modal.css 那条覆盖没了，才回落去读 EP 安装副本的变量 —— 届时口径确实该跟着换。
+ * 「当前生效的是哪一份」由各条锁显式登记（见 test/contrast-cite-hit-face.test.ts 的 D 组）：
+ * 来源悄悄换档必须让锁变红，而不是继续按老遮罩假绿。
+ */
+export const MODAL_CSS = join(ROOT, 'src/styles/modal.css');
+export const EP_OVERLAY_CSS = join(NODE_MODULES, 'element-plus/theme-chalk/el-overlay.css');
+export const EP_VAR_CSS = join(NODE_MODULES, 'element-plus/theme-chalk/el-var.css');
+
+export type OverlaySource = 'modal.css' | 'element-plus';
+
+function die(msg: string): never {
+  throw new Error(msg);
+}
+
+/** 弹窗遮罩表达式与其来源（见文件顶部口径注释） */
+export function overlayExpr(): { expr: string; source: OverlaySource } {
+  const modalCss = stripComments(readFileSync(MODAL_CSS, 'utf8'));
+  const own = /\.el-overlay\s*\{[^}]*background-color:\s*([^;}]+)/.exec(modalCss);
+  if (own) {
+    const expr = own[1].trim();
+    if (!/--modal-mask/.test(expr)) {
+      die(`modal.css 的 .el-overlay 底色不再走 --modal-mask（当前是 ${expr}）：模态面口径要重新定`);
+    }
+    return { expr, source: 'modal.css' };
+  }
+  const epCss = stripComments(readFileSync(EP_OVERLAY_CSS, 'utf8'));
+  if (!/\.el-overlay\s*\{[^}]*background-color:\s*var\(--el-overlay-color-lighter\)/.test(epCss)) {
+    die('既不在 modal.css、也不在 element-plus 里找到 .el-overlay 的底色规则：模态面口径失效');
+  }
+  const epVar = stripComments(readFileSync(EP_VAR_CSS, 'utf8'));
+  const m = /--el-overlay-color-lighter:\s*([^;]+)/.exec(epVar);
+  if (!m) die('element-plus 主题里找不到 --el-overlay-color-lighter');
+  return { expr: m[1].trim(), source: 'element-plus' };
+}
+
+/**
+ * 弹窗内元素的两张真实落点面：遮罩压卡片合成底、遮罩压页底。
+ * theme 用于把 modal.css 里 `[data-theme='X']` 的遮罩减淡覆盖并进来（浅色主题走 rgba(17,17,17,.34)）——
+ * 那份声明不在 themes/ 下，loadThemes() 天然看不见它。
+ */
+export function modalFaces(theme: ThemeTokens): RGB[] {
+  const { expr } = overlayExpr();
+  const decls = new Map(theme.decls);
+  if (theme.name !== 'default(:root)') {
+    for (const [k, v] of themeBlockDecls(readFileSync(MODAL_CSS, 'utf8'), theme.name)) decls.set(k, v);
+  }
+  const overlay = solidOf(expr, decls, `遮罩表达式 ${expr}`);
+  return [composite(overlay, pageOf(theme.decls)), composite(overlay, solidOf('var(--bg-void)', theme.decls, '--bg-void'))];
+}
+
+function solidOf(expr: string, decls: Map<string, string>, what: string): RGB {
+  const r = resolve(expr, decls);
+  if ('stops' in r) die(`${what} 解析成了渐变，模态面口径按两端点分别算即可，勿走这里`);
+  return r.solid;
+}
+
+/** 前景表达式对「多张候选面」的最差对比度：每张面都按 worstRatio 的面/端点口径展开 */
+export function worstRatioOnFaces(fgExpr: string, bgExpr: string, decls: Map<string, string>, faces: RGB[]): number {
+  let worst = Infinity;
+  for (const face of faces) {
+    worst = Math.min(worst, worstRatio(fgExpr, bgExpr, decls, face));
+  }
+  return worst;
 }
 
 

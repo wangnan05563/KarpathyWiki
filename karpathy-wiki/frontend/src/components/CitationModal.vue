@@ -150,9 +150,12 @@ function openPage() {
   padding-top: 4px;
 }
 /* 查询词命中高亮：黄底黑字（荧光笔语义，明暗通用）。
-   色值走 token：dark 下背景提高不透明度，避免半透明黄叠深底后黑字对比不足 */
+   T04524：这里的面不是页底，而是「modal.css 的 .el-overlay 遮罩 + 半透明对话框」，
+   深底三主题在 0.55 档两张落点 3.94~4.07，不达 AA。达标值改由 :root 的 --cite-hit-bg（0.9）
+   统一供给，浅底五主题各自覆盖回 0.55；fallback 与 :root 同值是有意的——未登记的新主题必须落在
+   达标档，不能靠组件里的旧字面量回退（面口径见 test/helpers/contrast.ts 的 modalFaces()）。 */
 :deep(.cite-hit) {
-  background: var(--cite-hit-bg, rgba(255, 213, 79, 0.55));
+  background: var(--cite-hit-bg, rgba(255, 213, 79, 0.9));
   color: var(--cite-hit-fg, #1a1a1a);
   border-radius: 2px;
   padding: 0 1px;
