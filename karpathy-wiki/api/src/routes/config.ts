@@ -13,6 +13,7 @@ import {
   importConfigData,
   restoreConfigFromBackup,
   getConfigSource,
+  getPathWarnings,
   ConfigMigrationError,
 } from '../config.js';
 import type { AppConfig } from '../types.js';
@@ -88,6 +89,8 @@ export function registerConfigRoute(
     return void reply.send({
       // T04556：配置页据此区分「读的就是文件」与「读失败后静默回落默认值」
       configSource: getConfigSource(),
+      // T04558：定根后失效的绝对路径（只告警不改写），配置页据此提示重新选择
+      pathWarnings: getPathWarnings(),
       vaultPath: config.vaultPath,
       adapter: config.adapter,
       llm: {

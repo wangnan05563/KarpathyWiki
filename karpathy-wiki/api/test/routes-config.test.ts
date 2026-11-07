@@ -111,6 +111,8 @@ describe('routes/config.ts 配置路由', () => {
       const res = await app.inject({ method: 'GET', url: '/api/config' });
       expect(res.statusCode).toBe(200);
       const body = res.json();
+      // T04558：路径失效告警随配置透出（本用例 loadConfig 被 mock，无实际探测 → 空数组）
+      expect(body.pathWarnings).toEqual([]);
       expect(body.vaultPath).toBe('C:/tmp/vault');
       expect(body.llm.model).toBe('glm-4-plus');
       expect(body.llm.apiKeyRef).toBe('CFG_TEST_KEY_REF');

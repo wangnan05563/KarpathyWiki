@@ -30,6 +30,7 @@ import {
   loadConfig,
   restoreConfigFromBackup,
   getConfigSource,
+  getPathWarnings,
   ConfigMigrationError,
 } from '../src/config.js';
 import { getApiDir, getUserDataDir } from '../src/utils/runtime.js';
@@ -358,5 +359,60 @@ describe('R · 备份还原：以 .bak 为准且不销毁备份（T04556）', ()
     await expect(restoreConfigFromBackup(configPath)).rejects.toBeInstanceOf(ConfigMigrationError);
     await expect(restoreConfigFromBackup(configPath)).rejects.toThrow('备份不是合法 JSON');
     expect(await fs.readFile(configPath, 'utf8')).toBe(current);
+  });
+});
+
+// ── T04558：定根后的绝对路径失效要能看见（只告警不改写） ──
+// 触发面：UI 选目录把 vaultPath 存成绝对值，重装换盘后路径不存在 → 读不到库却像「配置丢了」。
+// 四条锁住口径：报失效项、不误报存在项、探测在定根之后、空串是合法语义。
+describe('K · 路径失效告警（T04558）', () => {
+  const tempDirs: string[] = [];
+  async function makeDir(prefix: string): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+    tempDirs.push(dir);
+    return dir;
+  }
+  async function writeConfig(dir: string, body: Record<string, unknown>): Promise<string> {
+    const p = path.join(dir, 'config.json');
+    await fs.writeFile(p, JSON.stringify(body, null, 2), 'utf8');
+    return p;
+  }
+  afterEach(async () => {
+    for (const d of tempDirs.splice(0)) await fs.rm(d, { recursive: true, force: true });
+  });
+
+  it('K1 · vaultPath 指向不存在目录 → 告警含该项，且原值未被改写', async () => {
+    const dir = await makeDir('t04558-k1-');
+    const missing = path.join(dir, 'not-there');
+    const cfg = await loadConfig(await writeConfig(dir, { vaultPath: missing }));
+
+    expect(cfg.vaultPath).toBe(missing);
+    expect(getPathWarnings()).toContainEqual({ field: 'vaultPath', path: missing, reason: '目录不存在' });
+  });
+
+  it('K2 · 路径存在 → 不产生告警', async () => {
+    const dir = await makeDir('t04558-k2-');
+    const vault = path.join(dir, 'vault');
+    await fs.mkdir(vault);
+    await loadConfig(await writeConfig(dir, { vaultPath: vault, logging: { level: 'info', logFilePath: '' } }));
+
+    expect(getPathWarnings()).toEqual([]);
+  });
+
+  it('K3 · 相对值定根后存在 → 不误报告警（探测发生在定根之后）', async () => {
+    const dir = await makeDir('t04558-k3-');
+    const rel = path.relative(apiDir, dir);
+    const cfg = await loadConfig(await writeConfig(dir, { vaultPath: rel, logging: { level: 'info', logFilePath: '' } }));
+
+    expect(path.isAbsolute(cfg.vaultPath)).toBe(true);
+    expect(path.resolve(cfg.vaultPath)).toBe(path.resolve(dir));
+    expect(getPathWarnings()).toEqual([]);
+  });
+
+  it('K4 · 空串 logging.logFilePath 不告警（空 = 不落盘是合法语义）', async () => {
+    const dir = await makeDir('t04558-k4-');
+    await loadConfig(await writeConfig(dir, { vaultPath: dir, logging: { level: 'info', logFilePath: '' } }));
+
+    expect(getPathWarnings().some((w) => w.field === 'logging.logFilePath')).toBe(false);
   });
 });

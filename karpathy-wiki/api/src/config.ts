@@ -334,6 +334,42 @@ export function getConfigSource(): ConfigSource {
   return configSource;
 }
 
+// T04558：定根后的路径存在性告警（只告警不改写）。
+// 场景：UI 选目录会把 vaultPath 存成绝对值，重装到别的盘/外接盘盘符变化后该路径失效，
+//   应用读不到知识库却与「配置丢了」同相，用户无从判断。
+// T02886 口径不变：这里不把用户显式绝对路径兜底成默认值，只收集给 GET /api/config 透出。
+// 探测只发生在 loadConfig 实际读盘/定根时；命中 30s 缓存的热路径不会重复 stat。
+export interface ConfigPathWarning {
+  field: string;
+  path: string;
+  reason: string;
+}
+
+let pathWarnings: ConfigPathWarning[] = [];
+
+export function getPathWarnings(): ConfigPathWarning[] {
+  return pathWarnings.map((w) => ({ ...w }));
+}
+
+function collectPathWarnings(config: AppConfig): ConfigPathWarning[] {
+  const warnings: ConfigPathWarning[] = [];
+  const checkDir = (field: string, p: string | undefined): void => {
+    if (!p || !path.isAbsolute(p)) return;
+    if (!fsSync.existsSync(p)) warnings.push({ field, path: p, reason: '目录不存在' });
+  };
+  const checkFile = (field: string, p: string | undefined): void => {
+    if (!p || !path.isAbsolute(p)) return;
+    // 文件型字段探父目录：日志/用户库等目标文件可能尚未生成，那不是路径失效
+    if (!fsSync.existsSync(path.dirname(p))) warnings.push({ field, path: p, reason: '上级目录不存在' });
+  };
+  checkDir('vaultPath', config.vaultPath);
+  checkFile('auth.usersFilePath', config.auth?.usersFilePath);
+  checkFile('auth.auditLogPath', config.auth?.auditLogPath);
+  checkFile('urlCrawl.incrementalStatePath', config.urlCrawl?.incrementalStatePath);
+  checkFile('logging.logFilePath', config.logging?.logFilePath);
+  return warnings;
+}
+
 // 简单的内存缓存
 interface ConfigCache {
   data: AppConfig | null;
@@ -585,6 +621,8 @@ export function anchorConfigPaths(merged: AppConfig, opts: { sea: boolean }): vo
   if (merged.logging) {
     merged.logging.logFilePath = repoLog(merged.logging.logFilePath, 'api.log');
   }
+  // 定根之后再探测：相对值（如 ../data/vault）此时已是绝对路径，不会误报
+  pathWarnings = collectPathWarnings(merged);
 }
 
 // 落盘前把「定根通道产生的绝对路径」还原为相对写法（T02886 工单口径 3）：
