@@ -63,6 +63,8 @@ describe('T04563 失败分流纯函数', () => {
   it('失败类别渲染为可读文案', () => {
     expect(failureCategoryLabel('budget')).toBe('超出预算');
     expect(failureCategoryLabel('auth')).toBe('认证失败');
+    // T04562：fetch failed 的真因分类要有人话标签，不能裸显 category 英文
+    expect(failureCategoryLabel('network')).toBe('网络异常');
     expect(failureCategoryLabel(undefined)).toBe('');
   });
 });

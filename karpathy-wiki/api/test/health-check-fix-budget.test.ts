@@ -93,6 +93,43 @@ describe('healthCheckFixWorkflow · T04563 终态口径', () => {
     expect(done?.message).toContain('401');
   });
 
+  it('T04562：failed 且带结构化 error（fetch failed + cause ECONNRESET）→ 友好文案 + network/retryable', async () => {
+    h.run.mockResolvedValue({
+      runId: 'r',
+      status: 'failed',
+      messages: [],
+      finalContent: '',
+      step: 2,
+      tokenUsed: 10,
+      error: {
+        name: 'TypeError',
+        message: 'fetch failed',
+        code: 'ECONNRESET',
+        causeMessage: 'read ECONNRESET',
+      },
+    });
+    const events = await collect();
+    const done = events.find((e) => e.step === 'done');
+    expect(done?.status).toBe('error');
+    expect(done?.message).toContain('无法连接 LLM 服务');
+    expect(done?.message).toContain('ECONNRESET');
+    expect(done?.data).toMatchObject({ category: 'network', retryable: true, harnessSteps: 2, tokens: 10 });
+  });
+
+  it('T04562：failed 仅回退 finalContent 时仍按材质分类（401 → 人工处理）', async () => {
+    h.run.mockResolvedValue({
+      runId: 'r',
+      status: 'failed',
+      messages: [],
+      finalContent: 'LLM API error 401: unauthorized',
+      step: 1,
+      tokenUsed: 5,
+    });
+    const events = await collect();
+    const done = events.find((e) => e.step === 'done');
+    expect(done?.data).toMatchObject({ category: 'auth', retryable: false });
+  });
+
   it('FixInput.signal 原样透传给 harness.run（暂停/取消/超时的中断通道）', async () => {
     h.run.mockResolvedValue({
       runId: 'r',

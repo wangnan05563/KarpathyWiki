@@ -97,7 +97,11 @@ export function registerHealthCheckRoute(
   jobsDir: string = path.join(getDataDir(), '.harness', 'batch-fix'),
   batchFixOptions: BatchFixJobOptions = {},
 ) {
-  const batchJobs = new BatchFixJobManager(jobsDir, adapter, batchFixOptions);
+  // T04562：批量修复的原始异常（含 cause.code）落服务端日志，前端只看到友好文案。
+  const batchJobs = new BatchFixJobManager(jobsDir, adapter, {
+    ...batchFixOptions,
+    logger: { warn: (payload, message) => app.log.warn(payload, message) },
+  });
   batchJobs.startStartupPrune();
 
   app.post('/api/health-check', { preHandler: guards.requireAdmin }, async (_request, reply) => {

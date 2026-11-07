@@ -45,7 +45,7 @@ export interface BatchFixFailedItem {
   message: string;
   // T04563：可重试性（缺省/旧快照按可重试降级）；认证失败/413/护栏拒绝为 false
   retryable?: boolean;
-  // 失败类别：timeout / rate_limit / service_down / auth / request_too_large / budget / unknown
+  // 失败类别：timeout / rate_limit / service_down / network / auth / request_too_large / budget / unknown
   category?: string;
 }
 
@@ -154,7 +154,7 @@ const SINGLE_SAMPLE_SPREAD = 0.5;
 // 这里保留一份，供直接构造管理器的测试/调用方在缺省时降级。
 // itemTimeoutMs 必须大于 harness 单次最坏耗时（Layer A：60s × 3 次重试 ≈ 186s），
 // 取 300s 以免把「还在正常跑的项」误判超时。
-export const DEFAULT_BATCH_FIX_OPTIONS: Required<BatchFixJobOptions> = {
+export const DEFAULT_BATCH_FIX_OPTIONS: Required<Omit<BatchFixJobOptions, 'logger'>> = {
   maxRetries: 2,
   baseDelayMs: 1000,
   maxDelayMs: 30_000,
@@ -170,6 +170,8 @@ export interface BatchFixJobOptions {
   maxDelayMs?: number;
   /** 单项（单次尝试）超时预算（毫秒） */
   itemTimeoutMs?: number;
+  /** T04562：服务端日志口（失败项保留原始错误与 cause.code，供排障） */
+  logger?: { warn(payload: Record<string, unknown>, message: string): void };
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -189,7 +191,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-function backoffDelay(attempt: number, opts: Required<BatchFixJobOptions>): number {
+function backoffDelay(attempt: number, opts: Required<Omit<BatchFixJobOptions, 'logger'>>): number {
   const ceiling = Math.min(opts.maxDelayMs, opts.baseDelayMs * 2 ** (attempt - 1));
   // 半固定 + 半随机：避免多项连续失败时同拍重试再次撞上限流窗口
   return Math.round(ceiling / 2 + Math.random() * (ceiling / 2));
@@ -251,7 +253,8 @@ export class BatchFixJobManager {
   private readonly jobsDir: string;
   private readonly statsFile: string;
   private readonly adapter: EngineAdapter;
-  private readonly options: Required<BatchFixJobOptions>;
+  private readonly options: Required<Omit<BatchFixJobOptions, 'logger'>>;
+  private readonly logger?: BatchFixJobOptions['logger'];
   private readonly jobs = new Map<string, JobEntry>();
   // 串行落盘：同一 job 的并发写入互相覆盖，排队保证后写生效
   private writeChain: Promise<void> = Promise.resolve();
@@ -273,6 +276,7 @@ export class BatchFixJobManager {
     this.jobsDir = jobsDir;
     this.statsFile = path.join(jobsDir, 'stats.json');
     this.adapter = adapter;
+    this.logger = options.logger;
     this.options = {
       maxRetries: Math.max(0, options.maxRetries ?? DEFAULT_BATCH_FIX_OPTIONS.maxRetries),
       baseDelayMs: Math.max(0, options.baseDelayMs ?? DEFAULT_BATCH_FIX_OPTIONS.baseDelayMs),
@@ -708,6 +712,19 @@ export class BatchFixJobManager {
       outcome.gotDoneEvent = true;
       outcome.error = err;
       outcome.errorMessage = err instanceof Error ? err.message : String(err);
+      // T04562：友好文案只给用户看「网络不可达」；真因（cause.code）留在服务端日志里排障。
+      const cause = err instanceof Error ? (err as { cause?: unknown }).cause : undefined;
+      const causeNode = typeof cause === 'object' && cause !== null ? (cause as { code?: unknown; message?: unknown }) : null;
+      this.logger?.warn(
+        {
+          issueKey: item.issueKey,
+          errorName: err instanceof Error ? err.name : typeof err,
+          errorMessage: outcome.errorMessage.slice(0, 500),
+          causeCode: typeof causeNode?.code === 'string' ? causeNode.code : undefined,
+          causeMessage: typeof causeNode?.message === 'string' ? causeNode.message.slice(0, 500) : undefined,
+        },
+        '批量修复项失败：LLM 调用异常',
+      );
     }
     return outcome;
   }

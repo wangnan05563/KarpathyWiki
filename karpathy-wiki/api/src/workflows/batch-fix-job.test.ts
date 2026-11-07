@@ -307,6 +307,34 @@ describe('BatchFixJobManager', { timeout: FS_HEAVY_TIMEOUT_MS }, () => {
     });
   });
 
+  it('T04562：fetch failed 的 cause ECONNRESET → network 可重试，真因只进服务端日志', async () => {
+    const warns: Array<{ payload: Record<string, unknown>; message: string }> = [];
+    const err = new TypeError('fetch failed');
+    (err as { cause?: unknown }).cause = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' });
+    const manager = new BatchFixJobManager(
+      dir,
+      fakeAdapter(() => {
+        throw err;
+      }),
+      {
+        ...fastRetry,
+        maxRetries: 0,
+        logger: { warn: (payload, message) => warns.push({ payload, message }) },
+      },
+    );
+    const started = await manager.start(itemsOf(['a.md']));
+    const done = await waitFor(() => manager.getSnapshot(started.jobId), (s) => s.status === 'completed');
+    expect(done.failed[0]).toMatchObject({ retryable: true, category: 'network' });
+    expect(warns).toHaveLength(1);
+    expect(warns[0].payload).toMatchObject({
+      issueKey: 'orphan:a.md',
+      errorName: 'TypeError',
+      causeCode: 'ECONNRESET',
+      causeMessage: 'read ECONNRESET',
+    });
+    expect(Object.keys(warns[0].payload)).not.toContain('apiKey');
+  });
+
   it('错误事件显式标注 budget → 直接落可人工处理的失败，不自动重试', async () => {
     let attempts = 0;
     const manager = new BatchFixJobManager(

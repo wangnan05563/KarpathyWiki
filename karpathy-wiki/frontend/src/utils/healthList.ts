@@ -168,6 +168,7 @@ const FAILURE_CATEGORY_LABELS: Record<string, string> = {
   timeout: '超时',
   rate_limit: '限流',
   service_down: '服务故障',
+  network: '网络异常',
 };
 
 export function failureCategoryLabel(category?: string): string {

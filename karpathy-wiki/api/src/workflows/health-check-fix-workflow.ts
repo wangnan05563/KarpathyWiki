@@ -6,6 +6,7 @@ import type { FixInput, FixProgressEvent } from '../types.js';
 import { getPromptPath } from '../utils/runtime.js';
 import { pageDirsSlash, flatPagePathHint } from '../vault/page-scope.js';
 import { writePageSafely } from '../vault/page-write-guard.js';
+import { friendlyLlmError, isRetryableLlmError } from '../utils/llm-error.js';
 
 // 加载 fix prompt 单点存储（M-3 prompt 等价性）
 // 路径解析统一走 runtime.ts，兼容开发模式与 SEA 打包模式
@@ -188,21 +189,34 @@ ${targetDesc}
         return;
       }
       const isError = result.status === 'failed';
+      // T04562：失败项的文案/可重试判定要基于结构化错误（含 cause 真因），
+      // 不能只看 finalContent——LLM 失败时 finalContent 往往为空或只有一句 fetch failed。
+      let failureData: Record<string, unknown> = usage;
+      let failureMessage = `修复完成，共 ${result.step} 步`;
+      if (isError) {
+        const rawError = result.error ?? new Error(result.finalContent || '未知错误');
+        const { friendly, category } = friendlyLlmError(rawError);
+        failureMessage = `修复失败: ${friendly}`;
+        failureData = { ...usage, category, retryable: isRetryableLlmError(rawError) };
+      }
       pushEvent({
         step: isError ? 'done' : 'fixed',
         status: isError ? 'error' : 'done',
-        message: isError
-          ? `修复失败: ${result.finalContent || '未知错误'}`
-          : `修复完成，共 ${result.step} 步`,
-        data: usage,
+        message: failureMessage,
+        data: failureData,
       });
       if (!isError) {
         pushEvent({ step: 'done', status: 'done', message: '修复流程结束', data: usage });
       }
     })
     .catch((err: unknown) => {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      pushEvent({ step: 'done', status: 'error', message: `修复异常: ${errMsg}` });
+      const { friendly, category } = friendlyLlmError(err);
+      pushEvent({
+        step: 'done',
+        status: 'error',
+        message: `修复异常: ${friendly}`,
+        data: { category, retryable: isRetryableLlmError(err) },
+      });
     })
     .finally(() => {
       finished = true;

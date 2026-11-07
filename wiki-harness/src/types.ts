@@ -91,6 +91,16 @@ export interface RunResult {
   tokenUsed: number;
   // §X-1 步骤级追踪：随 RunResult 返回，便于调用方即时诊断
   timings?: StepTiming[];
+  // T04562：失败时的结构化错误。finalContent 只有 message，原生 fetch 的真因
+  // （err.cause.code，如 ECONNRESET）会在这里保留，供上游做错误友好化/可重试判定。
+  error?: {
+    name: string;
+    message: string;
+    /** 自身或 cause 链上的错误码（ECONNRESET / ETIMEDOUT / …） */
+    code?: string;
+    /** cause 的 message（如 "read ECONNRESET"） */
+    causeMessage?: string;
+  };
 }
 
 // §X-1 步骤级追踪：单步耗时分解（定位 143s/282s 级长耗时瓶颈）

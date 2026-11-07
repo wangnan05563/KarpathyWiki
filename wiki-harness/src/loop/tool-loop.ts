@@ -16,6 +16,25 @@ import { withRetry } from '../retry/retry-policy.js';
 import { HookManager } from '../hook/hook-manager.js';
 import { compactLog } from '../session/compaction.js';
 
+// T04562：把失败错误结构化——finalContent 只留 message 会把原生 fetch 的 cause 真因
+// （ECONNRESET 等）丢干净，上游无法区分「网络抖动可重试」与「配置错误需人工」。
+export function toRunResultError(err: unknown): NonNullable<RunResult['error']> {
+  if (!(err instanceof Error)) {
+    return { name: 'Error', message: String(err) };
+  }
+  const cause = (err as { cause?: unknown }).cause;
+  const ownCode = (err as { code?: string }).code;
+  const causeCode = cause instanceof Error ? (cause as { code?: string }).code : undefined;
+  const code = ownCode ?? causeCode;
+  const causeMessage = cause === undefined ? undefined : cause instanceof Error ? cause.message : String(cause);
+  return {
+    name: err.name,
+    message: err.message,
+    ...(code ? { code } : {}),
+    ...(causeMessage ? { causeMessage } : {}),
+  };
+}
+
 interface LoopConfig {
   llm: LLMAdapter;
   tools: ToolDefinition[];
@@ -205,6 +224,7 @@ export async function runLoop(ctx: RunContext, config: LoopConfig): Promise<RunR
         status: 'failed',
         messages: ctx.log.messages(),
         finalContent: err instanceof Error ? err.message : String(err),
+        error: toRunResultError(err),
         // 与 done 路径保持一致：返回已执行到的步数，而非上一步编号
         step: ctx.step + 1,
         tokenUsed: ctx.tokenUsed,
