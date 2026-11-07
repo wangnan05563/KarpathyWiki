@@ -270,7 +270,7 @@ function defaultConfig(): AppConfig {
 //   3. 找不到时返回权威路径作为写入目标（保持向后兼容）
 // 为什么不用 process.pkg 检测：SEA 模式下 process.pkg 不存在（仅传统 pkg 有），
 // 改用 runtime.ts 的 IS_SEA 标志统一识别打包模式
-export function getConfigPath(): string | null {
+export function getConfigPath(): string {
   const candidates: string[] = [
     API_CONFIG_PATH,
     path.resolve(process.cwd(), CONFIG_FILENAME),
@@ -286,6 +286,15 @@ export function getConfigPath(): string | null {
   }
   // 候选路径都不存在时，返回权威路径作为写入目标（创建新配置文件）
   return API_CONFIG_PATH;
+}
+
+// 配置来源（T04556）：供 GET /api/config 透出，让配置页能区分「读的就是文件」
+// 与「读失败后静默回落默认值」。'migrated' 预留给 legacy 一次性迁移（T04555）。
+export type ConfigSource = 'file' | 'defaults-after-read-error' | 'defaults-after-parse-error' | 'migrated';
+let configSource: ConfigSource = 'file';
+
+export function getConfigSource(): ConfigSource {
+  return configSource;
 }
 
 // 简单的内存缓存
@@ -409,43 +418,57 @@ function mergeConfigObjects(defaults: AppConfig, parsed: Partial<AppConfig>): Ap
 
 // 从 config.json 加载配置，合并默认值。
 // apiKeyRef 仅存环境变量名，API Key 在使用方通过 process.env[apiKeyRef] 读取（M-7）。
-export async function loadConfig(): Promise<AppConfig> {
+// configPathOverride 仅测试传临时路径：传参时绕过「路径 + TTL」缓存，也不污染生产缓存。
+export async function loadConfig(configPathOverride?: string): Promise<AppConfig> {
   const now = Date.now();
   // 先获取当前路径，用于缓存有效性校验
-  const currentPath = getConfigPath();
+  const currentPath = configPathOverride ?? getConfigPath();
+  const useCache = !configPathOverride;
   // 检查缓存是否有效：路径必须一致 + TTL 未过期
-  if (configCache.data && configCache.path === currentPath && (now - configCache.loadedAt) < CONFIG_CACHE_TTL_MS) {
+  if (useCache && configCache.data && configCache.path === currentPath && (now - configCache.loadedAt) < CONFIG_CACHE_TTL_MS) {
     return configCache.data;
   }
 
   const defaults = defaultConfig();
-  if (!currentPath) {
-    configCache.data = defaults;
-    configCache.path = currentPath;
-    configCache.loadedAt = now;
-    return defaults;
-  }
+  const cacheAndReturn = (data: AppConfig): AppConfig => {
+    if (useCache) {
+      configCache.data = data;
+      configCache.path = currentPath;
+      configCache.loadedAt = now;
+    }
+    return data;
+  };
 
   let raw: string;
   try {
     raw = await fs.readFile(currentPath, 'utf8');
-  } catch {
-    configCache.data = defaults;
-    configCache.path = currentPath;
-    configCache.loadedAt = now;
-    return defaults;
+  } catch (err) {
+    // T04556：读取失败回落默认值必须可观测——此前零日志，用户只看到「配置丢了」。
+    // 此刻 logger 可能尚未初始化（index.ts 的 setupLoggerStream 晚于 loadConfig），只能用 console。
+    const reason = err instanceof Error ? `${(err as NodeJS.ErrnoException).code ?? 'ERR'}: ${err.message}` : String(err);
+    console.warn(`[配置] 读取失败，已回落默认配置：${currentPath}；原因=${reason}`);
+    configSource = 'defaults-after-read-error';
+    return cacheAndReturn(defaults);
   }
 
   let parsed: Partial<AppConfig>;
   try {
     parsed = JSON.parse(raw) as Partial<AppConfig>;
-  } catch {
-    configCache.data = defaults;
-    configCache.path = currentPath;
-    configCache.loadedAt = now;
-    return defaults;
+  } catch (err) {
+    // T04556：解析失败先把损坏文件改名留证据，否则用户下一次保存会用默认值整文覆盖、因文件消失。
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const corruptPath = `${currentPath}.corrupt-${stamp}`;
+    try {
+      await fs.rename(currentPath, corruptPath);
+    } catch (renameErr) {
+      console.warn(`[配置] 损坏文件改名失败：${currentPath}；原因=${renameErr instanceof Error ? renameErr.message : String(renameErr)}`);
+    }
+    console.warn(`[配置] JSON 解析失败，已回落默认配置：${currentPath}；损坏文件=${corruptPath}；原因=${err instanceof Error ? err.message : String(err)}`);
+    configSource = 'defaults-after-parse-error';
+    return cacheAndReturn(defaults);
   }
 
+  configSource = 'file';
   // 浅合并嵌套对象，避免下层数据丢失
   const merged = mergeConfigObjects(defaults, parsed);
 
@@ -458,11 +481,7 @@ export async function loadConfig(): Promise<AppConfig> {
     await writeSeaDefaultsIfNeeded(merged);
   }
 
-  // 写入缓存
-  configCache.data = merged;
-  configCache.path = currentPath;
-  configCache.loadedAt = now;
-  return merged;
+  return cacheAndReturn(merged);
 }
 
 // §12.3-7 配置热加载：重新读取 config.json 并返回新配置。
@@ -554,10 +573,63 @@ export function portableConfigForDisk(config: AppConfig): AppConfig {
 // 全部「整份 config 回写 config.json」的单一出口：序列化前做 portable 还原。
 // 各 save* 函数此前各自 JSON.stringify(merged)——定根上线后那会把机器相关绝对路径
 // 固化进 config.json，因此全部收口到这里（T02886）。
-export async function persistConfigFile(config: AppConfig): Promise<void> {
-  const configPath = getConfigPath();
-  if (!configPath) return;
-  await fs.writeFile(configPath, JSON.stringify(portableConfigForDisk(config), null, 2), 'utf8');
+// T04556：写盘改为「tmp → 备份旧文件 → rename」原子序列。裸 writeFile 先截断后写，
+//   进程在中间退出会留下半截 JSON，下次启动回落默认值并（无本改动时）被永久覆盖。
+export async function persistConfigFile(config: AppConfig, configPathOverride?: string): Promise<void> {
+  const configPath = configPathOverride ?? getConfigPath();
+  const tmpPath = `${configPath}.tmp`;
+  const bakPath = `${configPath}.bak`;
+  // tmp 必须与目标同目录：跨卷 rename 会退化成复制+删除，失去原子性
+  await fs.writeFile(`${configPath}.tmp`, JSON.stringify(portableConfigForDisk(config), null, 2), 'utf8');
+  try {
+    await fs.copyFile(configPath, bakPath);
+  } catch (err) {
+    // 首次保存时旧文件不存在：没有可备份的内容，吞掉 ENOENT；其余错误不继续，避免留下 tmp
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      await fs.rm(tmpPath, { force: true }).catch(() => {});
+      throw err;
+    }
+  }
+  try {
+    await fs.rename(tmpPath, configPath);
+  } catch (err) {
+    // rename 失败时目标仍是完整旧内容；清理 tmp，避免下次误把它当有效残留
+    await fs.rm(tmpPath, { force: true }).catch(() => {});
+    throw err;
+  }
+}
+
+// T04556：把上一版备份还原回 config.json（POST /api/config/restore-backup 的实现）。
+// 不复用 persistConfigFile：后者会先把「当前（可能是损坏的）文件」拷进 .bak，
+// 在还原场景里等于先毁掉唯一可用的备份。这里直接 tmp + rename，.bak 原样保留。
+export async function restoreConfigFromBackup(configPathOverride?: string): Promise<AppConfig> {
+  const configPath = configPathOverride ?? getConfigPath();
+  const bakPath = `${configPath}.bak`;
+  let raw: string;
+  try {
+    raw = await fs.readFile(bakPath, 'utf8');
+  } catch {
+    throw new ConfigMigrationError('未找到配置备份 config.json.bak，无法还原');
+  }
+  let parsed: Partial<AppConfig>;
+  try {
+    parsed = JSON.parse(raw) as Partial<AppConfig>;
+  } catch {
+    throw new ConfigMigrationError('配置备份不是合法 JSON，已拒绝还原');
+  }
+  const restored = mergeConfigObjects(defaultConfig(), parsed);
+  anchorConfigPaths(restored, { sea: IS_SEA });
+  const tmpPath = `${configPath}.tmp`;
+  await fs.writeFile(tmpPath, JSON.stringify(portableConfigForDisk(restored), null, 2), 'utf8');
+  try {
+    await fs.rename(tmpPath, configPath);
+  } catch (err) {
+    await fs.rm(tmpPath, { force: true }).catch(() => {});
+    throw err;
+  }
+  configSource = 'file';
+  if (!configPathOverride) refreshConfigCache(restored);
+  return restored;
 }
 
 // SEA 首次运行：若用户数据目录尚无 config.json，落盘默认配置，便于用户编辑且保持行为一致
@@ -668,10 +740,7 @@ export async function saveAiConfig(updates: {
     },
   };
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
 
   // 写盘后立即刷新缓存，避免后续 GET 命中旧缓存
   refreshConfigCache(merged);
@@ -734,10 +803,7 @@ export async function resetAiConfig(): Promise<AppConfig> {
     llm: { ...defaults.llm },
   };
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
 
   refreshConfigCache(merged);
   return merged;
@@ -772,10 +838,7 @@ export async function saveWebSearchConfig(updates: {
     },
   };
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
 
   refreshConfigCache(merged);
   return merged;
@@ -821,10 +884,7 @@ export async function saveMcpConfig(updates: {
     },
   };
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
 
   refreshConfigCache(merged);
   return merged;
@@ -893,10 +953,7 @@ export async function saveSharedMediaConfig(updates: {
     },
   };
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
 
   refreshConfigCache(merged);
   return merged;
@@ -922,10 +979,7 @@ export async function saveBudgetConfig(updates: {
     },
   };
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
   refreshConfigCache(merged);
   return merged;
 }
@@ -947,10 +1001,7 @@ export async function saveSkillsConfig(
     merged.activeSkill = activeSkill;
   }
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
   refreshConfigCache(merged);
   return merged;
 }
@@ -969,10 +1020,7 @@ export async function saveHealthCheckConfig(updates: {
     },
   };
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
   refreshConfigCache(merged);
   return merged;
 }
@@ -986,10 +1034,7 @@ export async function saveSubAgentConfig(enabled?: boolean): Promise<AppConfig> 
     merged.enableSubAgents = enabled;
   }
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
   refreshConfigCache(merged);
   return merged;
 }
@@ -1003,10 +1048,7 @@ export async function saveResumableStreamConfig(enabled?: boolean): Promise<AppC
     merged.enableResumableStream = enabled;
   }
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
   refreshConfigCache(merged);
   return merged;
 }
@@ -1032,10 +1074,7 @@ export async function saveBatchConfig(updates: {
     },
   };
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
   refreshConfigCache(merged);
   return merged;
 }
@@ -1066,10 +1105,7 @@ export async function saveLoggingConfig(updates: {
     },
   };
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
   refreshConfigCache(merged);
   return merged;
 }
@@ -1104,10 +1140,7 @@ export async function saveToolsConfig(updates: {
     },
   };
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
   refreshConfigCache(merged);
   return merged;
 }
@@ -1165,10 +1198,7 @@ export async function saveQqConfig(updates: {
     },
   };
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
   refreshConfigCache(merged);
   return merged;
 }
@@ -1206,10 +1236,7 @@ export async function saveUrlCrawlConfig(updates: Partial<UrlCrawlConfig>): Prom
     },
   };
 
-  const configPath = getConfigPath();
-  if (configPath) {
-    await persistConfigFile(merged);
-  }
+  await persistConfigFile(merged);
   refreshConfigCache(merged);
   return merged;
 }
@@ -1473,9 +1500,6 @@ export async function importConfigData(
   const restored = restoreSecretsInConfig(base, prev);
 
   const configPath = getConfigPath();
-  if (!configPath) {
-    throw new ConfigMigrationError('无法定位 config.json 写入路径');
-  }
 
   if (mode === 'overwrite') {
     // 备份当前配置，写入失败时回滚

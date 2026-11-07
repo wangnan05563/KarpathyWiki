@@ -312,9 +312,6 @@ function maskToken(token: string): string {
 // 用于向导：每步成功后立即持久化，避免后续步骤失败时丢失前序成果。
 async function saveTunnelField(field: keyof TunnelConfig, value: string): Promise<void> {
   const configPath = getConfigPath();
-  if (!configPath) {
-    throw new Error('无法定位 config.json 路径');
-  }
   let raw: Record<string, unknown> = {};
   try {
     const content = await fsp.readFile(configPath, 'utf8');
@@ -332,9 +329,6 @@ async function saveTunnelField(field: keyof TunnelConfig, value: string): Promis
 // cpolarAuthtoken 空串表示"不修改已有 token"，避免前端回传脱敏串覆盖真实值。
 async function saveTunnelConfig(body: Partial<TunnelConfig>): Promise<void> {
   const configPath = getConfigPath();
-  if (!configPath) {
-    throw new Error('无法定位 config.json 路径');
-  }
 
   // 读取现有 config.json，保留其他段（llm/budget/server 等）不动
   let raw: Record<string, unknown> = {};

@@ -11,12 +11,27 @@
 //     树外用户绝对值原样保留（SEA 的 LOCALAPPDATA 值不被改写），非路径字段不受影响；
 //   D 源码级锁：不再存在第二份「把相对配置定根」的实现——applySeaRebase 已删除、
 //     auth.ts 的 getDataDir()+basename 已改为复用 toAbsVaultPath、写盘全部收口 persistConfigFile。
-import { describe, it, expect } from 'vitest';
+// T04556 追加（不改动 A~E 既有断言）：
+//   F 回落可观测：读失败/解析失败不再零日志，损坏文件改名留证、不被下次保存永久覆盖；
+//   I 原子落盘：无 .tmp 残留、.bak 恒为上一版、rename 失败不破坏目标；
+//   R 备份还原：以 .bak 为准且不销毁备份，缺失/非法备份拒绝还原。
+//   全部在 fs.mkdtemp 临时目录内进行，绝不触碰真实 config.json。
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import fs from 'node:fs/promises';
+import fsPromises from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { anchorConfigPaths, portableConfigForDisk, persistConfigFile, getConfigPath } from '../src/config.js';
+import {
+  anchorConfigPaths,
+  portableConfigForDisk,
+  persistConfigFile,
+  getConfigPath,
+  loadConfig,
+  restoreConfigFromBackup,
+  getConfigSource,
+  ConfigMigrationError,
+} from '../src/config.js';
 import { getApiDir, getUserDataDir } from '../src/utils/runtime.js';
 import { toAbsVaultPath } from '../src/utils/harness-dirs.js';
 import type { AppConfig } from '../src/types.js';
@@ -171,4 +186,177 @@ describe('E · 双 CWD 等价：从不同目录起进程，定根后指向同一
     // 本用例真实读全库（两个 VaultService 各列一遍页面），单跑实测 6.1 s > 默认 5 s 预算；
     //   全量并跑时 libuv 线程池被其它用例占满，更容易顶穿——按测量值给显式超时，不动共享配置。
   }, 20_000);
+});
+
+// T04556：隔离目录收集与清理——任何用例都只在自己的 mkdtemp 目录里读写
+const tmpDirs: string[] = [];
+
+async function mkTmpDir(): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kw-t04556-'));
+  tmpDirs.push(dir);
+  return dir;
+}
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await Promise.all(tmpDirs.splice(0).map((d) => fs.rm(d, { recursive: true, force: true })));
+});
+
+describe('F · 读盘失败可观测：告警带路径 + 损坏文件留证（T04556）', () => {
+  it('F1 文件缺失：回落默认值并打印一次含路径的告警，不凭空生成配置文件', async () => {
+    const dir = await mkTmpDir();
+    const configPath = path.join(dir, 'config.json');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const cfg = await loadConfig(configPath);
+
+    expect(cfg.vaultPath).toBe('../data/vault');
+    expect(cfg.llm.provider).toBe('glm');
+    expect(getConfigSource()).toBe('defaults-after-read-error');
+    expect(warn).toHaveBeenCalledTimes(1);
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg, '告警必须点名是哪个路径读失败').toContain(configPath);
+    expect(msg).toContain('读取失败');
+    expect(await fs.readdir(dir), '回落是只读动作，不应创建文件').toEqual([]);
+  });
+
+  it('F2 截断 JSON：回落默认值，原文件改名留证且字节不变', async () => {
+    const dir = await mkTmpDir();
+    const configPath = path.join(dir, 'config.json');
+    const corrupt = '{\n  "vaultPath": "../data/va';
+    await fs.writeFile(configPath, corrupt, 'utf8');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const cfg = await loadConfig(configPath);
+
+    expect(cfg.vaultPath).toBe('../data/vault');
+    expect(getConfigSource()).toBe('defaults-after-parse-error');
+    const files = await fs.readdir(dir);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/^config\.json\.corrupt-\d/);
+    expect(await fs.readFile(path.join(dir, files[0]), 'utf8'), '损坏内容必须原样留证').toBe(corrupt);
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg).toContain('JSON 解析失败');
+    expect(msg).toContain(files[0]);
+  });
+
+  it('F3 损坏回落后再保存：损坏证据仍在，新配置可被重新读回', async () => {
+    const dir = await mkTmpDir();
+    const configPath = path.join(dir, 'config.json');
+    const corrupt = '{"vaultPath": ';
+    await fs.writeFile(configPath, corrupt, 'utf8');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await loadConfig(configPath);
+
+    const cfg = fixture({ vaultPath: '../data/vault-2' });
+    anchorConfigPaths(cfg, { sea: false });
+    await persistConfigFile(cfg, configPath);
+
+    const files = await fs.readdir(dir);
+    const corruptFile = files.find((f) => f.startsWith('config.json.corrupt-'));
+    expect(corruptFile, '损坏文件不应被新保存覆盖或删除').toBeTruthy();
+    expect(await fs.readFile(path.join(dir, corruptFile!), 'utf8')).toBe(corrupt);
+
+    const reread = await loadConfig(configPath);
+    expect(reread.vaultPath).toBe(toAbsVaultPath('../data/vault-2'));
+    expect(getConfigSource()).toBe('file');
+  });
+});
+
+describe('I · 原子落盘：无 .tmp 残留、.bak 为上一版、失败不破坏目标（T04556）', () => {
+  it('I1 连续两次保存：无 .tmp 残留，.bak 恰为上一版落盘内容', async () => {
+    const dir = await mkTmpDir();
+    const configPath = path.join(dir, 'config.json');
+    const cfg1 = fixture({ vaultPath: '../data/v1' });
+    anchorConfigPaths(cfg1, { sea: false });
+    await persistConfigFile(cfg1, configPath);
+    const first = await fs.readFile(configPath, 'utf8');
+    expect(await fs.readdir(dir), '首次保存无旧文件可备份').toEqual(['config.json']);
+
+    const cfg2 = fixture({ vaultPath: '../data/v2' });
+    anchorConfigPaths(cfg2, { sea: false });
+    await persistConfigFile(cfg2, configPath);
+
+    expect((await fs.readdir(dir)).sort()).toEqual(['config.json', 'config.json.bak']);
+    expect(await fs.readFile(`${configPath}.bak`, 'utf8')).toBe(first);
+    expect(await fs.readFile(configPath, 'utf8')).toBe(JSON.stringify(portableConfigForDisk(cfg2), null, 2));
+  });
+
+  it('I2 rename 失败：目标保持完整旧内容、.tmp 被清理、错误上抛', async () => {
+    const dir = await mkTmpDir();
+    const configPath = path.join(dir, 'config.json');
+    const old = '{"vaultPath":"../data/old"}';
+    await fs.writeFile(configPath, old, 'utf8');
+    const cfg = fixture({ vaultPath: '../data/v3' });
+    anchorConfigPaths(cfg, { sea: false });
+    const spy = vi
+      .spyOn(fsPromises, 'rename')
+      .mockRejectedValueOnce(Object.assign(new Error('EACCES: contrived'), { code: 'EACCES' }));
+
+    await expect(persistConfigFile(cfg, configPath)).rejects.toThrow('EACCES');
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(await fs.readFile(configPath, 'utf8'), 'rename 失败时目标不能被截断').toBe(old);
+    expect(await fs.readFile(`${configPath}.bak`, 'utf8')).toBe(old);
+    expect((await fs.readdir(dir)).sort(), '.tmp 必须被清理').toEqual(['config.json', 'config.json.bak']);
+  });
+
+  it('I3 三次保存：.bak 只保留最近一版前态，全程无 .tmp', async () => {
+    const dir = await mkTmpDir();
+    const configPath = path.join(dir, 'config.json');
+    const snaps: string[] = [];
+    for (const vault of ['../data/a', '../data/b', '../data/c']) {
+      const cfg = fixture({ vaultPath: vault });
+      anchorConfigPaths(cfg, { sea: false });
+      await persistConfigFile(cfg, configPath);
+      snaps.push(await fs.readFile(configPath, 'utf8'));
+      expect((await fs.readdir(dir)).filter((f) => f.endsWith('.tmp'))).toEqual([]);
+    }
+    expect(await fs.readFile(`${configPath}.bak`, 'utf8')).toBe(snaps[1]);
+    expect(await fs.readFile(configPath, 'utf8')).toBe(snaps[2]);
+  });
+});
+
+describe('R · 备份还原：以 .bak 为准且不销毁备份（T04556）', () => {
+  it('R1 还原：config.json 回到备份内容，.bak 原样保留，来源回到 file', async () => {
+    const dir = await mkTmpDir();
+    const configPath = path.join(dir, 'config.json');
+    const good = fixture({ vaultPath: '../data/good' });
+    anchorConfigPaths(good, { sea: false });
+    await persistConfigFile(good, configPath);
+    const newer = fixture({ vaultPath: '../data/newer' });
+    anchorConfigPaths(newer, { sea: false });
+    await persistConfigFile(newer, configPath);
+    const bakBytes = await fs.readFile(`${configPath}.bak`, 'utf8');
+    await fs.writeFile(configPath, '{broken', 'utf8');
+
+    const restored = await restoreConfigFromBackup(configPath);
+
+    expect(restored.vaultPath).toBe(toAbsVaultPath('../data/good'));
+    const onDisk = JSON.parse(await fs.readFile(configPath, 'utf8')) as AppConfig;
+    expect(onDisk.vaultPath).toBe('../data/good');
+    expect(await fs.readFile(`${configPath}.bak`, 'utf8'), '还原不得销毁唯一可用的备份').toBe(bakBytes);
+    expect(getConfigSource()).toBe('file');
+    expect((await fs.readdir(dir)).sort()).toEqual(['config.json', 'config.json.bak']);
+  });
+
+  it('R2 无备份：抛 ConfigMigrationError，且不创建 config.json', async () => {
+    const dir = await mkTmpDir();
+    const configPath = path.join(dir, 'config.json');
+    await expect(restoreConfigFromBackup(configPath)).rejects.toBeInstanceOf(ConfigMigrationError);
+    await expect(restoreConfigFromBackup(configPath)).rejects.toThrow('未找到配置备份');
+    expect(await fs.readdir(dir)).toEqual([]);
+  });
+
+  it('R3 备份非法：拒绝还原，当前文件不被改动', async () => {
+    const dir = await mkTmpDir();
+    const configPath = path.join(dir, 'config.json');
+    const current = '{"vaultPath":"../data/current"}';
+    await fs.writeFile(configPath, current, 'utf8');
+    await fs.writeFile(`${configPath}.bak`, '{nope', 'utf8');
+
+    await expect(restoreConfigFromBackup(configPath)).rejects.toBeInstanceOf(ConfigMigrationError);
+    await expect(restoreConfigFromBackup(configPath)).rejects.toThrow('备份不是合法 JSON');
+    expect(await fs.readFile(configPath, 'utf8')).toBe(current);
+  });
 });

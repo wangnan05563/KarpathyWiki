@@ -11,6 +11,8 @@ import {
   maskApiKey,
   buildConfigExport,
   importConfigData,
+  restoreConfigFromBackup,
+  getConfigSource,
   ConfigMigrationError,
 } from '../config.js';
 import type { AppConfig } from '../types.js';
@@ -84,6 +86,8 @@ export function registerConfigRoute(
     const config = await loadConfig();
     // 脱敏：apiKeyRef 是环境变量名（非 Key 本身），可展示；实际 Key 不返回
     return void reply.send({
+      // T04556：配置页据此区分「读的就是文件」与「读失败后静默回落默认值」
+      configSource: getConfigSource(),
       vaultPath: config.vaultPath,
       adapter: config.adapter,
       llm: {
@@ -521,6 +525,35 @@ export function registerConfigRoute(
       const msg = err instanceof Error ? err.message : 'Unknown error';
       audit({ request, action: 'config_change', resource: 'POST /api/config/import', result: 'fail', message: `mode=${mode} ${msg}` });
       // ConfigMigrationError：格式/完整性不符，返回 400 + 明确 message；其余为写盘等内部错误 → 500
+      const status = err instanceof ConfigMigrationError ? 400 : 500;
+      return void reply.code(status).send({ error: msg });
+    }
+  });
+
+  // POST /api/config/restore-backup：把 config.json.bak 还原回 config.json 并刷新缓存（T04556）。
+  // 鉴权：requireAdmin——还原会整体替换运行配置，与导入/导出同档。
+  // 为什么需要：原子写从本单起才会滚动产出 .bak；此前唯一备份只写不读，用户无从恢复。
+  app.post('/api/config/restore-backup', { preHandler: guards.requireAdmin }, async (request, reply) => {
+    try {
+      const restored = await restoreConfigFromBackup();
+      audit({
+        request,
+        action: 'config_change',
+        resource: 'POST /api/config/restore-backup',
+        result: 'success',
+        message: '已从 config.json.bak 还原配置',
+      });
+      return void reply.send({
+        ok: true,
+        restored: {
+          vaultPath: restored.vaultPath,
+          llm: { provider: restored.llm.provider, model: restored.llm.model },
+        },
+        configSource: getConfigSource(),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      audit({ request, action: 'config_change', resource: 'POST /api/config/restore-backup', result: 'fail', message: msg });
       const status = err instanceof ConfigMigrationError ? 400 : 500;
       return void reply.code(status).send({ error: msg });
     }

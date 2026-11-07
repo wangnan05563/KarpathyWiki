@@ -22,6 +22,8 @@ const {
   saveMcpConfigMock,
   buildConfigExportMock,
   importConfigDataMock,
+  restoreConfigFromBackupMock,
+  getConfigSourceMock,
 } = vi.hoisted(() => ({
   loadConfigMock: vi.fn(),
   reloadConfigMock: vi.fn(),
@@ -33,6 +35,8 @@ const {
   saveMcpConfigMock: vi.fn(),
   buildConfigExportMock: vi.fn(),
   importConfigDataMock: vi.fn(),
+  restoreConfigFromBackupMock: vi.fn(),
+  getConfigSourceMock: vi.fn(),
 }));
 
 vi.mock('../src/config.js', async (importOriginal) => {
@@ -49,6 +53,8 @@ vi.mock('../src/config.js', async (importOriginal) => {
     saveMcpConfig: saveMcpConfigMock,
     buildConfigExport: buildConfigExportMock,
     importConfigData: importConfigDataMock,
+    restoreConfigFromBackup: restoreConfigFromBackupMock,
+    getConfigSource: getConfigSourceMock,
   };
 });
 
@@ -600,6 +606,51 @@ describe('routes/config.ts 配置路由', () => {
       importConfigDataMock.mockRejectedValue(new Error('EACCES'));
       app = await buildApp(adapter);
       const res = await app.inject({ method: 'POST', url: '/api/config/import', headers: jsonHeaders, payload: JSON.stringify({ mode: 'merge', data: {} }) });
+      expect(res.statusCode).toBe(500);
+      expect(res.json().error).toBe('EACCES');
+    });
+  });
+
+  // T04556：配置页要能区分「读的就是文件」与「读失败后回落默认值」
+  describe('GET /api/config 配置来源（T04556）', () => {
+    it('透出 configSource 字段', async () => {
+      loadConfigMock.mockResolvedValue(baseConfig());
+      getConfigSourceMock.mockReturnValue('defaults-after-parse-error');
+      app = await buildApp(adapter);
+      const res = await app.inject({ method: 'GET', url: '/api/config' });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().configSource).toBe('defaults-after-parse-error');
+    });
+  });
+
+  // T04556：.bak 只写不读等于没备份——补上恢复入口
+  describe('POST /api/config/restore-backup（T04556）', () => {
+    it('成功还原：返回 200、还原摘要与最新来源', async () => {
+      restoreConfigFromBackupMock.mockResolvedValue(baseConfig({ vaultPath: 'D:/restored/vault' }));
+      getConfigSourceMock.mockReturnValue('file');
+      app = await buildApp(adapter);
+      const res = await app.inject({ method: 'POST', url: '/api/config/restore-backup' });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({
+        ok: true,
+        restored: { vaultPath: 'D:/restored/vault', llm: { provider: 'glm', model: 'glm-4-plus' } },
+        configSource: 'file',
+      });
+      expect(restoreConfigFromBackupMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('无备份/备份非法（ConfigMigrationError）→ 400 并回原文', async () => {
+      restoreConfigFromBackupMock.mockRejectedValue(new ConfigMigrationError('未找到配置备份 config.json.bak，无法还原'));
+      app = await buildApp(adapter);
+      const res = await app.inject({ method: 'POST', url: '/api/config/restore-backup' });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toContain('未找到配置备份');
+    });
+
+    it('其他异常 → 500', async () => {
+      restoreConfigFromBackupMock.mockRejectedValue(new Error('EACCES'));
+      app = await buildApp(adapter);
+      const res = await app.inject({ method: 'POST', url: '/api/config/restore-backup' });
       expect(res.statusCode).toBe(500);
       expect(res.json().error).toBe('EACCES');
     });
