@@ -46,6 +46,16 @@ export const READABLE_DIRS: string[] = WRITABLE_DIRS;
 export const INIT_DIRS: string[] = WRITABLE_DIRS;
 
 /**
+ * vault 根目录下的「收录页」：合法可写、会 [[链接]] 页面，但不是链接图节点。
+ * T04561：computeLinkGraph 只收 PAGE_DIRS 内的页面与边，根目录这两个文件里的 [[链接]]
+ *   不产生入边——编译期 append_index 往 index.md 追加 `- [[页面名]] — 摘要` 正是产品设计的
+ *   正常收录动作，被收录页却仍被判 orphan（本机库 91 个 orphan 中 59+1 个由此产生，白烧 LLM）。
+ * 口径：链接图/统计/搜索不把根文件当节点（保持图语义不变），只有体检的 orphan 判定
+ *   把它们当作「额外入链来源」；因此本集合既不并入 PAGE_DIRS，也不并入 WRITABLE_DIRS。
+ */
+export const ROOT_LINK_SOURCES: string[] = ['index.md', 'log.md'];
+
+/**
  * 按 frontmatter title 去重的目录（编译 P2 去重仅对这两个目录生效）。
  * 保留独立定义的理由（T02686 要求逐处判定）：qa/solutions 按 rawId 命名天然不重复，
  * comparisons/queries 是聚合产物，按 title 重定向会把不同主题并成一页。

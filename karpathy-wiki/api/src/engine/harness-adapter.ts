@@ -17,7 +17,8 @@ import { parsePage, stringifyPage } from '../utils/frontmatter.js';
 // FR-18 知识时效判定：healthCheck 复检项复用同一判定规则，保证与浏览/问答取值一致
 import { computeKnowledgeStatus } from '../utils/knowledge-status.js';
 // T02686：页面口径单一来源（目录集合 + 测试文件排除规则）
-import { PAGE_DIRS, isPageFile } from '../vault/page-scope.js';
+// T04561：根目录收录页（index.md/log.md）是 orphan 判定的额外入链来源
+import { PAGE_DIRS, ROOT_LINK_SOURCES, isPageFile } from '../vault/page-scope.js';
 // T02921：wikilink 解析与目标名解析唯一实现（拆别名/锚点 + 大小写不敏感回落）
 import {
   addPageToNameIndex,
@@ -261,7 +262,8 @@ export class HarnessAdapter implements EngineAdapter {
     const graph = await this.vault.buildLinkGraph();
 
     // 入链集合：被任何页面 [[页面名]] 引用过的页面路径
-    const linked = new Set<string>(graph.edges.map((e) => e.to));
+    // T04561：额外并入 index.md/log.md 的收录链接（见 collectInboundPages 注释）
+    const linked = await this.collectInboundPages(graph);
     const orphans = graph.nodes.filter((n) => !linked.has(n));
 
     // 断链检测：扫描每个页面的 [[link]]，对照已存在的页面名集合。
@@ -351,6 +353,33 @@ export class HarnessAdapter implements EngineAdapter {
     return createLinkResolver(nameToPath);
   }
 
+  // T04561：orphan 判定用入链集合的唯一实现。
+  // 图口径（computeLinkGraph）刻意只含页面互链；index.md/log.md 是编译期 append_index 的
+  // 正常收录入口，被它们链接的页面实际有入链，只按图判定会成为假性孤儿。
+  // doHealthCheck 与 recheckIssueResolved 必须共用本方法：否则体检已不报的页，
+  // 修复后复检仍按老口径判「未消解」，批量作业把它记成 ineffective。
+  // 读失败按「无额外入链」降级——根文件缺失/被占用不得让整个体检报错。
+  private async collectInboundPages(graph: {
+    nodes: string[];
+    edges: Array<{ from: string; to: string }>;
+  }): Promise<Set<string>> {
+    const linked = new Set<string>(graph.edges.map((e) => e.to));
+    const resolver = this.buildNameResolverFromGraph(graph);
+    for (const rel of ROOT_LINK_SOURCES) {
+      let content = '';
+      try {
+        content = await this.vault.readFile(rel);
+      } catch {
+        continue;
+      }
+      for (const target of extractWikilinkTargets(content)) {
+        const toPath = resolver.resolve(target);
+        if (toPath) linked.add(toPath);
+      }
+    }
+    return linked;
+  }
+
   // T02922 定点复检：确定性判定单个问题是否已被消解，零 LLM 消耗。
   // 为什么不复用 healthCheck()：那会命中 HEALTH_CHECK_CACHE_TTL_MS 缓存，把「写后」判成「写前」；
   // buildLinkGraph 由 vault.writeFile 主动失效（vault-service.ts 写路径），此处拿到的一定是写后状态。
@@ -361,7 +390,8 @@ export class HarnessAdapter implements EngineAdapter {
     const graph = await this.vault.buildLinkGraph();
     if (input.issueType === 'orphan') {
       const targetPath = input.target as string;
-      return graph.edges.some((e) => e.to === targetPath);
+      // T04561：与 doHealthCheck 同一入链口径（含 index.md/log.md 收录链接）
+      return (await this.collectInboundPages(graph)).has(targetPath);
     }
     const { from, to } = input.target as { from: string; to: string };
     // 来源页已被删除/改路径 → 断链对不再存在，按消解（与体检列表一致：列表里也不会再有该对）
