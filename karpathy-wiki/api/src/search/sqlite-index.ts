@@ -9,6 +9,8 @@
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
+// T04458：召回层与 searchPages / searchPagesIndexed 共用同一份取词（裁决：必须共用取词）
+import { toSearchTerms } from '../utils/query-keywords.js';
 
 const nodeRequire = createRequire(import.meta.url);
 const { DatabaseSync } = nodeRequire('node:sqlite') as typeof import('node:sqlite');
@@ -204,17 +206,39 @@ export function toLikePattern(term: string): string {
 
 export function keywordRecall(dataDir: string, query: string, limit: number): Array<ChunkRow & { score: number }> {
   const d = getIndexDb(dataDir);
-  const terms = query.trim().split(/\s+/).filter(Boolean);
+  const terms = toSearchTerms(query);
   if (terms.length === 0) return [];
   // 短查询（trigram 需 ≥3 字符）降级 LIKE；中文两字词（最常见的搜索粒度）走此分支
   const useLike = terms.some((t) => t.length < 3) || /["*()]/.test(query);
   if (useLike) {
-    const likeTerms = terms.slice(0, 3);
-    const where = likeTerms.map(() => `content LIKE ? ESCAPE '${LIKE_ESCAPE_CHAR}'`).join(' AND ');
-    const rows = d.prepare(`
-      SELECT page_path, chunk_index, content, heading FROM chunks WHERE ${where} LIMIT ?
-    `).all(...likeTerms.map(toLikePattern), limit) as Array<{ page_path: string; chunk_index: number; content: string; heading: string | null }>;
-    return rows.map((r) => ({ pagePath: r.page_path, chunkIndex: r.chunk_index, content: r.content, heading: r.heading, score: -1 }));
+    // T04458：本分支与下方 FTS MATCH 分支同为 OR 语义。历史上这里是「前 3 个词 AND」——
+    // 共用取词后中文查询必然产出 2-gram（全部 <3 字符）而全落进本分支，AND 会让
+    // 「两个概念分处相邻两节」的页面整页召回不到，同一查询在索引可用/不可用时给出不同召回集。
+    // 逐词各取 limit 条再轮转合并：单条 OR + LIMIT 按 rowid 先到先得，
+    // 高频词的前 N 个 chunk 会把低频词的页面挤出候选集（test/search-shared-keywords.test.ts R10）。
+    const stmt = d.prepare(`
+      SELECT page_path, chunk_index, content, heading FROM chunks WHERE content LIKE ? ESCAPE '${LIKE_ESCAPE_CHAR}' LIMIT ?
+    `);
+    const buckets = terms.map(
+      (t) => stmt.all(toLikePattern(t), limit) as Array<{ page_path: string; chunk_index: number; content: string; heading: string | null }>,
+    );
+    const merged: Array<{ page_path: string; chunk_index: number; content: string; heading: string | null }> = [];
+    const seen = new Set<string>();
+    for (let i = 0; merged.length < limit; i++) {
+      let any = false;
+      for (const bucket of buckets) {
+        const row = bucket[i];
+        if (!row) continue;
+        any = true;
+        const key = `${row.page_path}#${row.chunk_index}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(row);
+        if (merged.length >= limit) break;
+      }
+      if (!any) break; // 所有词的候选都取完了
+    }
+    return merged.map((r) => ({ pagePath: r.page_path, chunkIndex: r.chunk_index, content: r.content, heading: r.heading, score: -1 }));
   }
   const match = terms.map((t) => `"${t.replace(/"/g, '""')}"`).join(' OR ');
   try {

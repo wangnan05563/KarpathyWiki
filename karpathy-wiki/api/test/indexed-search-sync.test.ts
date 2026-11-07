@@ -40,13 +40,18 @@ afterAll(async () => {
   await fs.rm(tempDir, { recursive: true, force: true });
 });
 
+// T04458：查询串只用拉丁标记，不带「唯一标记」这段中文。
+// 取词收敛后中文查询会展开成 2-gram（唯一/一标/标记），而三页正文都含「页面/提到」这类共用 bigram，
+// 于是「查 beta 的标记」会把 alpha 一并召回——本文件锁的是索引新鲜度（删页/改写后旧内容不再命中），
+// 不是中文分词；标记必须在**词项级**唯一，否则 toEqual([]) / toHaveLength(1) 锁的是分词口径而非同步。
+// 中文整句召回由 test/search-shared-keywords.test.ts 负责。
 describe('O1 索引增量同步', () => {
   it('服务内写入后，下一次搜索立即命中新页（不等 5 s 节流）', async () => {
     await ensureIndexSynced(dataDir, vault);
-    expect(await searchPagesIndexed(dataDir, vault, '唯一标记ALPHA')).toHaveLength(1);
+    expect(await searchPagesIndexed(dataDir, vault, 'ALPHA')).toHaveLength(1);
 
     await vault.writeFile('entities/beta.md', matter.stringify('\n乙页面，提到 唯一标记BETA。\n', { title: 'beta', updated: '2026-11-01' }));
-    const hits = await searchPagesIndexed(dataDir, vault, '唯一标记BETA');
+    const hits = await searchPagesIndexed(dataDir, vault, 'BETA');
     expect(hits?.map((h) => h.path)).toContain('entities/beta.md');
   });
 
@@ -54,14 +59,14 @@ describe('O1 索引增量同步', () => {
     await fs.rm(path.join(vaultDir, 'entities', 'beta.md'));
     // 未强制同步前，节流窗口内的读数仍可能含旧页；强制同步后必须为空
     await ensureIndexSynced(dataDir, vault, true);
-    expect(await searchPagesIndexed(dataDir, vault, '唯一标记BETA')).toEqual([]);
+    expect(await searchPagesIndexed(dataDir, vault, 'BETA')).toEqual([]);
   });
 
   it('mtime 变化（外部改写）在下一次同步里被重索引，旧内容不再命中', async () => {
     await writePage('entities/gamma.md', '丙页面，关键词 唯一标记GAMMAOLD。');
     // 外部落盘不动修订号，靠同步周期收敛；这里用强制同步表达「下一个周期」
     await ensureIndexSynced(dataDir, vault, true);
-    expect(await searchPagesIndexed(dataDir, vault, '唯一标记GAMMAOLD')).toHaveLength(1);
+    expect(await searchPagesIndexed(dataDir, vault, 'GAMMAOLD')).toHaveLength(1);
 
     await writePage('entities/gamma.md', '丙页面改写，关键词 唯一标记GAMMANEW。');
     // 判 stale 用的是「文件 mtime 比索引写入时间新 1 s 以上」，同秒内的两次写需要显式推后 mtime
@@ -69,8 +74,8 @@ describe('O1 索引增量同步', () => {
     const t = (Date.now() + 5_000) / 1000;
     await fs.utimes(abs, t, t);
     await ensureIndexSynced(dataDir, vault, true);
-    expect(await searchPagesIndexed(dataDir, vault, '唯一标记GAMMANEW')).toHaveLength(1);
-    expect(await searchPagesIndexed(dataDir, vault, '唯一标记GAMMAOLD')).toEqual([]);
+    expect(await searchPagesIndexed(dataDir, vault, 'GAMMANEW')).toHaveLength(1);
+    expect(await searchPagesIndexed(dataDir, vault, 'GAMMAOLD')).toEqual([]);
   });
 
   it('纯过滤查询（无关键词）返回 null，交给调用方回退', async () => {

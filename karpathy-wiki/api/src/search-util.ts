@@ -8,6 +8,8 @@ import type { VaultService } from './vault/vault-service.js';
 // T02686：检索侧页面目录取 page-scope 单一来源
 import { PAGE_DIRS } from './vault/page-scope.js';
 import { DEFAULT_SCAN_CONCURRENCY, mapWithConcurrency } from './utils/async-pool.js';
+// T04458（裁决：必须共用取词）：与索引路径、召回层共用同一份取词，不再各自按空白切词
+import { toSearchTerms } from './utils/query-keywords.js';
 
 // 全文检索命中结果
 export interface SearchHit {
@@ -163,7 +165,7 @@ export async function searchPages(
   filter?: SearchFilter,
 ): Promise<SearchHit[]> {
   const pageDirs = PAGE_DIRS;
-  const terms = keywords.toLowerCase().split(/\s+/).filter(Boolean);
+  const terms = toSearchTerms(keywords);
   // T04455：与 matchSearchFilter 共用 narrowsToScope（同一份维度枚举）。
   // 原先这里自写了一遍 `filter?.source || filter?.status || filter?.type`，漏掉 tags 与 folder——
   // 只传 tags 的范围限定 + 空关键词于是被提前 return []，用户看到的「没有结果」根本不是检索结果。

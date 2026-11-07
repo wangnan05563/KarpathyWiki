@@ -11,6 +11,8 @@ import type { VaultService } from '../vault/vault-service.js';
 import type { SearchFilter, SearchHit } from '../search-util.js';
 import { mapWithConcurrency } from '../utils/async-pool.js';
 import { getPageSnapshot } from '../utils/derived-cache.js';
+// T04458：与 legacy 扫描、召回层共用同一份取词（整句中文不再当成一个词项）
+import { toSearchTerms } from '../utils/query-keywords.js';
 import { keywordRecall, listIndexedPageTimes, removePageIndex } from './sqlite-index.js';
 import { indexPage, listVaultPages } from './hybrid-search.js';
 
@@ -216,12 +218,13 @@ export async function searchPagesIndexed(
   limit = 20,
   filter?: SearchFilter,
 ): Promise<SearchHit[] | null> {
-  const terms = keywords.toLowerCase().split(/\s+/).filter(Boolean);
+  const terms = toSearchTerms(keywords);
   if (terms.length === 0) return null;
 
   await ensureIndexSynced(dataDir, vault);
   // 多取候选 chunk，保证同一页面的多个 chunk 不会把 top-20 页面挤掉
-  const rows = keywordRecall(dataDir, keywords, Math.max(limit * 20, 200));
+  // 传词表而非原句：召回层与下方 hitCount/snippet 必须用同一份词，否则「召回到的页」与「算分的词」会分叉
+  const rows = keywordRecall(dataDir, terms.join(' '), Math.max(limit * 20, 200));
   if (rows.length === 0) return [];
 
   const byPage = groupChunksByPage(rows);

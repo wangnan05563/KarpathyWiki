@@ -1,9 +1,9 @@
 // T04176：把「一句自然语言问题」变成「检索可用的关键词集合」。
 //
-// 为什么需要：searchPages 的口径是「按空白切词 + 逐词 includes 匹配」。英文问题切出来的是单词，
-// 中文问题切完只剩**整句**（中文没有空格），于是「知识库的价值体现在哪里」这种问法要求页面正文
-// 逐字包含整句才算命中——真实页面几乎不可能，降级检索必然 0 命中。问答降级链第 2 级直接把整句
-// 问题当关键词传进来（queryWithSearchFallback），于是中文问题一律落到兜底文案。
+// 为什么需要：检索的匹配口径是「逐词 includes / FTS 短语」。英文问题切出来的是单词，
+// 中文问题按空白切完只剩**整句**（中文没有空格），于是「知识库的价值体现在哪里」这种问法要求页面正文
+// 逐字包含整句才算命中——真实页面几乎不可能，必然 0 命中。T04176 先把它接到问答降级链第 2 级；
+// T04458 起由 toSearchTerms 统一供 searchPages / searchPagesIndexed / keywordRecall 三个检索出口共用。
 //
 // 分词口径与 data-clean/dedup-engine.ts 的 tokenize 保持一致：拉丁词 + 中文 2-gram。
 // 为什么不在这里复用那个私有函数：它入参要先 normalizeContent（剥 frontmatter/链接）并返回
@@ -67,4 +67,20 @@ export function extractSearchKeywords(text: string, options: ExtractKeywordsOpti
   for (const gram of cjkGrams.length > 0 ? cjkGrams : allGrams) push(gram);
 
   return terms.slice(0, maxTerms).join(' ');
+}
+
+/**
+ * T04458（裁决：必须共用取词）：检索侧的唯一取词入口。
+ * searchPages / searchPagesIndexed / keywordRecall 三处都从这里拿词表，
+ * 不再各自 `split(/\s+/)`——中文没有空格，那样整句会成为一个词项，三个出口一律 0 命中。
+ *
+ * 抽不出词时回退原文按空白切词：`C++`、`%`、`_v` 这类符号查询在共用取词之前是按字面命中的
+ * （T04068 的 LIKE 转义锁就钉在这类输入上），返回空词表等于把整类查询判成「无需检索」。
+ * 回退同样受词表上限约束：每个词都要在全库正文做一次匹配，词数直接决定扫描耗时。
+ */
+export function toSearchTerms(query: string, options: ExtractKeywordsOptions = {}): string[] {
+  const maxTerms = options.maxTerms ?? 24;
+  const extracted = extractSearchKeywords(query, options);
+  if (extracted.length > 0) return extracted.split(' ');
+  return query.toLowerCase().split(/\s+/).filter(Boolean).slice(0, maxTerms);
 }

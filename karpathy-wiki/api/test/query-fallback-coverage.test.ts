@@ -189,13 +189,15 @@ describe('T04176-A 降级检索取词', () => {
     expect(extractSearchKeywords(long, { maxTerms: 3 }).split(' ')).toHaveLength(3);
   });
 
-  it('串联 searchPages：改造前整句 0 命中，抽取后命中新导入页面（修分词不接线=假修复）', async () => {
+  it('串联 searchPages：整句直传与先抽词再传同结论（修分词不接线=假修复）', async () => {
     const question = '知识库的价值体现在哪里';
-    // 旧口径：整句当一个词 → 必然空
-    expect(await searchPages(vault, question, 5)).toHaveLength(0);
-    // 新口径：抽词后进降级链第 2 级的取数
-    const hits = await searchPages(vault, extractSearchKeywords(question), 5);
-    expect(hits.map((h) => h.path)).toContain('entities/llm-wiki.md');
+    // T04458 前这里断言「整句直传必然 0 命中」——那是把缺陷当基线：取词只接在问答降级链上，
+    // searchPages 自己仍按空白切词。取词收敛进 searchPages 后，整句直传必须命中，
+    // 且与「调用方先抽词再传」给出同一份路径序列（单一取词源，两条入口不许分叉）。
+    const direct = await searchPages(vault, question, 5);
+    const preExtracted = await searchPages(vault, extractSearchKeywords(question), 5);
+    expect(direct.map((h) => h.path)).toContain('entities/llm-wiki.md');
+    expect(preExtracted.map((h) => h.path)).toEqual(direct.map((h) => h.path));
   });
 
   // 「真的接到调用点上」由 D 组端到端锁：取词没接线时第 2 级必然 0 命中，
