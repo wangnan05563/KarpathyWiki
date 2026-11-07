@@ -103,6 +103,21 @@
   --graph-edge: rgba(0, 255, 136, 0.4);
   --graph-edge-highlight: #ff0080;
   --graph-label: #ffffff;
+  /* T04513：画布配对 token（深底主题原色板本就达标，只换掉 alpha 封顶的连线）。 */
+  --graph-entities-readable: var(--graph-entities);
+  --graph-concepts-readable: var(--graph-concepts);
+  --graph-comparisons-readable: var(--graph-comparisons);
+  --graph-queries-readable: var(--graph-queries);
+  --graph-qa-readable: var(--graph-qa);
+  --graph-solutions-readable: var(--graph-solutions);
+  --graph-entities-border-readable: var(--graph-entities-border);
+  --graph-concepts-border-readable: var(--graph-concepts-border);
+  --graph-comparisons-border-readable: var(--graph-comparisons-border);
+  --graph-queries-border-readable: var(--graph-queries-border);
+  --graph-qa-border-readable: var(--graph-qa-border);
+  --graph-solutions-border-readable: var(--graph-solutions-border);
+  --graph-edge-readable: #00ff88; /* 2.993/3.058 → 15.179/14.206（原 rgba 的 alpha 是封顶根因） */
+  --graph-edge-highlight-readable: var(--graph-edge-highlight);
 
   /* Scene backgrounds: container depth area (code blocks, tree, stat card) */
   --bg-scene: #050508;

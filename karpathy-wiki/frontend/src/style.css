@@ -239,6 +239,31 @@
   --graph-edge-highlight: #00f5ff;
   --graph-label: #f3e9ff;
 
+  /* T04513：画布配对 token（裁决 = 方案 2「独立画布配对 token」）。
+     为什么单开一族：画布色板不经 CSS 声明渲染，而是 Graph.vue 用 getComputedStyle 读变量后交给
+     vis-network 画到 canvas 上；「本色前景压同源 alpha」这类不可达只能落到 token 层修 —— 原始
+     --graph-* 是色相来源（也仍被 Browse.vue 的时效角标当底色用），-readable 才是画布真正消费的档。
+     口径：按**所在面**配对 —— 节点填充/描边与连线对画布面 --bg-scene，图例点（与节点同色）对卡片面
+     --bg-card-solid，两侧都要 ≥3.0（WCAG 1.4.11 非文本控件）。连线原值 rgba(...,.45) 的 alpha 会
+     把可达对比度封顶（压到纯黑也不够），故 readable 档一律**不透明**；vis 侧也不得再二次乘 opacity。
+     取值方法沿用 T04469 取证：保持色相、只调明度，逐主题搜索到恰好达标（目标 3.05 留取整余量）。
+     未调整的写 var(--graph-*) 别名 —— 单一色板来源，下游改色板时 readable 自动跟随。 */
+  --graph-entities-readable: var(--graph-entities);
+  --graph-concepts-readable: var(--graph-concepts);
+  --graph-comparisons-readable: var(--graph-comparisons);
+  --graph-queries-readable: var(--graph-queries);
+  --graph-qa-readable: var(--graph-qa);
+  --graph-solutions-readable: var(--graph-solutions);
+  --graph-entities-border-readable: var(--graph-entities-border);
+  --graph-concepts-border-readable: var(--graph-concepts-border);
+  --graph-comparisons-border-readable: var(--graph-comparisons-border);
+  --graph-queries-border-readable: var(--graph-queries-border);
+  --graph-qa-border-readable: var(--graph-qa-border);
+  --graph-solutions-border-readable: var(--graph-solutions-border);
+  /* 原 rgba(176,38,255,.45) 对 --bg-scene 只有 1.704：取同色相的实色 */
+  --graph-edge-readable: #b026ff;
+  --graph-edge-highlight-readable: var(--graph-edge-highlight);
+
   /* 场景背景与边框 */
   --bg-scene: #050010;
   --border-accent: rgba(176, 38, 255, 0.4);

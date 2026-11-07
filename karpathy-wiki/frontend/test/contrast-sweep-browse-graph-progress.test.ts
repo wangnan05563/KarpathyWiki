@@ -163,7 +163,13 @@ const EXPECTED: Record<string, { n: number; readable: number; fam: Record<string
   'src/views/Graph.vue': { n: 36, readable: 36, fam: { accent: 26, pink: 10 }, tint: 31 },
 };
 
-const readableRefCount = (src: string) => (src.match(/-readable/g) || []).length;
+/**
+ * 只统计本清单覆盖的三族（accent / pink / purple）。
+ * T04513 起 Graph.vue 另有 --graph-*-readable 一族（画布配对档，由 test/contrast-graph-canvas.test.ts
+ * 独立审计）。把它一并计入会让「消费点数 == 清单行数」失去意义：那 42 处消费点不在本 AUDIT 清单里，
+ * 对齐断言就会从「清单与代码互相钉住」退化成「只要数字相等就行」。
+ */
+const readableRefCount = (src: string) => (src.match(/--(?:accent|pink|purple)-readable/g) || []).length;
 const famCount = (src: string, fam: string) => (src.match(new RegExp(`--${fam}-readable`, 'g')) || []).length;
 const rowsOf = (f: string) => AUDIT.filter((r) => r.label.startsWith(PAGE[f] + '·'));
 

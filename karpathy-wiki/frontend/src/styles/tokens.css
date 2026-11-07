@@ -148,6 +148,21 @@
   --graph-edge: rgba(77, 141, 255, 0.35);
   --graph-edge-highlight: #4d8dff;
   --graph-label: #e6edf3;
+  /* T04513：画布配对 token（dark 只作画布辅助主题参与审计，不扩 loadThemes() 的 8 主题口径）。 */
+  --graph-entities-readable: var(--graph-entities);
+  --graph-concepts-readable: var(--graph-concepts);
+  --graph-comparisons-readable: var(--graph-comparisons);
+  --graph-queries-readable: var(--graph-queries);
+  --graph-qa-readable: var(--graph-qa);
+  --graph-solutions-readable: var(--graph-solutions);
+  --graph-entities-border-readable: var(--graph-entities-border);
+  --graph-concepts-border-readable: var(--graph-concepts-border);
+  --graph-comparisons-border-readable: var(--graph-comparisons-border);
+  --graph-queries-border-readable: var(--graph-queries-border);
+  --graph-qa-border-readable: var(--graph-qa-border);
+  --graph-solutions-border-readable: var(--graph-solutions-border);
+  --graph-edge-readable: #4d8dff; /* 1.747/1.752 → 5.787/5.412（原 rgba(77,141,255,.35) 的 alpha 封顶） */
+  --graph-edge-highlight-readable: var(--graph-edge-highlight);
 
   /* 激活态配对硬规则（NFR-2）：暗底激活背景（深蓝）→ 白色前景。
      --menu-active-fg 为旧变量名别名，保留避免既有消费点断裂（FR-24 规格 2） */

@@ -142,6 +142,22 @@
   --graph-edge: rgba(255, 107, 53, 0.35);
   --graph-edge-highlight: #00a8e8;
   --graph-label: #1a1a2e;
+  /* T04513：画布配对 token（浅底主题须压深明度；未调整的别名回原色板）。
+     括号内为「画布面/卡片面」实算，原值→新值。 */
+  --graph-entities-readable: #ff5719; /* 2.737/2.835 → 3.058/3.168 */
+  --graph-concepts-readable: #0099d3; /* 2.610/2.704 → 3.120/3.232 */
+  --graph-comparisons-readable: var(--graph-comparisons);
+  --graph-queries-readable: #f46000; /* 2.232/2.312 → 3.109/3.221 */
+  --graph-qa-readable: #c18501; /* 1.469/1.522 → 3.060/3.171 */
+  --graph-solutions-readable: #17a37e; /* 1.897/1.965 → 3.082/3.193 */
+  --graph-entities-border-readable: #f46000; /* 2.232/2.312 → 3.109/3.221 */
+  --graph-concepts-border-readable: #0098da; /* 1.923/1.993 → 3.117/3.229 */
+  --graph-comparisons-border-readable: var(--graph-comparisons-border);
+  --graph-queries-border-readable: #f36400; /* 1.832/1.898 → 3.055/3.166 */
+  --graph-qa-border-readable: #bd8500; /* 1.320/1.368 → 3.109/3.221 */
+  --graph-solutions-border-readable: #1ea54f; /* 1.682/1.743 → 3.094/3.206 */
+  --graph-edge-readable: #ff5719; /* 1.435/1.447 → 3.058/3.168（原 rgba 的 alpha 是封顶根因） */
+  --graph-edge-highlight-readable: #0099d3; /* 2.610/2.704 → 3.120/3.232 */
 
   /* Scene backgrounds: container depth area (code blocks, tree, stat card) */
   --bg-scene: #fafbfc;

@@ -149,6 +149,21 @@
   --graph-edge: rgba(200, 162, 232, 0.4);
   --graph-edge-highlight: #a8e0d8;
   --graph-label: #4a3a52;
+  /* T04513：画布配对 token（马卡龙色板明度最高，14 项全部下压；括号内为「画布面/卡片面」实算）。 */
+  --graph-entities-readable: #ff428d; /* 1.551/1.664 → 3.050/3.273 */
+  --graph-concepts-readable: #389c8e; /* 1.367/1.466 → 3.100/3.326 */
+  --graph-comparisons-readable: #ac73dc; /* 1.999/2.145 → 3.136/3.365 */
+  --graph-queries-readable: #ff417b; /* 1.386/1.487 → 3.109/3.336 */
+  --graph-qa-readable: #cc7a00; /* 1.277/1.370 → 3.081/3.306 */
+  --graph-solutions-readable: #569f39; /* 1.372/1.472 → 3.051/3.274 */
+  --graph-entities-border-readable: #ff417b; /* 1.386/1.487 → 3.109/3.336 */
+  --graph-concepts-border-readable: #2a9c85; /* 1.146/1.229 → 3.160/3.391 */
+  --graph-comparisons-border-readable: #af76d4; /* 1.691/1.814 → 3.075/3.299 */
+  --graph-queries-border-readable: #ff4378; /* 1.243/1.334 → 3.094/3.319 */
+  --graph-qa-border-readable: #c67a00; /* 1.148/1.232 → 3.164/3.395 */
+  --graph-solutions-border-readable: #46a122; /* 1.178/1.264 → 3.067/3.290 */
+  --graph-edge-readable: #ac73dc; /* 1.298/1.329 → 3.136/3.365（原 rgba 的 alpha 是封顶根因） */
+  --graph-edge-highlight-readable: #389c8e; /* 1.367/1.466 → 3.100/3.326 */
 
   /* Scene backgrounds: container depth area (code blocks, tree, stat card) */
   --bg-scene: #fff5f0;

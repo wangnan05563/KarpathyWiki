@@ -136,6 +136,21 @@
   --graph-edge: rgba(37, 99, 235, 0.35);
   --graph-edge-highlight: #06b6d4;
   --graph-label: #0f172a;
+  /* T04513：画布配对 token（括号内为「画布面/卡片面」实算，原值→新值）。 */
+  --graph-entities-readable: var(--graph-entities);
+  --graph-concepts-readable: #0599b2; /* 2.216/2.428 → 3.089/3.384 */
+  --graph-comparisons-readable: var(--graph-comparisons);
+  --graph-queries-readable: var(--graph-queries);
+  --graph-qa-readable: #c27d08; /* 1.960/2.148 → 3.076/3.370 */
+  --graph-solutions-readable: #0e9f6f; /* 2.315/2.537 → 3.088/3.383 */
+  --graph-entities-border-readable: var(--graph-entities-border);
+  --graph-concepts-border-readable: #0d99ae; /* 1.650/1.807 → 3.099/3.395 */
+  --graph-comparisons-border-readable: #737ff7; /* 2.723/2.983 → 3.138/3.438 */
+  --graph-queries-border-readable: #348cf9; /* 2.321/2.542 → 3.060/3.352 */
+  --graph-qa-border-readable: #b48303; /* 1.524/1.669 → 3.098/3.393 */
+  --graph-solutions-border-readable: #229e71; /* 1.755/1.922 → 3.093/3.389 */
+  --graph-edge-readable: #2563eb; /* 1.636/1.671 → 4.718/5.168（原 rgba 的 alpha 是封顶根因） */
+  --graph-edge-highlight-readable: #0599b2; /* 2.216/2.428 → 3.089/3.384 */
 
   /* Scene backgrounds: container depth area (code blocks, tree, stat card) */
   --bg-scene: #f1f5f9;

@@ -124,21 +124,22 @@ const DIR_OPTIONS = [
 // 现在两条改动：① 每个变量用**它自己在 :root 的声明值**兜底（串色不可能发生，最多回到母色板）；
 // ② 缺声明即 console.warn，让「画布颜色不对」在现场可被定位。
 // 兜底表与 style.css 的 :root 逐条比对由 test/contrast-graph-canvas.test.ts 钉住：改名/漏配/值漂移即红。
+// T04513：消费的已是 -readable 配对档（对画布面/卡片面实算 ≥3.0），原始 --graph-* 仍是色相来源。
 const GRAPH_VAR_FALLBACKS: Record<string, string> = {
-  '--graph-entities': '#ff006e',
-  '--graph-concepts': '#00f5ff',
-  '--graph-comparisons': '#b026ff',
-  '--graph-queries': '#ff3ec9',
-  '--graph-entities-border': '#ff4d94',
-  '--graph-concepts-border': '#7afaff',
-  '--graph-comparisons-border': '#d366ff',
-  '--graph-queries-border': '#ff7ad9',
-  '--graph-qa': '#ff9500',
-  '--graph-solutions': '#00ff88',
-  '--graph-qa-border': '#ffb84d',
-  '--graph-solutions-border': '#5fffaa',
-  '--graph-edge': 'rgba(176, 38, 255, 0.45)',
-  '--graph-edge-highlight': '#00f5ff',
+  '--graph-entities-readable': '#ff006e',
+  '--graph-concepts-readable': '#00f5ff',
+  '--graph-comparisons-readable': '#b026ff',
+  '--graph-queries-readable': '#ff3ec9',
+  '--graph-qa-readable': '#ff9500',
+  '--graph-solutions-readable': '#00ff88',
+  '--graph-entities-border-readable': '#ff4d94',
+  '--graph-concepts-border-readable': '#7afaff',
+  '--graph-comparisons-border-readable': '#d366ff',
+  '--graph-queries-border-readable': '#ff7ad9',
+  '--graph-qa-border-readable': '#ffb84d',
+  '--graph-solutions-border-readable': '#5fffaa',
+  '--graph-edge-readable': '#b026ff',
+  '--graph-edge-highlight-readable': '#00f5ff',
   '--graph-label': '#f3e9ff',
 };
 
@@ -160,22 +161,22 @@ function getThemeVar(name: string): string {
 // FR-15-5：补全 6 目录颜色，与 SCHEMA.md type 枚举对齐
 function getDirColors(): Record<string, string> {
   return {
-    entities: getThemeVar('--graph-entities'),
-    concepts: getThemeVar('--graph-concepts'),
-    comparisons: getThemeVar('--graph-comparisons'),
-    queries: getThemeVar('--graph-queries'),
-    qa: getThemeVar('--graph-qa'),
-    solutions: getThemeVar('--graph-solutions'),
+    entities: getThemeVar('--graph-entities-readable'),
+    concepts: getThemeVar('--graph-concepts-readable'),
+    comparisons: getThemeVar('--graph-comparisons-readable'),
+    queries: getThemeVar('--graph-queries-readable'),
+    qa: getThemeVar('--graph-qa-readable'),
+    solutions: getThemeVar('--graph-solutions-readable'),
   };
 }
 function getDirBorders(): Record<string, string> {
   return {
-    entities: getThemeVar('--graph-entities-border'),
-    concepts: getThemeVar('--graph-concepts-border'),
-    comparisons: getThemeVar('--graph-comparisons-border'),
-    queries: getThemeVar('--graph-queries-border'),
-    qa: getThemeVar('--graph-qa-border'),
-    solutions: getThemeVar('--graph-solutions-border'),
+    entities: getThemeVar('--graph-entities-border-readable'),
+    concepts: getThemeVar('--graph-concepts-border-readable'),
+    comparisons: getThemeVar('--graph-comparisons-border-readable'),
+    queries: getThemeVar('--graph-queries-border-readable'),
+    qa: getThemeVar('--graph-qa-border-readable'),
+    solutions: getThemeVar('--graph-solutions-border-readable'),
   };
 }
 
@@ -315,7 +316,7 @@ function buildListData(data: GraphData): ListGroup[] {
   // 转为数组
   return Array.from(groups.entries()).map(([dir, pages]) => ({
     dir,
-    color: getDirColors()[dir] ?? getThemeVar('--graph-comparisons'),
+    color: getDirColors()[dir] ?? getThemeVar('--graph-comparisons-readable'),
     pages: pages.sort((a, b) => b.links - a.links),
   }));
 }
@@ -331,8 +332,8 @@ function buildNodes(data: GraphData, huge: boolean, large: boolean) {
     const parts = path.split('/');
     const dir = parts[0] ?? 'default';
     const label = parts[parts.length - 1]?.replace('.md', '') ?? path;
-    const bg = getDirColors()[dir] ?? getThemeVar('--graph-comparisons');
-    const border = getDirBorders()[dir] ?? getThemeVar('--graph-comparisons-border');
+    const bg = getDirColors()[dir] ?? getThemeVar('--graph-comparisons-readable');
+    const border = getDirBorders()[dir] ?? getThemeVar('--graph-comparisons-border-readable');
     return {
       id: path,
       // 超大图隐藏标签，仅悬停显示，减少 DOM 开销
@@ -348,14 +349,17 @@ function buildNodes(data: GraphData, huge: boolean, large: boolean) {
   });
 }
 
-// 构建边：半透明霓虹紫，大图模式关闭平滑曲线减少 Canvas 绘制
+// 构建边：可读档实色，大图模式关闭平滑曲线减少 Canvas 绘制
+// T04513：不再设 color.opacity。vis 的 opacity 会叠加在 token 的 alpha 上二次合成 ——
+// 原 rgba(...,.45) × opacity .5 让可达对比度被 alpha 封顶（压到纯黑也不够 3.0）；
+// 现在 token 已是不透明可读档，任何 <1 的 opacity 都会把实算口径再次架空。
 function buildEdges(data: GraphData, huge: boolean, large: boolean) {
   return data.edges.map((e, idx) => ({
     id: idx,
     from: e.from,
     to: e.to,
     arrows: 'to' as const,
-    color: { color: getThemeVar('--graph-edge'), highlight: getThemeVar('--graph-edge-highlight'), opacity: huge ? 0.25 : 0.5 },
+    color: { color: getThemeVar('--graph-edge-readable'), highlight: getThemeVar('--graph-edge-highlight-readable') },
     width: huge ? 1 : 1.5,
     smooth: !large && !huge,
   }));
@@ -950,22 +954,22 @@ watch(loading, () => {
       <!-- FR-15-5：补全 6 目录图例，与 SCHEMA.md type 枚举对齐 -->
       <div v-if="!listView" class="legend-bar">
         <span class="legend-item">
-          <span class="legend-dot" style="background: var(--graph-entities); box-shadow: 0 0 10px var(--graph-entities)"></span>实体
+          <span class="legend-dot" style="background: var(--graph-entities-readable); box-shadow: 0 0 10px var(--graph-entities-readable)"></span>实体
         </span>
         <span class="legend-item">
-          <span class="legend-dot" style="background: var(--graph-concepts); box-shadow: 0 0 10px var(--graph-concepts)"></span>概念
+          <span class="legend-dot" style="background: var(--graph-concepts-readable); box-shadow: 0 0 10px var(--graph-concepts-readable)"></span>概念
         </span>
         <span class="legend-item">
-          <span class="legend-dot" style="background: var(--graph-comparisons); box-shadow: 0 0 10px var(--graph-comparisons)"></span>对比
+          <span class="legend-dot" style="background: var(--graph-comparisons-readable); box-shadow: 0 0 10px var(--graph-comparisons-readable)"></span>对比
         </span>
         <span class="legend-item">
-          <span class="legend-dot" style="background: var(--graph-queries); box-shadow: 0 0 10px var(--graph-queries)"></span>问答
+          <span class="legend-dot" style="background: var(--graph-queries-readable); box-shadow: 0 0 10px var(--graph-queries-readable)"></span>问答
         </span>
         <span class="legend-item">
-          <span class="legend-dot" style="background: var(--graph-qa); box-shadow: 0 0 10px var(--graph-qa)"></span>业务问答
+          <span class="legend-dot" style="background: var(--graph-qa-readable); box-shadow: 0 0 10px var(--graph-qa-readable)"></span>业务问答
         </span>
         <span class="legend-item">
-          <span class="legend-dot" style="background: var(--graph-solutions); box-shadow: 0 0 10px var(--graph-solutions)"></span>方案沉淀
+          <span class="legend-dot" style="background: var(--graph-solutions-readable); box-shadow: 0 0 10px var(--graph-solutions-readable)"></span>方案沉淀
         </span>
       </div>
 
