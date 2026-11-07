@@ -266,26 +266,46 @@ function defaultConfig(): AppConfig {
 // 解析 config.json 实际路径，供 tunnel 路由等落盘复用。
 // 查找顺序（与 CWD 解耦）：
 //   1. 权威路径（SEA: exe/config.json，开发: api/config.json，由 getResourcePath 统一解析）
-//   2. CWD/config.json（兼容用户从任意目录启动的场景）
+//   2. CWD/config.json（兼容用户从任意目录启动的场景；T04557 起先校验内容归属）
 //   3. 找不到时返回权威路径作为写入目标（保持向后兼容）
 // 为什么不用 process.pkg 检测：SEA 模式下 process.pkg 不存在（仅传统 pkg 有），
 // 改用 runtime.ts 的 IS_SEA 标志统一识别打包模式
-export function getConfigPath(): string {
+export interface ConfigPathOptions {
+  cwd?: string;
+  authoritativePath?: string;
+}
+
+// 应用配置的特征键（T04557）：CWD 里可能躺着别的工具的 config.json，
+// 只要解析成功就会被旧逻辑当成应用配置，甚至被 persistConfigFile 整文覆盖。
+const APP_CONFIG_FEATURE_KEYS = ['vaultPath', 'llm', 'server'] as const;
+
+function isAppConfigFile(filePath: string): boolean {
+  try {
+    const parsed = JSON.parse(fsSync.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    return APP_CONFIG_FEATURE_KEYS.some((key) => key in parsed);
+  } catch {
+    return false;
+  }
+}
+
+export function getConfigPath(options: ConfigPathOptions = {}): string {
+  const authoritativePath = options.authoritativePath ?? API_CONFIG_PATH;
+  const cwd = options.cwd ?? process.cwd();
   const candidates: string[] = [
-    API_CONFIG_PATH,
-    path.resolve(process.cwd(), CONFIG_FILENAME),
+    authoritativePath,
+    path.resolve(cwd, CONFIG_FILENAME),
   ];
 
   for (const p of candidates) {
-    try {
-      fsSync.accessSync(p);
-      return p;
-    } catch {
-      // 尝试下一个候选路径
-    }
+    if (!fsSync.existsSync(p)) continue;
+    // 权威路径是应用自己的文件：即使内容损坏也返回，交给 loadConfig 走「改名留证」分支
+    if (p === authoritativePath) return p;
+    if (isAppConfigFile(p)) return p;
+    console.warn(`[配置] 忽略非应用配置文件：${p}`);
   }
-  // 候选路径都不存在时，返回权威路径作为写入目标（创建新配置文件）
-  return API_CONFIG_PATH;
+  // 候选路径都不存在/不可用时，返回权威路径作为写入目标（创建新配置文件）
+  return authoritativePath;
 }
 
 // 配置来源（T04556）：供 GET /api/config 透出，让配置页能区分「读的就是文件」

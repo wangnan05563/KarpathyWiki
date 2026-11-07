@@ -82,7 +82,8 @@ import { ProxyAgent, setGlobalDispatcher } from 'undici';
 // 用户机器不存在，派生的 dirname 不可用，导致日志/SPA 路径解析失败
 // 为什么不用 process.pkg 检测：SEA 模式下 process.pkg 不存在（仅传统 pkg 有），
 // IS_SEA 基于 __filename 是否存在检测，兼容 SEA 与 pkg 两种打包模式
-import { IS_SEA, getApiDir, getDataDir, getUserDataPath } from './utils/runtime.js';
+import { IS_SEA, getApiDir, getDataDir } from './utils/runtime.js';
+import { buildEnvFileCandidates, loadEnvFile as loadEnvFileFromCandidates } from './utils/env-file.js';
 
 // 向后兼容别名：IS_PACKAGED 语义 = 打包模式（SEA 或 pkg），等价于 IS_SEA
 const IS_PACKAGED = IS_SEA;
@@ -95,39 +96,10 @@ const STARTED_AT = new Date().toISOString();
 /**
  * 加载 .env 文件环境变量（pkg 打包模式需要手动加载）
  * 为什么需要：开发模式由 start.ps1 加载，打包后需自行加载
-
+ * 候选顺序与命中日志见 utils/env-file.ts（T04557：补 exe 同级候选，去 CWD 依赖）
  */
-function applyEnvLine(line: string): void {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith('#')) return;
-
-  // 用 match 从 .env 行提取 KEY=VALUE；未匹配返回 null 跳过
-  // 为什么用 match 而非 exec：单行单次解析，数组结果直接取 [1]（键）与 [2]（值）
-  const m = trimmed.match(/^([^=]+)=(.*)$/);
-  if (m && !process.env[m[1].trim()]) {
-    process.env[m[1].trim()] = m[2].trim();
-  }
-}
-
 function loadEnvFile(): void {
-
-
-  // SEA 模式：用户数据目录（%LOCALAPPDATA%/KarpathyWiki）下放 .env，普通用户可写、与 config.json 同目录
-  const candidates = [
-    getUserDataPath('.env'),
-    path.resolve(process.cwd(), '.env'),
-    path.resolve(process.cwd(), 'services', 'api', '.env'),
-  ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) {
-      const content = fs.readFileSync(p, 'utf8');
-      for (const line of content.split(/\r?\n/)) {
-        applyEnvLine(line);
-      }
-      console.log(`[启动] .env 已加载：${p}`);
-      break;
-    }
-  }
+  loadEnvFileFromCandidates(buildEnvFileCandidates());
 }
 
 /**
