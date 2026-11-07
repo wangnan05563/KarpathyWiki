@@ -5,6 +5,8 @@ import type { EngineAdapter, AppConfig } from '../types.js';
 import { withCompileLock } from '../compile-queue.js';
 import { createSSESender } from '../utils/sse.js';
 import { getPromptsDir } from '../utils/runtime.js';
+// T04571：test-run 会临时覆写 prompts/*.md 并消耗服务端共享 Key，挂管理员守卫
+import type { IsolationGuards } from '../middleware/auth.js';
 
 // FR-14-2 Prompt IDE 路由
 // AC-14-4: 支持 GET 列出/读取、PUT 编辑 prompts/*.md
@@ -77,6 +79,7 @@ const PROMPT_META: Record<string, PromptMeta> = {
 export function registerPromptsRoute(
   app: FastifyInstance,
   adapter: EngineAdapter,
+  guards: IsolationGuards,
   appConfig?: AppConfig,
 ) {
   // 列出所有可用 prompt 文件
@@ -158,6 +161,8 @@ export function registerPromptsRoute(
   app.post('/api/prompts/test-run', {
     // 试运行触发 LLM 调用 + vault 写入，限流 5/min 防滥用
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+    // T04571：会临时覆写 prompts/*.md 再还原，属管理操作，档位与写 prompts 的 PUT 一致
+    preHandler: guards.requireAdmin,
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as {
       promptName?: string;

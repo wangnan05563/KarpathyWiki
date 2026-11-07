@@ -15,6 +15,8 @@ import type { VaultService } from '../vault/vault-service.js';
 import type { AppConfig } from '../types.js';
 import { suggestTagsForPage, confirmTagForPage, listPendingTagPages } from '../workflows/tag-suggest-workflow.js';
 import { PAGE_DIRS_ALT } from '../vault/page-scope.js';
+// T04571：suggest 消耗服务端共享 Key，必须挂真实守卫（不得用默认 enabled=false 的空转守卫）
+import type { IsolationGuards } from '../middleware/auth.js';
 
 // 路径白名单正则：仅允许 PAGE_DIRS 目录下的 .md 文件
 // 与 vault-service.ts WRITE_ALLOWED_DIRS 中的页面目录对齐（排除 drafts/raw）
@@ -31,6 +33,7 @@ export function registerTagsRoute(
   app: FastifyInstance,
   vault: VaultService,
   config: AppConfig,
+  guards: IsolationGuards,
 ): void {
   // GET /api/tags/pending
   // 列出所有含 ai_tags 字段的页面，供前端 Browse.vue 展示待审核列表
@@ -50,6 +53,8 @@ export function registerTagsRoute(
   app.post('/api/tags/suggest', {
     // 触发 LLM 调用，10/min 防滥用（与 compile 同级别）
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    // T04571：消耗服务端共享 Key，档位与 /api/ai/models 一致（登录用户即可）
+    preHandler: guards.requireAuth,
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as { path?: string } | null;
     const pagePath = body?.path ?? '';

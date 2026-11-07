@@ -650,7 +650,8 @@ registerDataCleanRoute(app, vault, isolationGuards);
   registerSkillRoute(app, isolationGuards);
   // FR-10-1 AI 自动打标签：compile 末尾追加 ai_tags 建议 + 手动触发 + 确认
   // 为什么需要 config 完整对象：POST /api/tags/suggest 调用 LLM 需读取 llm.baseUrl/model/apiKey
-  registerTagsRoute(app, vault, config);
+  // T04571：suggest 消耗共享 Key，传真实守卫（此前不传时默认守卫 enabled=false，preHandler 空转）
+  registerTagsRoute(app, vault, config, isolationGuards);
   // FR-16-1 Discover Sources：基于双链拓扑推荐"邻近但未连接"的相关笔记 + 一键建立双链
   // 为什么不需要 config：纯拓扑计算（同目录/同标签/同作者），不调用 LLM
   registerDiscoverRoute(app, vault);
@@ -659,7 +660,8 @@ registerDataCleanRoute(app, vault, isolationGuards);
   registerGapsRoute(app, vault, config, isolationGuards);
   // FR-14-2 Prompt IDE：列出/编辑/试运行 prompts/*.md
   // 为什么需要 adapter 与 config：试运行端点调用 adapter.compile，需要 config 提供 LLM 配置
-  registerPromptsRoute(app, adapter, config);
+  // T04571：test-run 覆写 prompts/*.md + 消耗共享 Key，传真实守卫并要求管理员
+  registerPromptsRoute(app, adapter, isolationGuards, config);
   // FR-09-3 Podcast：生成对话式播客脚本 + 可选 TTS 合成 + 归档到 queries/
   // 为什么需要 adapter 与 config：adapter.podcast 调用 generatePodcast workflow，
   //   config 提供 podcast.ttsApiKey/ttsBaseUrl 决定是否启用 TTS 合成
