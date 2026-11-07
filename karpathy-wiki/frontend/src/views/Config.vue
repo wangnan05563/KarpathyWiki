@@ -503,6 +503,10 @@ const { dirtyFields: aiFormDirtyFields } = useDirtyFields(
 // 既看不见「从未入索引」的页面，也分不清「补算失败」与「压根没配向量模型」，用户据此无法判断该干什么。
 const indexStatus = ref<SearchIndexStatus>({ ...EMPTY_INDEX_STATUS });
 const rebuildingIndex = ref(false);
+// T04535：后端 POST /api/search/rebuild 挂 guards.requireAdmin，而「AI 服务」页签 adminOnly:false——
+// 非管理员此前能点到按钮、点完才吃 403。角色判定复用 authStore.isAdmin（内有 role === 'admin'，
+// 与后端同一口径），不在本文件另写角色名，避免前后端权限口径各长一套。
+const canRebuildIndex = computed(() => isAdmin.value);
 
 async function refreshIndexStatus() {
   try {
@@ -532,6 +536,8 @@ const indexStatusDetail = computed(() => {
 });
 
 async function handleRebuildIndex() {
+  // T04535：按钮对非管理员已置灰；入口再拦一次，防止键盘/程序化触发绕过置灰打到 403
+  if (!canRebuildIndex.value) return;
   rebuildingIndex.value = true;
   try {
     // embedding 配置随重建请求携带（BYOK）：复用当前表单的 baseUrl/apiKey + embeddingModel
@@ -3904,11 +3910,14 @@ async function importConfig() {
                       向量覆盖 {{ indexStatus.coveredPages }}/{{ indexStatus.totalPages }} 页（{{ indexStatus.totalChunks }} 块）
                     </span>
                     <span v-if="indexStatusDetail" class="form-hint" data-testid="search-index-detail">{{ indexStatusDetail }}</span>
+                    <!-- T04535：非管理员看到置灰按钮时要有可操作的说明，而不是点了才知道 403 -->
+                    <span v-if="!canRebuildIndex" class="form-hint" data-testid="rebuild-index-admin-hint">仅管理员可重建语义索引，请联系管理员</span>
                   </div>
                   <el-button
                     class="neon-btn"
                     data-testid="rebuild-index-btn"
-                    data-tip="重建知识库语义索引（含向量计算，耗时取决于页面数）"
+                    :disabled="!canRebuildIndex"
+                    :data-tip="canRebuildIndex ? '重建知识库语义索引（含向量计算，耗时取决于页面数）' : '仅管理员可重建语义索引'"
                     :loading="rebuildingIndex"
                     @click="handleRebuildIndex"
                   >重建索引</el-button>

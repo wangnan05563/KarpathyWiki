@@ -123,7 +123,7 @@ function installFetchStub(): void {
   );
 }
 
-async function mountConfigOnAiTab(): Promise<VueWrapper> {
+async function mountConfigOnAiTab(role: 'admin' | 'user' | 'guest' = 'admin'): Promise<VueWrapper> {
   setActivePinia(createPinia());
   const auth = useAuthStore();
   auth.token = 't04073';
@@ -135,8 +135,8 @@ async function mountConfigOnAiTab(): Promise<VueWrapper> {
   localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, 't04073');
   auth.user = {
     id: 'u-t04073',
-    username: 'admin',
-    role: 'admin',
+    username: role === 'admin' ? 'admin' : role,
+    role,
     enabled: true,
     createdAt: '2026-10-01T00:00:00.000Z',
     updatedAt: '2026-10-01T00:00:00.000Z',
@@ -293,5 +293,32 @@ describe('T04073 配置中心向量覆盖展示', () => {
     const error = vi.mocked(ElMessage.error).mock.calls.at(-1)?.[0] ?? '';
     expect(String(error)).toContain('网关错误');
     expect(String(error)).not.toMatch(/Unexpected token|JSON/);
+  }, MOUNT_BUDGET_MS);
+
+  // ── T04535：非管理员的事前拦截（后端 requireAdmin，前端不再等点击后吃 403） ──
+  it.each(['user', 'guest'] as const)('K · %s 角色：重建入口置灰 + 可操作说明，强行触发也不发请求', async (role) => {
+    wrapper = await mountConfigOnAiTab(role);
+    const btn = wrapper.find('[data-testid="rebuild-index-btn"]');
+    expect(btn.exists()).toBe(true);
+    // 置灰保留（与配置 tab 的锁定口径一致：不隐藏，用户能看到能力存在但不可用）
+    expect(btn.attributes('disabled')).toBeDefined();
+    const hint = wrapper.find('[data-testid="rebuild-index-admin-hint"]');
+    expect(hint.exists()).toBe(true);
+    expect(hint.text()).toContain('仅管理员可重建');
+    // 真挂载下强行事件触发：入口二次拦截必须兜住，不能打到后端再收 403
+    await btn.trigger('click');
+    await flushPromises();
+    expect(rebuildRequests.length).toBe(0);
+    expect(vi.mocked(ElMessage.error)).not.toHaveBeenCalled();
+  }, MOUNT_BUDGET_MS);
+
+  it('L · 管理员：入口可点、无拦截说明，点击照常发出重建请求', async () => {
+    wrapper = await mountConfigOnAiTab('admin');
+    const btn = wrapper.find('[data-testid="rebuild-index-btn"]');
+    expect(btn.attributes('disabled')).toBeUndefined();
+    expect(wrapper.find('[data-testid="rebuild-index-admin-hint"]').exists()).toBe(false);
+    await btn.trigger('click');
+    await flushPromises();
+    expect(rebuildRequests.length).toBe(1);
   }, MOUNT_BUDGET_MS);
 });
