@@ -27,12 +27,14 @@ const DEFAULT_BUDGET: BudgetConfig = {
   tokenBudget: 50000,
 };
 
-// 默认重试：3 次指数退避，仅对超时和限流重试（业务错误不应重试）
+// 默认重试：3 次指数退避，对超时/限流/网络错误/5xx 重试（业务错误不应重试）。
+// 注意重试放大：Layer A 网络重试(3) × Layer B(1+3) 最坏 12 次请求；配合 Retry-After
+// 上限（maxDelayMs）与调用方超时预算使用，扩展 retryOn 时须同步核算。
 const DEFAULT_RETRY: RetryConfig = {
   maxRetries: 3,
   baseDelayMs: 1000,
   maxDelayMs: 30000,
-  retryOn: ['timeout', 'rate_limit'],
+  retryOn: ['timeout', 'rate_limit', 'network', 'service_down'],
 };
 
 // Harness 主类：组合 LLM + 工具 + 预算 + 重试 + Hook，对外暴露 run/resume

@@ -351,9 +351,18 @@ export async function buildApp(): Promise<BuiltApp> {
         baseUrl: config.llm.baseUrl,
         model: config.llm.model,
         apiKey: apiKey ?? '',
+        // T04564：单次请求超时从配置读取，缺省 60s（与 harness 默认值一致）
+        timeoutMs: config.llm.timeoutMs ?? 60000,
       },
       tools: [],
       budget: config.budget,
+      // T04564：重试参数从配置读取（429/5xx/网络/超时），缺省值与 harness DEFAULT_RETRY 对齐
+      retry: {
+        maxRetries: config.retry?.maxRetries ?? 3,
+        baseDelayMs: config.retry?.baseDelayMs ?? 1000,
+        maxDelayMs: config.retry?.maxDelayMs ?? 30000,
+        retryOn: config.retry?.retryOn ?? ['timeout', 'rate_limit', 'network', 'service_down'],
+      },
       // T02772：显式注入 stateStore。不传时 harness 会用默认 FileStateStore，
       // 其目录是相对**进程 CWD** 的 `.harness/state`——开发模式落到 api/ 下、
       // SEA 模式取决于用户从哪个目录起进程（甚至可能是只读安装目录），

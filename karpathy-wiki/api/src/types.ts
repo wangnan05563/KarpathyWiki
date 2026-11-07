@@ -435,8 +435,16 @@ export interface AppConfig {
   // §真流式开关：stream=true 时 queryWorkflow 走 LLM 逐 token 推送（chatStream）
   // 为什么可选：保留向后兼容，老配置文件无此字段时 queryWorkflow 内部用 false 兜底
   // 权威源：后端 config.json 是默认值，前端可每次请求 body.stream 覆盖
-  llm: { provider: string; baseUrl: string; model: string; apiKeyRef: string; apiKey?: string; apiKeys?: Record<string, string>; stream?: boolean };
+  llm: { provider: string; baseUrl: string; model: string; apiKeyRef: string; apiKey?: string; apiKeys?: Record<string, string>; stream?: boolean; timeoutMs?: number };
   budget: { maxSteps: number; tokenBudget: number };
+  // T04564：LLM 调用重试参数（Layer B）。缺省值由 defaultConfig 提供，旧配置文件自动补齐。
+  // 为什么可选：保留向后兼容，且允许只覆盖其中一项（其余走默认值）。
+  retry?: {
+    maxRetries?: number;
+    baseDelayMs?: number;
+    maxDelayMs?: number;
+    retryOn?: ('timeout' | 'rate_limit' | 'network' | 'service_down' | 'tool_error' | 'parse_error')[];
+  };
   server: { host: string; port: number };
   localOnly: boolean;
   // T04563：批量修复项级自动重试与超时预算（缺省值由 defaultConfig 提供）

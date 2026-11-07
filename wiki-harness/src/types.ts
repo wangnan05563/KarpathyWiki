@@ -6,6 +6,8 @@ export interface LLMConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  // 单次 LLM 请求超时（ms），默认 60000；由宿主配置注入，缺省保持历史行为
+  timeoutMs?: number;
 }
 
 export interface Message {
@@ -211,7 +213,7 @@ export interface RetryConfig {
   maxRetries: number;  // 默认 3
   baseDelayMs: number; // 默认 1000
   maxDelayMs: number;  // 默认 30000
-  retryOn: ('timeout' | 'rate_limit' | 'tool_error' | 'parse_error')[];
+  retryOn: ('timeout' | 'rate_limit' | 'network' | 'service_down' | 'tool_error' | 'parse_error')[];
 }
 
 export interface StateStore {

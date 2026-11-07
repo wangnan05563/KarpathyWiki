@@ -42,8 +42,18 @@ function defaultConfig(): AppConfig {
       // §真流式默认值：false 保持向后兼容，前端可在 Query 页面切换并发送 body.stream=true
       // 为什么不默认 true：避免老用户升级后行为突变（流式可能触发某些 LLM 的限流）
       stream: false,
+      // T04564：单次 LLM 请求超时（原 harness 内硬编码 60s）
+      timeoutMs: 60000,
     },
     budget: { maxSteps: 20, tokenBudget: 50000 },
+    // T04564：LLM 重试（Layer B）。与 harness DEFAULT_RETRY 同值；
+    // 429/5xx/网络错误/超时重试，认证类确定性错误不重试。
+    retry: {
+      maxRetries: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 30000,
+      retryOn: ['timeout', 'rate_limit', 'network', 'service_down'],
+    },
     server: { host: 'localhost', port: 3000 },
     localOnly: false,
     healthCheck: {
@@ -399,6 +409,8 @@ function mergeConfigObjects(defaults: AppConfig, parsed: Partial<AppConfig>): Ap
     ...parsed,
     llm: { ...defaults.llm, ...parsed.llm },
     budget: { ...defaults.budget, ...parsed.budget },
+    // T04564：重试参数可选，未配置时沿用默认值；只写部分字段时浅合并补全
+    retry: mergeSection(defaults.retry, parsed.retry),
     server: { ...defaults.server, ...parsed.server },
     healthCheck: {
       ...defaults.healthCheck,

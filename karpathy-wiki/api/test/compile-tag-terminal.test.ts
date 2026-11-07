@@ -136,7 +136,8 @@ describe('T03613 编译事件序：tag 阶段收口在 done 之前', () => {
     expect(tagEvents.some((e) => e.status === 'running' && e === aggregate)).toBe(false);
   });
 
-  it('编译失败时不追加 tag 阶段，终态仍收口为 error', async () => {
+  // T04564：500 现按 service_down 走默认重试（1s+2s+4s），失败路径耗时约 8s，超时放宽
+  it('编译失败时不追加 tag 阶段，终态仍收口为 error', { timeout: 20_000 }, async () => {
     let turn = 0;
     vi.stubGlobal(
       'fetch',

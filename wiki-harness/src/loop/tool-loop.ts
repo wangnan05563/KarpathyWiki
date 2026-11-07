@@ -103,6 +103,7 @@ export async function runLoop(ctx: RunContext, config: LoopConfig): Promise<RunR
       const response = await withRetry(
         () => config.llm.chat(llmReq.messages, llmReq.tools, config.signal),
         config.retry,
+        config.signal,
       );
       const llmMs = Date.now() - llmT0;
 

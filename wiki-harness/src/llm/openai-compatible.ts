@@ -33,6 +33,39 @@ function toOpenAITools(tools: ToolDefinition[]) {
   }));
 }
 
+// 单次 LLM 请求默认超时：60s。可由 LLMConfig.timeoutMs 覆盖。
+const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+
+// 解析 Retry-After：支持秒数（"30"）与 HTTP-date 两种格式，非法值返回 null。
+export function parseRetryAfterMs(value: string | null): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    return Math.round(Number.parseFloat(trimmed) * 1000);
+  }
+  const date = Date.parse(trimmed);
+  if (Number.isNaN(date)) return null;
+  return Math.max(0, date - Date.now());
+}
+
+// Layer A 网络重试退避：baseDelayMs × 2^(attempt-1) 叠加 ±20% 抖动，避免多实例同时重试。
+export function networkRetryDelayMs(attempt: number, baseDelayMs: number): number {
+  return baseDelayMs * Math.pow(2, attempt - 1) * (0.8 + Math.random() * 0.4);
+}
+
+// HTTP 非 2xx 错误：把 status 与 Retry-After 挂到错误对象上，
+// 让 withRetry 能按 429/5xx 分类并遵守服务端要求的等待时间。
+function createHttpError(status: number, text: string, retryAfterHeader: string | null): Error {
+  const err = new Error(`LLM API error ${status}: ${text}`) as Error & {
+    status?: number;
+    retryAfterMs?: number;
+  };
+  err.status = status;
+  const retryAfterMs = parseRetryAfterMs(retryAfterHeader);
+  if (retryAfterMs !== null) err.retryAfterMs = retryAfterMs;
+  return err;
+}
+
 // OpenAI 兼容适配器：通过 baseUrl + apiKey + model 切换 GLM/Qwen/DeepSeek
 // 国产模型普遍兼容 OpenAI API 协议，零依赖原生 fetch 实现
 export class OpenAICompatibleAdapter implements LLMAdapter {
@@ -40,32 +73,40 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
 
   // 网络层错误判定：仅这些错误值得重试（代理抖动/连接重置/DNS 失败/超时）。
   // 与 HTTP 4xx/5xx 区分：后者是确定性错误，重试无意义。
+  // 原生 fetch 的真实原因常在 err.cause.code（如 ECONNRESET），message 只有 "fetch failed"。
   private isRetryableNetworkError(err: unknown): boolean {
     const msg = err instanceof Error ? err.message : String(err);
     const code = (err as { code?: string } | null)?.code ?? '';
-    return (
-      /fetch failed|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNABORTED|timeout|abort/i.test(msg) ||
-      /^(ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNABORTED)$/.test(code)
-    );
+    const cause = (err as { cause?: unknown } | null)?.cause;
+    const causeCode = cause instanceof Error ? ((cause as { code?: string }).code ?? '') : '';
+    const pattern = /fetch failed|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNABORTED|timeout|abort/i;
+    return pattern.test(msg) || pattern.test(code) || pattern.test(causeCode);
   }
 
   // 带指数退避重试的 fetch 封装。
   // 为什么集中于此：本适配器是全部 LLM 请求的出口，HTTP(S) 代理（如 Clash 127.0.0.1:10808）
   // 偶发抖动会触发原生 "fetch failed"，直接抛错会让编译/问答整轮失败；加重试可自愈多数瞬时故障。
   // 每次重试重建 AbortController：复用已 abort 的 signal 会使后续请求立即失败。
-  // external signal（FR-22）：用户主动停止时立即终止上游连接，与 60s 超时 signal 合并；
+  // external signal（FR-22）：用户主动停止时立即终止上游连接，与请求超时 signal 合并；
   // 注意 external 已 abort 时重试循环不生效——用户停止语义优先于网络自愈，不应再发新请求。
+  // 退避为 baseDelayMs × 2^(attempt-1) 并叠加 ±20% 抖动（与 withRetry 的指数口径一致）。
+  // 请求超时不在此层重试：抛出 TimeoutError 交给 withRetry 统一决策，避免 60s × N 的成倍放大。
   private async fetchWithRetry(
     url: string,
     init: RequestInit,
     externalSignal?: AbortSignal,
     retries = 3,
     baseDelayMs = 2000,
+    timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   ): Promise<Response> {
     let lastErr: unknown;
     for (let attempt = 1; attempt <= retries; attempt++) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 60000); // 单次 60s 超时
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs);
       // AbortSignal.any 合并超时与外部停止：任一触发即终止请求（Node 20+ 原生支持）
       const merged = externalSignal ? AbortSignal.any([controller.signal, externalSignal]) : controller.signal;
       try {
@@ -77,9 +118,15 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
         lastErr = err;
         // 用户已停止：不再重试（继续重试会违背"停止即终止"语义，白白消耗用户额度）
         if (externalSignal?.aborted) throw err;
+        if (timedOut) {
+          const timeoutErr = new Error(`LLM 请求超时（${timeoutMs}ms）`) as Error & { code?: string };
+          timeoutErr.name = 'TimeoutError';
+          timeoutErr.code = 'ETIMEDOUT';
+          throw timeoutErr;
+        }
         const retryable = this.isRetryableNetworkError(err);
         if (retryable && attempt < retries) {
-          const delay = baseDelayMs * attempt; // 2s, 4s 指数退避
+          const delay = networkRetryDelayMs(attempt, baseDelayMs);
           await new Promise((r) => setTimeout(r, delay));
           continue;
         }
@@ -106,11 +153,11 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
         'Authorization': `Bearer ${this.config.apiKey}`,
       },
       body: JSON.stringify(body),
-    }, signal);
+    }, signal, 3, 2000, this.config.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`LLM API error ${response.status}: ${text}`);
+      throw createHttpError(response.status, text, response.headers.get('retry-after'));
     }
 
     const data = (await response.json()) as OpenAIChatResponse;
@@ -144,11 +191,11 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
         'Authorization': `Bearer ${this.config.apiKey}`,
       },
       body: JSON.stringify(body),
-    }, signal);
+    }, signal, 3, 2000, this.config.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`LLM API error ${response.status}: ${text}`);
+      throw createHttpError(response.status, text, response.headers.get('retry-after'));
     }
 
     const reader = response.body?.getReader();
