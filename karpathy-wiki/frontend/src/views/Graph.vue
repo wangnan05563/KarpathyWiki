@@ -659,7 +659,9 @@ async function analyzeGaps() {
   gapSuggestion.value = '';
   gapFallback.value = false;
   try {
-    const res = await fetch(`${API_BASE}/graph/gaps/analyze`, {
+    // T04537：analyze 消耗服务端共享 Key，后端已挂 requireAuth；必须走 apiFetch 注入 Bearer，
+    //   裸 fetch 会让已登录用户被当成游客 401（同 T03611 / T04531 的缺陷类）。
+    const res = await apiFetch(`${API_BASE}/graph/gaps/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),

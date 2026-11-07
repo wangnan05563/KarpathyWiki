@@ -668,7 +668,8 @@ registerDataCleanRoute(app, vault, isolationGuards);
   // 为什么不需要 config：纯拓扑计算（同目录/同标签/同作者），不调用 LLM
   registerDiscoverRoute(app, vault);
   // FR-17 知识缺口检测：纯拓扑计算（孤立节点/低密度社区/同标签未双链对），需要 config.graph.minPages
-  registerGapsRoute(app, vault, config);
+  // T04537：analyze 分支消耗共享 LLM Key，传真实守卫（此前不传时默认守卫 enabled=false，preHandler 空转）
+  registerGapsRoute(app, vault, config, isolationGuards);
   // FR-14-2 Prompt IDE：列出/编辑/试运行 prompts/*.md
   // 为什么需要 adapter 与 config：试运行端点调用 adapter.compile，需要 config 提供 LLM 配置
   registerPromptsRoute(app, adapter, config);

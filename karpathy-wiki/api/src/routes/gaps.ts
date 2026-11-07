@@ -11,6 +11,7 @@ import type { HarnessConfig } from '@wiki/harness';
 import type { VaultService } from '../vault/vault-service.js';
 import type { AppConfig } from '../types.js';
 import { getEffectiveApiKey } from '../config.js';
+import type { IsolationGuards } from '../middleware/auth.js';
 import { SSE_HEADERS, createSSESender } from '../utils/sse.js';
 import {
   detectGaps,
@@ -18,7 +19,14 @@ import {
   summarizeGapsText,
 } from '../workflows/gaps-workflow.js';
 
-export function registerGapsRoute(app: FastifyInstance, vault: VaultService, config: AppConfig): void {
+// guards 不设默认值：默认 createIsolationGuards() 的 enabled=false 会让 requireAuth 变成空转，
+// 正是 T02917 的坑（调用方忘传 → 守卫静默失效）。改为必传，由类型门禁强制接线。
+export function registerGapsRoute(
+  app: FastifyInstance,
+  vault: VaultService,
+  config: AppConfig,
+  guards: IsolationGuards,
+): void {
   // GET /api/graph/gaps
   // 小样本知识库（< config.graph.minPages）返回 insufficient-data，避免误报
   app.get('/api/graph/gaps', {
@@ -37,9 +45,12 @@ export function registerGapsRoute(app: FastifyInstance, vault: VaultService, con
   // POST /api/graph/gaps/analyze
   // LLM 生成缺口补全建议，SSE 流式返回，仅展示不落盘。
   // 降级：LLM 失败时回退到 summarizeGapsText 的拓扑摘要，保证前端始终有输出。
+  // 鉴权：requireAuth——本端点消耗服务端共享 LLM Key（getEffectiveApiKey），
+  //   与同样可用共享 Key 的 POST /api/ai/models 同档；匿名调用不得为共享 Key 买单。
   app.post('/api/graph/gaps/analyze', {
     // 调用 LLM 属于较重写操作，限制 60 req/min（与 tags/suggest 等写端点一致）
     config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    preHandler: guards.requireAuth,
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const minPages = config.graph?.minPages ?? 20;
     const result = await detectGaps(vault, minPages);

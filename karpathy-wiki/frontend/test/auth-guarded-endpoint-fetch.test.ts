@@ -224,7 +224,6 @@ describe('受守卫接口禁止裸 fetch（T04531 跨包普查锁）', () => {
         'views/Browse.vue': 2,            // POST /search/hybrid、GET /search（均无守卫）
         'views/Config.vue': 1,            // GET /search/status（无守卫；rebuild 已改走 apiFetch）
         'views/DataClean.vue': 1,         // GET /data-clean/diff（无守卫）
-        'views/Graph.vue': 1,             // POST /graph/gaps/analyze（无守卫）
         'views/Login.vue': 1,             // GET /auth/bootstrap（无守卫）
       };
       const actual: Record<string, number> = {};
@@ -261,6 +260,22 @@ describe('受守卫接口禁止裸 fetch（T04531 跨包普查锁）', () => {
 
     it('失败消息同时携带状态码与后端原文（行为面由 config-index-coverage J 条锁）', () => {
       expect(src).toMatch(/HTTP \$\{res\.status\}: \$\{data\.error/);
+    });
+  });
+
+  describe('T04537 复发现场：图谱缺口分析消耗共享 LLM Key', () => {
+    const src = fs.readFileSync(path.join(FRONT_SRC, 'views/Graph.vue'), 'utf8');
+
+    it('后端 analyze 进入受守卫清单（清单由源码现算，未挂守卫会掉出）', () => {
+      expect(guarded.has('POST /api/graph/gaps/analyze')).toBe(true);
+    });
+
+    it('analyze 请求走 apiFetch（注入 Bearer）', () => {
+      expect(src).toMatch(/await apiFetch\(`\$\{API_BASE\}\/graph\/gaps\/analyze`/);
+    });
+
+    it('不得退回裸 fetch 打 analyze', () => {
+      expect(src).not.toMatch(/await fetch\(`\$\{API_BASE\}\/graph\/gaps\/analyze`/);
     });
   });
 });
