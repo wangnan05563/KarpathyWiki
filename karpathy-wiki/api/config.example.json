@@ -71,5 +71,11 @@
       "manual": "medium",
       "qq-chat": "low"
     }
+  },
+  "update": {
+    "enabled": true,
+    "manifestUrl": "",
+    "githubRepo": "wangnan05563/KarpathyWiki",
+    "timeoutMs": 8000
   }
 }

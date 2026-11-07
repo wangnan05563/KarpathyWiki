@@ -377,17 +377,22 @@ export interface WebSearchConfig {
   maxResults?: number;
 }
 
-// 自动更新配置（T00883）。
-// 为什么默认关闭：本项目首版无外网发布通道，enabled=false 时 check-update 维持
-//   既有"固定返回 has_update=false"的本地行为（避免 SSRF 与无意义的请求）；
-//   接入发布通道后由用户显式置 true 并填写 manifestUrl 才启用远端检查。
+// 自动更新配置（T00883 引入，T04534 接入 GitHub Releases 通道）。
+// 两条远端通道二选一：manifestUrl 非空时走管理员自建的 manifest JSON（T00883 原语义），
+//   否则走 githubRepo 声明的 GitHub Releases latest。两者都空则维持本地固定判定。
+// 为什么 GitHub 通道可以默认开启：目标主机固定为 api.github.com、仓库名受 owner/repo
+//   形态白名单约束，客户端无法指定任意 URL，T00883 担心的 SSRF 面在此通道结构上不存在。
 export interface UpdateConfig {
-  // 是否启用远端 manifest 检查与下载代理。默认 false（零破坏向后兼容）。
+  // 是否启用远端版本检查与下载代理。默认 true（T04534：随发布通道接入而开启）。
   enabled: boolean;
   // 版本 manifest 的 HTTPS 地址：返回 JSON，含 version/latest/downloadUrl/sha256 字段。
   // 该地址是 SSRF 白名单的信任根，下载代理端点只允许转发 manifest 声明的 downloadUrl。
+  // 非空时优先于 githubRepo；留空串表示"未配置"，此时回落到 GitHub 通道。
   manifestUrl: string;
-  // 拉取 manifest 的超时（毫秒）。默认 8000。
+  // GitHub 仓库（owner/repo 形态，如 'wangnan05563/KarpathyWiki'）。
+  // 走 https://api.github.com/repos/<owner>/<repo>/releases/latest 取 tag_name 与安装包资产。
+  githubRepo?: string;
+  // 拉取 manifest / GitHub Releases 的超时（毫秒）。默认 8000。
   timeoutMs?: number;
 }
 
@@ -492,7 +497,7 @@ export interface AppConfig {
   refs?: RefsConfig;
   // T04072 问答召回图拓配置：可选，缺失时由 defaultConfig 提供默认值（关闭，零破坏）
   query?: { graphExpand?: QueryGraphExpandConfig };
-  // 自动更新配置（T00883）：可选，缺失时由 defaultConfig 提供默认值（enabled=false，零破坏）
+  // 自动更新配置（T00883 / T04534）：可选，缺失时由 defaultConfig 提供默认值（GitHub Releases 通道）
   update?: UpdateConfig;
 }
 

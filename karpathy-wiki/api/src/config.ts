@@ -248,12 +248,16 @@ function defaultConfig(): AppConfig {
     // T04072 问答召回图拓：默认关闭（零破坏，检索口径保持现状）。
     // 上限为默认值：3 个邻居 × 200 字摘要，总字数 900 兜底（浅合并时由使用方补默认，见 graph-expand.ts）。
     query: { graphExpand: { enabled: false, maxNeighbors: 3, charsPerPage: 200, totalChars: 900 } },
-    // 自动更新配置（T00883）：默认关闭，零破坏向后兼容。
-    // manifestUrl 留空串作为"未配置"哨兵：enabled 需用户显式置 true 且填写 manifestUrl
-    //   才启用远端检查，否则 check-update 维持既有"固定 has_update=false"的本地行为。
+    // 自动更新配置（T00883 引入 / T04534 接入 GitHub Releases）：默认开启 GitHub 通道。
+    // 为什么改默认值：T00883 关闭是因为"首版无外网发布通道"，现在 GitHub Releases 已是
+    //   实际发布通道（publish-release.py 推的就是它），不开则 About 页永远显示"已是最新"。
+    // 为什么不构成 SSRF 回归：GitHub 通道主机固定 api.github.com、仓库名受 owner/repo 白名单
+    //   约束，客户端无法指定任意 URL；manifestUrl 仍留空串作为"未配置"哨兵，非空时优先于
+    //   githubRepo 并沿用 T00883 的信任根语义。离线部署把 enabled 置 false 即可完全静默。
     update: {
-      enabled: false,
+      enabled: true,
       manifestUrl: '',
+      githubRepo: 'wangnan05563/KarpathyWiki',
       timeoutMs: 8000,
     },
   };
@@ -398,7 +402,7 @@ function mergeConfigObjects(defaults: AppConfig, parsed: Partial<AppConfig>): Ap
     refs: mergeRefsSection(defaults.refs, parsed.refs),
     // T04072 问答召回图拓：浅合并支持只覆盖部分字段，缺失字段在使用方补默认
     query: mergeSectionWhenBoth(defaults.query, parsed.query),
-    // 自动更新配置合并：parsed.update 可选，未配置时用默认值（关闭）；浅合并支持单字段覆盖
+    // 自动更新配置合并：parsed.update 可选，未配置时用默认值（GitHub 通道）；浅合并支持单字段覆盖
     update: mergeSectionWhenBoth(defaults.update, parsed.update),
   };
 }

@@ -2,10 +2,12 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { readFileSync } from 'node:fs';
 
-// 构建时从 frontend/package.json 读取版本号，注入到前端代码。
-// 为什么这么做：About 页版本号要跟随"打包构建"更新，改 package.json 的 version 即可，
-// 无需改后端 /about 或前端硬编码，保证每次打包产物携带正确版本号。
-const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+// 构建时从 workspace 根 package.json 读取版本号，注入到前端代码。
+// 为什么是根而不是 frontend/package.json（T04534）：根清单才是版本号的唯一权威源——
+//   scripts/bump-version.ps1 只写它、scripts/config.json 的 publish.version_source 指它、
+//   build-exe.ps1 与 installer.iss 也读它。frontend/package.json 是子包清单，version 恒为
+//   初始值 0.1.0 且从不被 bump，读它会让 About 页版本号永远停在 0.1.0。
+const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
 
 export default defineConfig({
   plugins: [vue()],
