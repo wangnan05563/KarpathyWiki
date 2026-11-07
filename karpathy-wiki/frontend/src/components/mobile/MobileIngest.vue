@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 移动端「投递采集」页（SRS FR-ING）。
 // 复用 useCompileStore 的状态机（prepareCompile + handleEvent）维护进度/时间线/生成页面，
-// 自行消费 /api/compile 的 SSE 流（经 apiFetch 注入 Bearer token，避免 useSSEStream 裸 fetch 无鉴权）。
+// 自行消费 /api/compile 的 SSE 流（经 apiFetch 注入 Bearer token）。
 // 三种投递方式：链接(url) / 文字(text) / 文件(file，multipart)。
 import { ref } from 'vue';
 import { apiFetch, API_BASE } from '../../utils/apiBase';

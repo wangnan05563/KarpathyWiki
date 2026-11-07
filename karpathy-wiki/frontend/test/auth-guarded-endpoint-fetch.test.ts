@@ -216,9 +216,7 @@ describe('受守卫接口禁止裸 fetch（T04531 跨包普查锁）', () => {
 
     it('裸 fetch 站点数量/归属文件与登记表一致（新增裸 fetch 必须先过鉴权判定）', () => {
       // 登记表现值来自 T04531 实测普查：全部为「公开接口」或「凭据通道实现本身」。
-      // 有意保留的例外：useSSEStream.ts 用变量 URL（无法静态判定）且零调用方，由下一条用例钉住。
       const expected: Record<string, number> = {
-        'composables/useSSEStream.ts': 1, // 变量 endpoint，零调用方（见下一条用例）
         'stores/auth.ts': 3,              // authFetch 实现 + login/register 两个公开端点
         'utils/apiBase.ts': 1,            // apiFetch 实现
         'views/Browse.vue': 2,            // POST /search/hybrid、GET /search（均无守卫）
@@ -229,14 +227,6 @@ describe('受守卫接口禁止裸 fetch（T04531 跨包普查锁）', () => {
       const actual: Record<string, number> = {};
       for (const s of sites) actual[s.file] = (actual[s.file] ?? 0) + 1;
       expect(actual).toEqual(expected);
-    });
-
-    it('useSSEStream 仍是零调用方的裸 fetch 实现（一旦接线必须先补鉴权）', () => {
-      const importers = listSourceFiles(FRONT_SRC, /\.(ts|vue)$/).filter((f) => {
-        if (f.replace(/\\/g, '/').endsWith('composables/useSSEStream.ts')) return false;
-        return /from\s+['"][^'"]*useSSEStream['"]/.test(fs.readFileSync(f, 'utf8'));
-      });
-      expect(importers.map((f) => path.relative(FRONT_SRC, f).replace(/\\/g, '/'))).toEqual([]);
     });
 
     it('凭据通道本身仍在注入 Bearer（通道失效会让上述全部断言失去意义）', () => {
