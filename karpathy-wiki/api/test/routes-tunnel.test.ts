@@ -435,3 +435,102 @@ describe('POST /api/tunnel/named/delete (T02913)', () => {
     await app.close();
   });
 });
+
+// ── T04574：向导落盘并入原子通道（tmp → .bak → rename），且解析失败绝不重建 ──
+// 旧实现直接 fsp.writeFile 整份写：先截断后写（中断留半截 JSON）、无滚动备份、
+// 解析失败 catch 成 {} 后回写（llm/budget/server 整段丢光）。
+describe('T04574 · POST /api/tunnel/config 落盘通道', () => {
+  let dir = '';
+  let configPath = '';
+  let bakPath = '';
+
+  const RAW = {
+    vaultPath: '../data/vault',
+    llm: { provider: 'glm', baseUrl: 'https://example.test/v4', model: 'glm-4-plus', apiKeyRef: 'CFG_TEST_KEY_REF' },
+    budget: { maxSteps: 20, tokenBudget: 50000 },
+    server: { port: 8787 },
+    tunnel: {
+      provider: 'cloudflare',
+      localPort: 0,
+      cpolarAuthtoken: 'tok-secret',
+      binaryPath: '',
+      autoStart: false,
+      tunnelMode: 'quick',
+      tunnelName: '',
+      tunnelId: '',
+      credentialsFile: '',
+      hostname: '',
+      certFile: 'C:/cf/cert.pem',
+      pathPrefix: '/wiki/',
+    },
+    customUnknown: { keep: ['me'] },
+  };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    dir = await fsp.mkdtemp(path.join(tmpdir(), 't04574-'));
+    configPath = path.join(dir, 'config.json');
+    bakPath = `${configPath}.bak`;
+    loadConfigMock.mockResolvedValue(baseAppConfig());
+    getConfigPathMock.mockReturnValue(configPath);
+  });
+
+  afterEach(async () => {
+    await fsp.rm(dir, { recursive: true, force: true });
+  });
+
+  it('A · 只改 tunnel 段：其他段与未知顶层键不变，旧文件进 .bak，无 .tmp 残留', async () => {
+    const before = JSON.stringify(RAW, null, 2);
+    await fsp.writeFile(configPath, before, 'utf8');
+    const app = await buildApp(makeTunnelStub());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/tunnel/config',
+      payload: { provider: 'cpolar', localPort: 4433, cpolarAuthtoken: '' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const afterRaw = JSON.parse(await fsp.readFile(configPath, 'utf8')) as typeof RAW;
+    // 其他段逐字不变（deepEqual 后逐段比对，排除「被默认值补全」的形态改写）
+    expect(afterRaw.llm).toEqual(RAW.llm);
+    expect(afterRaw.budget).toEqual(RAW.budget);
+    expect(afterRaw.server).toEqual(RAW.server);
+    expect(afterRaw.customUnknown).toEqual(RAW.customUnknown);
+    // tunnel：传了的改；空 token 表示不改；certFile 只由 login 步骤写
+    expect(afterRaw.tunnel.provider).toBe('cpolar');
+    expect(afterRaw.tunnel.localPort).toBe(4433);
+    expect(afterRaw.tunnel.cpolarAuthtoken).toBe('tok-secret');
+    expect(afterRaw.tunnel.certFile).toBe('C:/cf/cert.pem');
+    // 备份就是写之前的完整旧内容
+    expect(await fsp.readFile(bakPath, 'utf8')).toBe(before);
+    await expect(fsp.access(`${configPath}.tmp`)).rejects.toThrow();
+    await app.close();
+  });
+
+  it('B · 解析失败：500 拒绝写盘，原文件逐字节保留，不产生 .bak/.tmp', async () => {
+    const broken = '{"llm": {"provider": "glm"}, "tunnel": {oops';
+    await fsp.writeFile(configPath, broken, 'utf8');
+    const app = await buildApp(makeTunnelStub());
+    const res = await app.inject({ method: 'POST', url: '/api/tunnel/config', payload: { provider: 'cpolar' } });
+    expect(res.statusCode).toBe(500);
+    expect(res.json().detail).toContain('解析失败');
+    expect(await fsp.readFile(configPath, 'utf8')).toBe(broken);
+    await expect(fsp.access(bakPath)).rejects.toThrow();
+    await expect(fsp.access(`${configPath}.tmp`)).rejects.toThrow();
+    await app.close();
+  });
+
+  it('C · 写盘失败：目标保持完整旧内容、无 .tmp 残留', async () => {
+    const before = JSON.stringify(RAW, null, 2);
+    await fsp.writeFile(configPath, before, 'utf8');
+    // 让 tmp 写入 EISDIR：不依赖权限位，Windows/Unix 表现一致
+    await fsp.mkdir(`${configPath}.tmp`);
+    const app = await buildApp(makeTunnelStub());
+    const res = await app.inject({ method: 'POST', url: '/api/tunnel/config', payload: { provider: 'cpolar' } });
+    expect(res.statusCode).toBe(500);
+    expect(await fsp.readFile(configPath, 'utf8')).toBe(before);
+    await fsp.rm(`${configPath}.tmp`, { recursive: true, force: true });
+    await expect(fsp.access(`${configPath}.tmp`)).rejects.toThrow();
+    await app.close();
+  });
+});

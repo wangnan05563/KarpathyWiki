@@ -1,13 +1,13 @@
 ﻿import type { FastifyInstance } from 'fastify';
 import fsp from 'node:fs/promises';
-import { loadConfig, getConfigPath } from '../config.js';
+import { loadConfig, getConfigPath, persistConfigFile } from '../config.js';
 import {
   TunnelService,
   BinaryDownloadError,
   TailscaleFunnelAuthError,
   CloudflareLoginService,
 } from '../tunnel/tunnel-service.js';
-import type { TunnelConfig } from '../types.js';
+import type { AppConfig, TunnelConfig } from '../types.js';
 import { checkTunnelPrerequisites } from '../tunnel/tunnel-prerequisites.js';
 import { type IsolationGuards, createIsolationGuards } from '../middleware/auth.js';
 
@@ -308,36 +308,56 @@ function maskToken(token: string): string {
   return token.slice(-4).padStart(token.length, '?');
 }
 
+// T04574：读「盘上原样」而不是 loadConfig() 的合并结果。
+// 为什么：loadConfig 会把默认值整棵树补出来，persist 回写时等于悄悄改写用户配置形态；
+// 向导只该动 tunnel 段，其余段必须逐字保留（本单验收）。
+// 解析失败直接抛错：旧实现 catch 后从 {} 重建，会把 llm/budget/server 整段丢掉再写回。
+async function readRawConfigForWrite(): Promise<Record<string, unknown>> {
+  const configPath = getConfigPath();
+  let content: string;
+  try {
+    content = await fsp.readFile(configPath, 'utf8');
+  } catch (err) {
+    // 首次使用尚无 config.json：从空对象开始（persist 的 .bak 步骤已处理 ENOENT）
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return {};
+    throw err;
+  }
+  try {
+    const parsed: unknown = JSON.parse(content);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('顶层不是 JSON 对象');
+    }
+    return parsed as Record<string, unknown>;
+  } catch (err) {
+    // 此时一个字节都不能写：损坏文件可能是用户唯一副本（T04556 的 .corrupt-* 口径是保留，不是覆盖）
+    console.warn(
+      `[隧道路由] config.json 解析失败，已拒绝写盘以保留原文件：${configPath}；原因=${err instanceof Error ? err.message : String(err)}`,
+    );
+    throw new Error(`config.json 解析失败，未写入任何内容（原文件已保留）：${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+// 写盘统一走 persistConfigFile（tmp → 备份旧文件 → rename 原子序列，T04556 通道）。
+// 传原样 raw 而非 loadConfig()：portableConfigForDisk 只还原已知路径键，未知键逐字透传。
+// 显式传路径：测试会在 config.js 上 mock getConfigPath，而 persistConfigFile 内部读的是模块内真实路径。
+async function persistRawConfig(raw: Record<string, unknown>): Promise<void> {
+  await persistConfigFile(raw as unknown as AppConfig, getConfigPath());
+}
+
 // 增量持久化单个 tunnel 字段（参考 17_xianyu _save_tunnel_field）。
 // 用于向导：每步成功后立即持久化，避免后续步骤失败时丢失前序成果。
 async function saveTunnelField(field: keyof TunnelConfig, value: string): Promise<void> {
-  const configPath = getConfigPath();
-  let raw: Record<string, unknown> = {};
-  try {
-    const content = await fsp.readFile(configPath, 'utf8');
-    raw = JSON.parse(content) as Record<string, unknown>;
-  } catch {
-    // 文件不存在或解析失败，从空对象开始
-  }
+  const raw = await readRawConfigForWrite();
   const existing = (raw.tunnel ?? {}) as Record<string, unknown>;
   existing[field] = value;
   raw.tunnel = existing;
-  await fsp.writeFile(configPath, JSON.stringify(raw, null, 2), 'utf8');
+  await persistRawConfig(raw);
 }
 
 // 保存 tunnel 配置到 config.json（保留其他段不动）。
 // cpolarAuthtoken 空串表示"不修改已有 token"，避免前端回传脱敏串覆盖真实值。
 async function saveTunnelConfig(body: Partial<TunnelConfig>): Promise<void> {
-  const configPath = getConfigPath();
-
-  // 读取现有 config.json，保留其他段（llm/budget/server 等）不动
-  let raw: Record<string, unknown> = {};
-  try {
-    const content = await fsp.readFile(configPath, 'utf8');
-    raw = JSON.parse(content) as Record<string, unknown>;
-  } catch {
-    // 文件不存在或解析失败，从空对象开始
-  }
+  const raw = await readRawConfigForWrite();
 
   const existing = (raw.tunnel ?? {}) as Partial<TunnelConfig>;
   // body.cpolarAuthtoken 空串时保留 existing.cpolarAuthtoken
@@ -357,5 +377,5 @@ async function saveTunnelConfig(body: Partial<TunnelConfig>): Promise<void> {
     // certFile 不由前端表单修改，只由向导 login 步骤持久化
   };
 
-  await fsp.writeFile(configPath, JSON.stringify(raw, null, 2), 'utf8');
+  await persistRawConfig(raw);
 }
