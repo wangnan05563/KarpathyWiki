@@ -31,6 +31,7 @@ import {
   restoreConfigFromBackup,
   getConfigSource,
   getPathWarnings,
+  bootstrapSeaConfig,
   ConfigMigrationError,
 } from '../src/config.js';
 import { getApiDir, getUserDataDir } from '../src/utils/runtime.js';
@@ -414,5 +415,102 @@ describe('K · 路径失效告警（T04558）', () => {
     await loadConfig(await writeConfig(dir, { vaultPath: dir, logging: { level: 'info', logFilePath: '' } }));
 
     expect(getPathWarnings().some((w) => w.field === 'logging.logFilePath')).toBe(false);
+  });
+});
+
+// T04555：跨 771cd89 版本边界的 legacy 配置一次性迁移。
+// 全部在 mkdtemp 临时目录内构造「旧位置 / 新位置」，不触碰真实 api/config.json 与 %LOCALAPPDATA%。
+describe('G · legacy 配置一次性迁移（T04555）', () => {
+  const tempDirs: string[] = [];
+  let logSpy: ReturnType<typeof vi.spyOn>;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  async function makeDir(prefix: string): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+    tempDirs.push(dir);
+    return dir;
+  }
+
+  async function writeJson(file: string, body: unknown): Promise<void> {
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, JSON.stringify(body, null, 2), 'utf8');
+  }
+
+  afterEach(async () => {
+    logSpy?.mockRestore();
+    warnSpy?.mockRestore();
+    for (const d of tempDirs.splice(0)) await fs.rm(d, { recursive: true, force: true });
+  });
+
+  it('G1 · 新位置缺失且旧位置是应用配置 → 复制迁移、旧文件保留、标记落盘', async () => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const dir = await makeDir('t04555-g1-');
+    const legacy = path.join(dir, 'app', 'config.json');
+    const target = path.join(dir, 'userdata', 'config.json');
+    const legacyBody = { vaultPath: '../data/vault', llm: { model: 'x' } };
+    await writeJson(legacy, legacyBody);
+
+    const out = await bootstrapSeaConfig(fixture(), { configPath: target, legacyCandidates: [legacy] });
+
+    expect(out).toBe('migrated');
+    expect(await fs.readFile(target, 'utf8')).toBe(await fs.readFile(legacy, 'utf8'));
+    expect(JSON.parse(await fs.readFile(target, 'utf8'))).toEqual(legacyBody);
+    expect((await fs.stat(legacy)).isFile()).toBe(true);
+    const markerText = await fs.readFile(`${target}.migrated-from`, 'utf8');
+    expect(markerText).toContain(legacy);
+    expect(markerText).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    expect(logSpy.mock.calls.flat().join('\n')).toContain('已从旧位置迁移');
+  });
+
+  it('G2 · 再次启动不重复迁移；用户改过的新配置不会被旧值覆盖', async () => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const dir = await makeDir('t04555-g2-');
+    const legacy = path.join(dir, 'app', 'config.json');
+    const target = path.join(dir, 'userdata', 'config.json');
+    await writeJson(legacy, { vaultPath: '../data/vault', llm: { model: 'x' } });
+
+    expect(await bootstrapSeaConfig(fixture(), { configPath: target, legacyCandidates: [legacy] })).toBe('migrated');
+    const markerBefore = await fs.readFile(`${target}.migrated-from`, 'utf8');
+
+    expect(await bootstrapSeaConfig(fixture(), { configPath: target, legacyCandidates: [legacy] })).toBe('exists');
+    expect(await fs.readFile(`${target}.migrated-from`, 'utf8')).toBe(markerBefore);
+
+    const edited = JSON.parse(await fs.readFile(target, 'utf8'));
+    edited.llm.model = 'y';
+    await fs.writeFile(target, JSON.stringify(edited, null, 2), 'utf8');
+
+    expect(await bootstrapSeaConfig(fixture(), { configPath: target, legacyCandidates: [legacy] })).toBe('exists');
+    expect(JSON.parse(await fs.readFile(target, 'utf8')).llm.model).toBe('y');
+
+    // 标记的幂等语义：即使用户删掉新配置，也不再从旧位置「复活」一份旧值
+    await fs.rm(target);
+    expect(await bootstrapSeaConfig(fixture(), { configPath: target, legacyCandidates: [legacy] })).toBe('defaults');
+    expect(JSON.parse(await fs.readFile(target, 'utf8')).vaultPath).toBe('../data/vault');
+    expect(JSON.parse(await fs.readFile(target, 'utf8')).llm).toBeUndefined();
+    expect(await fs.readFile(`${target}.migrated-from`, 'utf8')).toBe(markerBefore);
+  });
+
+  it('G3 · 旧位置是同名非应用配置 → 不迁移、落默认并告警', async () => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const dir = await makeDir('t04555-g3-');
+    const legacy = path.join(dir, 'scripts', 'config.json');
+    const target = path.join(dir, 'userdata', 'config.json');
+    await writeJson(legacy, { commands: ['build'], ports: { api: 3000 }, process: { name: 'x' } });
+
+    const out = await bootstrapSeaConfig(fixture(), { configPath: target, legacyCandidates: [legacy] });
+
+    expect(out).toBe('defaults');
+    const written = JSON.parse(await fs.readFile(target, 'utf8'));
+    expect(written.vaultPath).toBe('../data/vault');
+    expect(written).not.toHaveProperty('commands');
+    expect(warnSpy.mock.calls.flat().join('\n')).toContain('忽略非应用配置');
+    await expect(fs.stat(`${target}.migrated-from`)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(logSpy.mock.calls.flat().join('\n')).toContain('已生成默认配置');
   });
 });

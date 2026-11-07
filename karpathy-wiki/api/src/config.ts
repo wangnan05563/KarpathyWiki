@@ -714,41 +714,109 @@ export async function restoreConfigFromBackup(configPathOverride?: string): Prom
   return restored;
 }
 
-// SEA 首次运行：若用户数据目录尚无 config.json，落盘默认配置，便于用户编辑且保持行为一致
+// SEA 首次运行：若用户数据目录尚无 config.json，先尝试从旧位置一次性迁移，再落默认配置。
 // 为什么只在 SEA：开发模式保持不自动生成文件的最小惊讶原则
 // 为什么写"干净默认"而非 merged：merged 已被 SEA rebase 成机器相关的绝对路径，固化进 config.json 会降低可移植性
 async function writeSeaDefaultsIfNeeded(merged: AppConfig): Promise<void> {
-  if (fsSync.existsSync(API_CONFIG_PATH)) return;
   try {
-    const defaults = defaultConfig();
-    const portable: AppConfig = {
-      ...merged,
-      vaultPath: defaults.vaultPath,
-      auth: merged.auth
-        ? {
-            ...merged.auth,
-            usersFilePath: defaults.auth?.usersFilePath ?? merged.auth.usersFilePath,
-            auditLogPath: defaults.auth?.auditLogPath ?? merged.auth.auditLogPath,
-          }
-        : merged.auth,
-      urlCrawl: merged.urlCrawl
-        ? {
-            ...merged.urlCrawl,
-            logging: {
-              ...merged.urlCrawl.logging,
-              logFilePath: defaults.urlCrawl?.logging?.logFilePath ?? merged.urlCrawl.logging?.logFilePath,
-            },
-            incrementalStatePath: defaults.urlCrawl?.incrementalStatePath ?? merged.urlCrawl.incrementalStatePath,
-          }
-        : merged.urlCrawl,
-      logging: merged.logging
-        ? { ...merged.logging, logFilePath: defaults.logging?.logFilePath ?? merged.logging.logFilePath }
-        : merged.logging,
-    };
-    await fs.writeFile(API_CONFIG_PATH, JSON.stringify(portable, null, 2), 'utf8');
+    await bootstrapSeaConfig(merged, { configPath: API_CONFIG_PATH });
   } catch {
-    // 落盘失败不阻断启动，应用退化为内存默认值
+    // 迁移/落盘失败不阻断启动，应用退化为内存默认值
   }
+}
+
+export type SeaBootstrapOutcome = 'exists' | 'migrated' | 'defaults';
+
+export interface SeaBootstrapOptions {
+  configPath: string;
+  legacyCandidates?: string[];
+  markerPath?: string;
+}
+
+// T04555：771cd89 把用户数据目录从 exe 同级迁到 %LOCALAPPDATA% 时没有迁移逻辑，
+// 跨该版本边界重装后旧 config.json 仍在磁盘却无人读取，用户看到的是「配置归零」。
+// 这里只做一次性、可回退的复制迁移：旧文件原地保留（覆盖安装仍可人工救回），
+// 标记文件保证下次启动不再重复迁移。
+export async function bootstrapSeaConfig(
+  merged: AppConfig,
+  opts: SeaBootstrapOptions,
+): Promise<SeaBootstrapOutcome> {
+  const targetPath = opts.configPath;
+  if (fsSync.existsSync(targetPath)) return 'exists';
+
+  const markerPath = opts.markerPath ?? `${targetPath}.migrated-from`;
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  if (!fsSync.existsSync(markerPath)) {
+    const candidates = opts.legacyCandidates ?? [
+      path.join(getApiDir(), 'config.json'),
+      path.resolve(process.cwd(), 'config.json'),
+    ];
+    for (const candidate of candidates) {
+      if (path.resolve(candidate) === path.resolve(targetPath)) continue;
+      if (!fsSync.existsSync(candidate)) continue;
+
+      let text: string;
+      try {
+        text = await fs.readFile(candidate, 'utf8');
+      } catch {
+        continue;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        console.warn(`[配置] 忽略无法解析的旧配置：${candidate}`);
+        continue;
+      }
+      if (!looksLikeAppConfig(parsed)) {
+        console.warn(`[配置] 忽略非应用配置：${candidate}（缺少 vaultPath/llm/server 特征键）`);
+        continue;
+      }
+
+      await fs.copyFile(candidate, targetPath);
+      await fs.writeFile(markerPath, `${candidate}\n${new Date().toISOString()}\n`, 'utf8');
+      console.log(`[配置] 已从旧位置迁移：${candidate} → ${targetPath}`);
+      return 'migrated';
+    }
+  }
+
+  await fs.writeFile(targetPath, JSON.stringify(buildPortableDefaults(merged), null, 2), 'utf8');
+  console.log(`[配置] 未找到任何既有配置，已生成默认配置：${targetPath}`);
+  return 'defaults';
+}
+
+function looksLikeAppConfig(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const obj = value as Record<string, unknown>;
+  return 'vaultPath' in obj || 'llm' in obj || 'server' in obj;
+}
+
+function buildPortableDefaults(merged: AppConfig): AppConfig {
+  const defaults = defaultConfig();
+  return {
+    ...merged,
+    vaultPath: defaults.vaultPath,
+    auth: merged.auth
+      ? {
+          ...merged.auth,
+          usersFilePath: defaults.auth?.usersFilePath ?? merged.auth.usersFilePath,
+          auditLogPath: defaults.auth?.auditLogPath ?? merged.auth.auditLogPath,
+        }
+      : merged.auth,
+    urlCrawl: merged.urlCrawl
+      ? {
+          ...merged.urlCrawl,
+          logging: {
+            ...merged.urlCrawl.logging,
+            logFilePath: defaults.urlCrawl?.logging?.logFilePath ?? merged.urlCrawl.logging?.logFilePath,
+          },
+          incrementalStatePath: defaults.urlCrawl?.incrementalStatePath ?? merged.urlCrawl.incrementalStatePath,
+        }
+      : merged.urlCrawl,
+    logging: merged.logging
+      ? { ...merged.logging, logFilePath: defaults.logging?.logFilePath ?? merged.logging.logFilePath }
+      : merged.logging,
+  };
 }
 
 // 保存 AI 配置到 config.json（部分更新，仅合并 llm 字段）。
