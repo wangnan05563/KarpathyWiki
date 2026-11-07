@@ -6,7 +6,7 @@
 //     只写根清单），否则本组用例会退化成"读哪份都绿"。
 //   B 通道判定：enabled=false / 两地址都空 → 不发外网请求；manifestUrl 优先于 githubRepo；
 //     githubRepo 受 owner/repo 形态白名单约束（穿越/绝对 URL/多段路径一律拒绝且不发出请求）。
-//   C GitHub 映射：tag_name→latest、资产→download_url、published_at 透传；无资产回退 release 页；
+//   C GitHub 映射：tag_name→latest、资产→download_url、资产 digest→sha256、published_at 透传；无资产回退 release 页；
 //      newer/older/带 v 前缀三种版本关系分别判定；HTTP 失败回退 local-fallback 不草率报更新。
 // 手法与 routes-tunnel.test.ts 一致：Fastify + inject，不 listen；fetch 全局桩；
 //   每个用例 vi.resetModules() 重新 import，隔离 about.ts 的模块级 5 分钟缓存。
@@ -30,6 +30,8 @@ const GITHUB_REPO = 'wangnan05563/KarpathyWiki';
 const GITHUB_LATEST_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 const ASSET_URL = `https://github.com/${GITHUB_REPO}/releases/download/0.1.202610301/KarpathyWiki-Setup-v0.1.202610301.exe`;
 const RELEASE_HTML_URL = `https://github.com/${GITHUB_REPO}/releases/tag/0.1.202610301`;
+// GitHub 为 release asset 提供的摘要格式："sha256:<64 hex>"（T04567）
+const ASSET_DIGEST_HEX = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
 
 // 权威版本源：与 about.ts 的 resolveVersionPackagePath 独立推导（读 pnpm-workspace.yaml 定位根），
 // 避免"用被测代码自己的口径验证被测代码"。
@@ -59,7 +61,11 @@ function githubRelease(overrides: Record<string, unknown> = {}): Record<string, 
     published_at: '2026-10-30T02:26:10Z',
     draft: false,
     prerelease: false,
-    assets: [{ browser_download_url: ASSET_URL, name: 'KarpathyWiki-Setup-v0.1.202610301.exe' }],
+    assets: [{
+      browser_download_url: ASSET_URL,
+      name: 'KarpathyWiki-Setup-v0.1.202610301.exe',
+      digest: `sha256:${ASSET_DIGEST_HEX}`,
+    }],
     ...overrides,
   };
 }
@@ -213,8 +219,8 @@ describe('C · GitHub Releases 响应映射与新旧判定', () => {
     expect(data.download_url).toBe(ASSET_URL);
     expect(data.release_url).toBe(ASSET_URL);
     expect(data.published_at).toBe('2026-10-30T02:26:10Z');
-    // GitHub API 不提供资产摘要：sha256 必须是空串，前端据此跳过校验（既有语义）
-    expect(data.sha256).toBe('');
+    // T04567：GitHub 为资产提供 digest，后端归一成裸 hex 供前端校验
+    expect(data.sha256).toBe(ASSET_DIGEST_HEX);
   });
 
   it('GitHub 版本更旧 → has_update=false，但 latest 仍如实等于 GitHub tag（本仓当前真实状态）', async () => {
@@ -257,6 +263,58 @@ describe('C · GitHub Releases 响应映射与新旧判定', () => {
     expect(data.download_url).toBe(ASSET_URL);
   });
 
+  it('资产无 digest（旧资产）→ sha256 空串，维持「声明了才校验」语义', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(githubRelease({
+      tag_name: '9.9.9',
+      assets: [{ browser_download_url: ASSET_URL, name: 'old.exe' }],
+    })));
+    app = await buildApp({ enabled: true, manifestUrl: '', githubRepo: GITHUB_REPO });
+    const data = await checkUpdate(app);
+    expect(data.sha256).toBe('');
+  });
+
+  it('digest 大写十六进制 → 归一为小写裸 hex', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(githubRelease({
+      tag_name: '9.9.9',
+      assets: [{
+        browser_download_url: ASSET_URL,
+        digest: `SHA256:${ASSET_DIGEST_HEX.toUpperCase()}`,
+      }],
+    })));
+    app = await buildApp({ enabled: true, manifestUrl: '', githubRepo: GITHUB_REPO });
+    const data = await checkUpdate(app);
+    expect(data.sha256).toBe(ASSET_DIGEST_HEX);
+  });
+
+  it('digest 非 sha256（如 sha512）→ 空串，不用错算法把正常包误判为篡改', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(githubRelease({
+      tag_name: '9.9.9',
+      assets: [{
+        browser_download_url: ASSET_URL,
+        digest: `sha512:${'a'.repeat(128)}`,
+      }],
+    })));
+    app = await buildApp({ enabled: true, manifestUrl: '', githubRepo: GITHUB_REPO });
+    const data = await checkUpdate(app);
+    expect(data.sha256).toBe('');
+  });
+
+  it('摘要与选中资产同源：跳过无下载地址的资产，不串用其它资产的 digest', async () => {
+    const otherUrl = 'https://github.com/wangnan05563/KarpathyWiki/releases/download/0.1.202610301/other.exe';
+    fetchMock.mockResolvedValue(jsonResponse(githubRelease({
+      tag_name: '9.9.9',
+      assets: [
+        { name: 'no-url.exe', digest: `sha256:${'b'.repeat(64)}` },
+        { browser_download_url: ASSET_URL, digest: `sha256:${ASSET_DIGEST_HEX}` },
+        { browser_download_url: otherUrl, digest: `sha256:${'c'.repeat(64)}` },
+      ],
+    })));
+    app = await buildApp({ enabled: true, manifestUrl: '', githubRepo: GITHUB_REPO });
+    const data = await checkUpdate(app);
+    expect(data.download_url).toBe(ASSET_URL);
+    expect(data.sha256).toBe(ASSET_DIGEST_HEX);
+  });
+
   it('GitHub 返回 404（仓库无 release）→ local-fallback，不草率报更新', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ message: 'Not Found' }, false, 404));
     app = await buildApp({ enabled: true, manifestUrl: '', githubRepo: GITHUB_REPO });
@@ -284,7 +342,7 @@ describe('C · GitHub Releases 响应映射与新旧判定', () => {
     expect(data.has_update).toBe(false);
   });
 
-  it('download-update：GitHub 通道下代理资产字节，X-Update-Sha256 为空串', async () => {
+  it('download-update：GitHub 通道下代理资产字节，X-Update-Sha256 回传资产 digest', async () => {
     const payload = Buffer.from('fake-installer-bytes');
     fetchMock.mockImplementation(async (url: string) => {
       if (url === GITHUB_LATEST_URL) return jsonResponse(githubRelease({ tag_name: '9.9.9' }));
@@ -304,7 +362,7 @@ describe('C · GitHub Releases 响应映射与新旧判定', () => {
     app = await buildApp({ enabled: true, manifestUrl: '', githubRepo: GITHUB_REPO });
     const res = await app.inject({ method: 'GET', url: '/api/about/download-update' });
     expect(res.statusCode).toBe(200);
-    expect(res.headers['x-update-sha256']).toBe('');
+    expect(res.headers['x-update-sha256']).toBe(ASSET_DIGEST_HEX);
     expect(res.headers['content-disposition']).toContain('KarpathyWiki-Setup-v0.1.202610301.exe');
     expect(res.rawPayload.equals(payload)).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);

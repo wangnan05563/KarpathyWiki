@@ -31,7 +31,8 @@ import type { AppConfig, UpdateConfig } from '../types.js';
 //     唯一白名单约束是协议：manifestUrl 与 downloadUrl 都必须是 http/https（杜绝 file: 等）。
 //   - sha256：manifest 声明 sha256，下载端点通过 X-Update-Sha256 头回传给前端，
 //     由前端在收齐字节后用 WebCrypto 校验再触发安装（流式代理阶段无法回滚已发字节）。
-//     GitHub Releases API 不返回资产摘要，故该通道 sha256 为空串，前端按既有语义跳过校验。
+//     GitHub 通道取 release asset 的 digest（API 侧给出的 sha256:<hex>，与资产字节同源、
+//     无需改发布链）；旧资产无该字段时为空串，前端按既有语义跳过校验。
 //   - 构建日期取权威 package.json 的修改时间（bump 即改它，与发版产物同步）
 //   - Git SHA 通过 git rev-parse 获取，无 git 环境时返回 unknown
 //   - check-update 后端 5 分钟缓存，避免前端高频调用造成不必要计算与重复外网请求
@@ -193,7 +194,9 @@ async function fetchRemoteManifest(cfg: UpdateConfig): Promise<UpdateManifest> {
 //   且带 assets（安装包下载地址）与 published_at，一次请求即可归一化成 UpdateManifest。
 // 版本号取 tag_name 原样（本仓 tag 无 v 前缀，资产名里的 v 只是命名前缀，不属版本号）；
 //   比较时由 compareVersions 统一剥 ^[vV]，故带不带前缀都能正确判定新旧。
-// sha256 留空：GitHub API 不提供资产摘要，前端按既有"声明了才校验"语义跳过（见文件头）。
+// sha256：GitHub 为 release asset 提供 digest（sha256:<hex>），与下载字节同源、
+//   又独立于资产下载主机，可在不改发布链的前提下作为完整性锚点。旧资产无该字段时留空，
+//   前端按既有"声明了才校验"语义跳过（见文件头）。
 async function fetchGithubRelease(cfg: UpdateConfig): Promise<UpdateManifest> {
   const repo = (cfg.githubRepo ?? '').trim();
   if (!GITHUB_REPO_RE.test(repo)) throw new Error('invalid githubRepo');
@@ -209,24 +212,37 @@ async function fetchGithubRelease(cfg: UpdateConfig): Promise<UpdateManifest> {
     const data = (await res.json()) as Record<string, unknown>;
     // 取第一个带下载地址的资产（本项目 release 只挂一个安装包）；无资产时回退 release 页，
     // 让前端"打开 release 页"分支仍可用，而不是拿到空串后卡在无动作状态。
+    // 摘要必须与选中的资产同源，不能拿别的资产的 digest——否则安装包与校验值错配，
+    // 正常下载也会被判 hash 失败。
     const assets = Array.isArray(data.assets) ? data.assets : [];
     let downloadUrl = '';
+    let sha256 = '';
     for (const asset of assets) {
-      const url = str((asset as Record<string, unknown> | null)?.browser_download_url);
+      const rec = asset as Record<string, unknown> | null;
+      const url = str(rec?.browser_download_url);
       if (url) {
         downloadUrl = url;
+        sha256 = parseAssetDigest(rec?.digest);
         break;
       }
     }
     return {
       version: str(data.tag_name),
       downloadUrl: downloadUrl || str(data.html_url),
-      sha256: '',
+      sha256,
       publishedAt: str(data.published_at),
     };
   } finally {
     clearTimeout(timer);
   }
+}
+
+// GitHub release asset 的 digest 形如 "sha256:<64 hex>"。只接受 sha256（前端 WebCrypto
+// 只实现这一种）；其它算法或格式异常一律按空串处理，维持"声明了才校验"的旧语义，
+// 避免用错算法把正常包误判为被篡改。
+function parseAssetDigest(v: unknown): string {
+  const m = /^sha256:([0-9a-f]{64})$/i.exec(str(v));
+  return m ? m[1].toLowerCase() : '';
 }
 
 // 语义化版本号比较：a > b 返回 1，a < b 返回 -1，相等返回 0。

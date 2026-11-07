@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { API_BASE, apiFetch } from '../utils/apiBase';
+import { expectedSha256, sha256Hex, sha256Matches } from '../utils/update-hash';
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import { CopyDocument, Refresh, Check, Top, Warning, Search } from '@element-plus/icons-vue';
@@ -265,15 +266,6 @@ function openReleaseUrl(url: string) {
   }
 }
 
-// 计算 Blob 的 sha256 十六进制摘要（WebCrypto）。校验不通过能丢弃整包，防下载损坏/篡改。
-async function sha256Hex(blob: Blob): Promise<string> {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
 // 触发浏览器把 Blob 保存为文件。
 function saveBlob(blob: Blob, name: string) {
   const objectUrl = URL.createObjectURL(blob);
@@ -322,10 +314,13 @@ async function handleUpdate() {
     }
 
     const blob = new Blob(chunks);
-    // manifest 声明了 sha256 才校验；不匹配则丢弃整包并提示，避免安装损坏/被篡改的更新
-    if (st.sha256) {
+    // T04567：优先用响应头里的摘要——它是本次下载对应的 manifest 值，比 5 分钟缓存的
+    // check-update 值更新；两者都空（旧资产无 digest）才跳过，保持「声明了才校验」语义。
+    // 不匹配则丢弃整包并提示，避免安装损坏/被篡改的更新。
+    const declared = expectedSha256(res.headers.get('x-update-sha256'), st.sha256);
+    if (declared) {
       const actual = await sha256Hex(blob);
-      if (actual.toLowerCase() !== st.sha256.toLowerCase()) {
+      if (!sha256Matches(actual, declared)) {
         updateState.value = { kind: 'download-error', reason: 'hash' };
         return;
       }
