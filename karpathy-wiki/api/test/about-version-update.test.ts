@@ -145,6 +145,8 @@ describe('B · 通道判定与 SSRF 结构白名单', () => {
     app = await buildApp({ enabled: false, manifestUrl: 'https://example.test/m.json', githubRepo: GITHUB_REPO });
     const data = await checkUpdate(app);
     expect(data.source).toBe('local');
+    // T04568：显式关闭要能被前端识别为「未启用检查更新」，而不是「已是最新」
+    expect(data.reason).toBe('disabled');
     expect(data.has_update).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -153,6 +155,15 @@ describe('B · 通道判定与 SSRF 结构白名单', () => {
     app = await buildApp({ enabled: true, manifestUrl: '', githubRepo: '' });
     const data = await checkUpdate(app);
     expect(data.source).toBe('local');
+    expect(data.reason).toBe('unconfigured');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('无 update 段（升级安装最早期配置）：reason=unconfigured，不触网', async () => {
+    app = await buildApp(undefined);
+    const data = await checkUpdate(app);
+    expect(data.source).toBe('local');
+    expect(data.reason).toBe('unconfigured');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -330,6 +341,7 @@ describe('C · GitHub Releases 响应映射与新旧判定', () => {
     const first = await checkUpdate(app);
     const second = await checkUpdate(app);
     expect(first.source).toBe('local-fallback');
+    expect(first.reason).toBe('remote-error');
     expect(second).toEqual(first);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

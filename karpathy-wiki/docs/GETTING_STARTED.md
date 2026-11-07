@@ -131,6 +131,13 @@ scripts\一键发布.bat                                                        
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
+**Q8：升级后关于页一直显示「未启用检查更新」？**
+升级安装会原样保留旧 `config.json`，其中 `update.enabled=false` 不会被新版默认值覆盖（也不会静默替你开启外网请求）。打开 `api/config.json`（安装版为 `%LOCALAPPDATA%\KarpathyWiki\config.json`），把 `update` 段改为：
+```json
+{ "enabled": true, "githubRepo": "wangnan05563/KarpathyWiki" }
+```
+重启服务后关于页会重新查询 GitHub Releases。若显示「未配置更新通道」，说明已启用但 `githubRepo` 与 `manifestUrl` 都为空；若显示「检查失败」，则是远端不可达，可稍后重试。
+
 ## 8. 项目结构
 
 ```

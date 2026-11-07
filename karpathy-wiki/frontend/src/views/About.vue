@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { API_BASE, apiFetch } from '../utils/apiBase';
 import { expectedSha256, sha256Hex, sha256Matches } from '../utils/update-hash';
+import { updateOffKind } from '../utils/updateStatus';
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import { CopyDocument, Refresh, Check, Top, Warning, Search } from '@element-plus/icons-vue';
@@ -27,6 +28,9 @@ type UpdateState =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'latest' }
+  // T04568：未启用/未配置更新通道时不得显示「已是最新」；远端检查失败单独成态
+  | { kind: 'disabled'; reason: 'disabled' | 'unconfigured' }
+  | { kind: 'check-failed' }
   | { kind: 'newer'; url: string; latest: string; downloadUrl?: string; sha256?: string }
   | { kind: 'downloading'; percent: number; received: number; total: number }
   | { kind: 'download-error'; reason: 'network' | 'server' | 'hash' }
@@ -62,6 +66,11 @@ const TEXTS = {
   updateIdle: '检查更新',
   updateLoading: '检查中…',
   updateLatest: '已是最新',
+  updateDisabled: '未启用检查更新',
+  updateUnconfigured: '未配置更新通道',
+  updateDisabledHint:
+    '当前配置未启用更新检查（升级安装不会继承新版默认值）：请在 api/config.json 的 update 段设置 enabled=true 并填写 githubRepo 后重启服务。',
+  updateCheckFailed: '检查失败',
   updateNewer: '有新版本',
   install: '立即更新',
   installReady: '更新包已下载，请退出并安装新版本',
@@ -214,16 +223,25 @@ async function performCheck() {
         sha256: data.sha256 || '',
       };
     } else {
-      updateState.value = { kind: 'latest' };
-      // 3s 后自动回 idle，让按钮恢复可点击
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
-        idleTimer = null;
-        // 仅在当前为 latest 时回退，避免覆盖 newer/error 终态
-        if (updateState.value.kind === 'latest') {
-          updateState.value = { kind: 'idle' };
-        }
-      }, 3000);
+      // T04568：本地分支不是「已是最新」。未启用时保持常显提示，避免用户误以为
+      // 已检查过且最新；远端回退单独提示检查失败（旧行为同样会误显示「已是最新」）。
+      const off = updateOffKind(data.source, data.reason);
+      if (off === 'check-failed') {
+        updateState.value = { kind: 'check-failed' };
+      } else if (off) {
+        updateState.value = { kind: 'disabled', reason: off };
+      } else {
+        updateState.value = { kind: 'latest' };
+        // 3s 后自动回 idle，让按钮恢复可点击
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          idleTimer = null;
+          // 仅在当前为 latest 时回退，避免覆盖 newer/error 终态
+          if (updateState.value.kind === 'latest') {
+            updateState.value = { kind: 'idle' };
+          }
+        }, 3000);
+      }
     }
   } catch (e) {
     updateState.value = { kind: 'error', reason: isNetworkError(e) ? 'network' : 'server' };
@@ -394,7 +412,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- 检查更新按钮：五态渲染 -->
+        <!-- 检查更新按钮：七态渲染（新增未启用/未配置、检查失败） -->
         <div class="update-btn-wrap">
           <el-tooltip
             v-if="updateState.kind === 'idle'"
@@ -412,6 +430,26 @@ onBeforeUnmount(() => {
 
           <el-button v-else-if="updateState.kind === 'latest'" type="success" :icon="Check" disabled>
             {{ TEXTS.updateLatest }}
+          </el-button>
+
+          <!-- 未启用/未配置更新通道：常显提示，不能伪装成「已是最新」 -->
+          <el-button
+            v-else-if="updateState.kind === 'disabled'"
+            type="warning"
+            :icon="Warning"
+            disabled
+          >
+            {{ updateState.reason === 'unconfigured' ? TEXTS.updateUnconfigured : TEXTS.updateDisabled }}
+          </el-button>
+
+          <el-button
+            v-else-if="updateState.kind === 'check-failed'"
+            type="danger"
+            data-tip="远端更新源不可达，可重试"
+            :icon="Warning"
+            @click="handleCheck"
+          >
+            {{ TEXTS.updateCheckFailed }} · {{ TEXTS.updateRetry }}
           </el-button>
 
           <!-- 有新版本：优先一键下载更新包（有 downloadUrl），否则回退打开 release 页 -->
@@ -459,6 +497,11 @@ onBeforeUnmount(() => {
           >
             {{ updateState.reason === 'network' ? TEXTS.updateErrorNetwork : TEXTS.updateErrorServer }} · {{ TEXTS.updateRetry }}
           </el-button>
+
+          <!-- 未启用时给出可操作说明（配置文件位置与字段），而不是仅一个灰按钮 -->
+          <div v-if="updateState.kind === 'disabled'" class="update-off-hint">
+            {{ TEXTS.updateDisabledHint }}
+          </div>
         </div>
       </div>
 
@@ -700,6 +743,19 @@ onBeforeUnmount(() => {
 
 .update-btn-wrap {
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+/* T04568：未启用更新检查时的说明，窄屏换行而不是把版本信息挤走 */
+.update-off-hint {
+  max-width: 320px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-soft);
+  text-align: right;
 }
 
 /* 下载中进度条：固定最小宽度避免按钮区在百分比变化时抖动 */

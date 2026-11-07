@@ -96,6 +96,12 @@ interface CheckUpdateData {
   published_at: string;
   checked_at: string;
   source: 'local' | 'remote' | 'github' | 'local-fallback';
+  // T04568：本地分支的原因，供前端给出准确提示（旧版配置升级后 enabled=false 不会
+  // 自动继承新默认值）。source 枚举保持不变，避免既有消费方破坏。
+  //   disabled     = 配置显式关闭（升级安装的旧 config.json 常见）
+  //   unconfigured = 已启用但 manifestUrl/githubRepo 都没填
+  //   remote-error = 远端检查失败回退（网络/仓库不可达）
+  reason?: 'disabled' | 'unconfigured' | 'remote-error';
 }
 
 // 读取权威 package.json（workspace 根，见 resolveVersionPackagePath）中的版本号。
@@ -290,7 +296,11 @@ function deriveFileName(downloadUrl: string): string {
 }
 
 // 构造本地兜底的 check-update 响应（未启用更新 / 远端检查失败时共用）。
-function localData(current: string, source: 'local' | 'local-fallback'): CheckUpdateData {
+function localData(
+  current: string,
+  source: 'local' | 'local-fallback',
+  reason?: CheckUpdateData['reason'],
+): CheckUpdateData {
   return {
     current,
     latest: current,
@@ -301,6 +311,7 @@ function localData(current: string, source: 'local' | 'local-fallback'): CheckUp
     published_at: '',
     checked_at: new Date().toISOString(),
     source,
+    ...(reason ? { reason } : {}),
   };
 }
 
@@ -352,10 +363,14 @@ export function registerAboutRoute(app: FastifyInstance, config: AppConfig): voi
           source: channel === 'github' ? 'github' : 'remote',
         };
       } catch {
-        data = localData(current, 'local-fallback');
+        data = localData(current, 'local-fallback', 'remote-error');
       }
     } else {
-      data = localData(current, 'local');
+      // T04568：区分「显式关闭」与「启用但没填通道」，前端据此给出可操作提示。
+      // 不静默改写用户配置——升级安装的 config.json 里 enabled=false 是用户/旧默认的
+      // 显式状态，自动翻成 true 会背着管理员发外网请求。
+      const reason = updateCfg?.enabled === false ? 'disabled' : 'unconfigured';
+      data = localData(current, 'local', reason);
     }
 
     checkUpdateCache = { data, ts: now };
