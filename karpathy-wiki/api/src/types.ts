@@ -309,6 +309,9 @@ export interface HealthReport {
 export interface FixInput {
   issueType: 'broken_link' | 'orphan';
   target: { from: string; to: string } | string;
+  // T04563：批量作业的暂停/取消/项级超时经此 signal 中止进行中的 LLM 调用。
+  // 单修复路由自带客户端断开短路，无需注入；缺省行为与旧版一致。
+  signal?: AbortSignal;
 }
 
 // §5.2 fix 事件 schema（L-6）：scan/fixing/fixed/done 四类步骤
@@ -320,9 +323,19 @@ export interface FixProgressEvent {
   tool?: string;
   // T02924：终端事件带实测 harness step 数与 token 消耗，批量作业据此累计
   // 「每项平均往返次数/费用」样本（llmCalls 估算不再按 1 项 = 1 次写死）。
-  data?: { path?: string; harnessSteps?: number; tokens?: number };
+  data?: {
+    path?: string;
+    harnessSteps?: number;
+    tokens?: number;
+    // T04563：失败分类（budget/timeout/auth/...），供批量作业与前端分流
+    category?: string;
+    retryable?: boolean;
+  };
   // T02954：单修复经定点复检后的裁定（false 随 ineffective 事件下发）
   resolved?: boolean;
+  // T04563：批量终态事件附带的失败可重试性与类别（单修复路径不填）
+  retryable?: boolean;
+  category?: string;
 }
 
 // 批量修复请求体：items 为单个修复任务的有序列表，后端按顺序串行执行。
@@ -426,7 +439,12 @@ export interface AppConfig {
   budget: { maxSteps: number; tokenBudget: number };
   server: { host: string; port: number };
   localOnly: boolean;
-  healthCheck: { staleDays: number };
+  // T04563：批量修复项级自动重试与超时预算（缺省值由 defaultConfig 提供）
+  healthCheck: {
+    staleDays: number;
+    fixRetry?: { maxRetries?: number; baseDelayMs?: number; maxDelayMs?: number };
+    fixItemTimeoutMs?: number;
+  };
   tunnel: TunnelConfig;
   webSearch?: WebSearchConfig;
   logging?: LoggingConfig;

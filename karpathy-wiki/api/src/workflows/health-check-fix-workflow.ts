@@ -171,12 +171,23 @@ ${targetDesc}
   });
 
   // 4. 启动 harness，完成后推送 done/fixed 事件
+  // T04563：终态三态口径——只有 'done' 算成功；'budget_exceeded' 与 'failed' 都必须
+  // 下发 error，否则预算耗尽的项会被前端当成「修复完成」并计入 doneKeys。
   const runPromise = harness
-    .run({ task, context: { issueType: input.issueType, target: input.target } })
+    .run({ task, context: { issueType: input.issueType, target: input.target }, signal: input.signal })
     .then((result) => {
-      const isError = result.status === 'failed';
       // T02924：把实测 harness step 数/token 带给批量作业，作为「调用次数/费用」估算样本
       const usage = { harnessSteps: result.step, tokens: result.tokenUsed };
+      if (result.status === 'budget_exceeded') {
+        pushEvent({
+          step: 'done',
+          status: 'error',
+          message: `超出步数/Token 预算，未完成修复（已执行 ${result.step} 步）`,
+          data: { ...usage, category: 'budget', retryable: false },
+        });
+        return;
+      }
+      const isError = result.status === 'failed';
       pushEvent({
         step: isError ? 'done' : 'fixed',
         status: isError ? 'error' : 'done',

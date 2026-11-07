@@ -3,7 +3,7 @@
 // 为什么抽出来：Health.vue 原先把 4 类问题各写一段模板，597 项逐行渲染、无搜索、
 // 无多选、无折叠，且「过期页面」这类根本不能自动修复的问题和可修复项混在同一个
 // 总数里报警。列表建模属于纯计算，抽成 utils 后可单测、可复用（移动端后续接入）。
-import type { BatchFixEstimate, HealthReport } from '../types';
+import type { BatchFixEstimate, BatchFixFailedItem, HealthReport } from '../types';
 
 export type IssueKind = 'orphan' | 'broken' | 'stale' | 'knowledge_stale';
 
@@ -140,6 +140,39 @@ export function buildFixPayloadFromSelection(
     issueKeys.push(row.key);
   }
   return { items, issueKeys };
+}
+
+// ===== T04563 失败分流 =====
+// 可重试：未消解项（流程跑过但问题还在，重跑可能解决）+ 明确可重试的失败项；
+// 需人工处理：retryable === false（认证失败 / 413 / 预算耗尽 / 护栏拒绝），
+// 直接重提只会重复失败。旧快照缺字段按可重试降级（与后端 ensureLoaded 同口径）。
+export interface FailureSplit {
+  retryable: BatchFixFailedItem[];
+  manual: BatchFixFailedItem[];
+  retryableKeys: Set<string>;
+}
+
+export function splitRetryableFailures(
+  failed: BatchFixFailedItem[],
+  ineffective: BatchFixFailedItem[] = [],
+): FailureSplit {
+  const manual = failed.filter((f) => f.retryable === false);
+  const retryable = [...ineffective, ...failed.filter((f) => f.retryable !== false)];
+  return { retryable, manual, retryableKeys: new Set(retryable.map((f) => f.issueKey)) };
+}
+
+const FAILURE_CATEGORY_LABELS: Record<string, string> = {
+  auth: '认证失败',
+  request_too_large: '内容过大',
+  budget: '超出预算',
+  timeout: '超时',
+  rate_limit: '限流',
+  service_down: '服务故障',
+};
+
+export function failureCategoryLabel(category?: string): string {
+  if (!category) return '';
+  return FAILURE_CATEGORY_LABELS[category] ?? category;
 }
 
 // 选中集按类拆分，用于汇总条文案「已选 12 项（孤立 8 · 断链 4）」

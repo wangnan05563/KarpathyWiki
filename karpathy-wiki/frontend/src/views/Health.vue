@@ -52,6 +52,8 @@ import {
   formatTokens,
   estimateBasisText as buildEstimateBasisText,
   estimateRangeText as buildEstimateRangeText,
+  splitRetryableFailures,
+  failureCategoryLabel,
 } from '../utils/healthList';
 import type { IssueKind, IssueRow } from '../utils/healthList';
 // T02941：四类问题实名/图标/空态文案的单一来源（帮助文档 health 章同挂接）
@@ -392,6 +394,9 @@ async function streamJobEvents(body: ReadableStream<Uint8Array>): Promise<void> 
       );
       if (parsed.eventType === 'batch_done' || parsed.eventType === 'batch_stopped') {
         ElMessage.success((data as { message?: string })?.message || '批量修复已停止');
+        // T04563：批量结束后刷新体检报告，否则 retryFailed 会按陈旧的 allRows 裁剪
+        // payload，可能提交空集或错集（已修掉/已变化的项）。不 await：不阻塞事件流收尾。
+        void runCheck();
       }
     }
   }
@@ -423,11 +428,12 @@ function dismissJob(): void {
 }
 
 function retryFailed(): void {
-  const keys = new Set(
-    [...batchFailed.value, ...batchIneffective.value].map((f) => f.issueKey),
-  );
-  void openEstimate(keys);
+  // T04563：只重提可恢复项；retryable===false 的项（认证/413/预算）重跑只会再次失败
+  void openEstimate(retrySplit.value.retryableKeys);
 }
+
+// 失败分流：可重试（未消解 + 瞬时错误）与需人工处理（永久失败）分开展示/重提
+const retrySplit = computed(() => splitRetryableFailures(batchFailed.value, batchIneffective.value));
 
 const jobStatusText = computed(() => {
   const current = job.value;
@@ -703,29 +709,42 @@ onMounted(() => {
             取消
           </el-button>
           <el-button
-            v-if="(batchFailed.length > 0 || batchIneffective.length > 0) && job.status !== 'running'"
+            v-if="retrySplit.retryable.length > 0 && job.status !== 'running'"
             size="small"
             class="neon-btn"
             :icon="RefreshRight"
-            data-tip="重试失败/未消解项 - 只把上次未达成的问题重新提交为新作业"
+            data-tip="重试可恢复项 - 只把上次未达成且可重试的问题重新提交为新作业"
             :disabled="anyFixing"
             @click="retryFailed"
           >
-            重试失败/未消解（{{ batchFailed.length + batchIneffective.length }}）
+            重试可恢复项（{{ retrySplit.retryable.length }}）
           </el-button>
+          <span
+            v-if="retrySplit.manual.length > 0 && job.status !== 'running'"
+            class="manual-tag"
+            data-tip="认证失败 / 内容过大 / 预算耗尽等永久失败，需先修正配置或内容再单独处理"
+          >
+            需人工处理（{{ retrySplit.manual.length }}）
+          </span>
         </div>
 
-        <div v-if="batchFailed.length > 0" class="job-failed">
-          <div v-for="f in batchFailed" :key="f.issueKey" class="failed-item">
+        <div v-if="retrySplit.retryable.length > 0" class="job-failed">
+          <div class="failed-title">可重试项（{{ retrySplit.retryable.length }}）</div>
+          <div v-for="f in retrySplit.retryable" :key="f.issueKey" class="failed-item">
             <code>{{ f.issueKey }}</code>
             <span class="failed-msg">{{ f.message }}</span>
+            <span v-if="f.category" class="failure-category">{{ failureCategoryLabel(f.category) }}</span>
           </div>
         </div>
 
-        <div v-if="batchIneffective.length > 0" class="job-failed">
-          <div v-for="f in batchIneffective" :key="f.issueKey" class="failed-item">
+        <div v-if="retrySplit.manual.length > 0" class="job-failed">
+          <div class="failed-title">需人工处理（{{ retrySplit.manual.length }}）</div>
+          <div v-for="f in retrySplit.manual" :key="f.issueKey" class="failed-item">
             <code>{{ f.issueKey }}</code>
             <span class="failed-msg">{{ f.message }}</span>
+            <span class="failure-manual">
+              {{ failureCategoryLabel(f.category) || '不可自动重试' }} · 需人工处理
+            </span>
           </div>
         </div>
       </div>
@@ -1300,6 +1319,37 @@ onMounted(() => {
 
 .failed-msg {
   color: var(--text-soft);
+}
+
+.failed-title {
+  font-size: 11px;
+  color: var(--text-soft);
+  opacity: 0.85;
+}
+
+.failure-category {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--accent-pink-a12, rgba(255, 0, 110, 0.12));
+  color: var(--text-soft);
+  font-size: 10px;
+}
+
+.failure-manual {
+  flex-shrink: 0;
+  color: var(--pink-readable, var(--accent-pink, #ff006e));
+  font-size: 10px;
+}
+
+.manual-tag {
+  align-self: center;
+  padding: 2px 8px;
+  border: 1px dashed var(--accent-pink-a30);
+  border-radius: 10px;
+  color: var(--text-soft);
+  font-size: 11px;
+  cursor: help;
 }
 
 /* ===== 加载 / 骨架 ===== */

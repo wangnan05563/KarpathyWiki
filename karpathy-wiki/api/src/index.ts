@@ -565,7 +565,13 @@ export async function buildApp(): Promise<BuiltApp> {
   // T00265：重新启用 registerThreadsRoute——上下文占用徽章依赖 GET /threads/:id/context
   //   （拉取当前上下文 token 数与 maxTokens）与 POST /threads/:id/compact（手动压缩）
   registerThreadsRoute(app, threadStore, governorConfig, isolationGuards);
-  registerHealthCheckRoute(app, adapter, isolationGuards);
+  // T04563：批量修复的项级重试/超时预算来自 healthCheck 配置（缺省值见 config.ts）
+  registerHealthCheckRoute(app, adapter, isolationGuards, undefined, {
+    maxRetries: config.healthCheck.fixRetry?.maxRetries,
+    baseDelayMs: config.healthCheck.fixRetry?.baseDelayMs,
+    maxDelayMs: config.healthCheck.fixRetry?.maxDelayMs,
+    itemTimeoutMs: config.healthCheck.fixItemTimeoutMs,
+  });
   // files/graph/stats 路由直接操作 Vault，不经过 adapter（纯确定性操作）
   // FR-18：末尾传 knowledge.staleDays 供 /files/pages 注入每页知识时效状态（Browse 角标）
   registerFilesRoutes(app, vault, isolationGuards, { filesReadAuthRequired: config.auth?.filesReadAuthRequired ?? false }, config.knowledge?.staleDays ?? 365);

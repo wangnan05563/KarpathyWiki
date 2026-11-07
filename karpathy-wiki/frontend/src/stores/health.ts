@@ -77,8 +77,9 @@ export const useHealthStore = defineStore('health', () => {
       return;
     }
     batchDoneKeys.value = new Set(snapshot.doneKeys);
-    batchFailed.value = [...snapshot.failed];
-    batchIneffective.value = [...(snapshot.ineffective ?? [])];
+    // T04563：旧快照的失败项没有 retryable → 按可重试降级，与后端 ensureLoaded 同口径
+    batchFailed.value = snapshot.failed.map((f) => ({ ...f, retryable: f.retryable !== false }));
+    batchIneffective.value = (snapshot.ineffective ?? []).map((f) => ({ ...f, retryable: f.retryable !== false }));
   }
 
   function clearJob() {
@@ -206,7 +207,12 @@ export const useHealthStore = defineStore('health', () => {
         job.value.ineffective = [...batchIneffective.value];
       } else {
         job.value.failCount++;
-        const item: BatchFixFailedItem = { issueKey: key, message: ev.message || '修复失败' };
+        const item: BatchFixFailedItem = {
+          issueKey: key,
+          message: ev.message || '修复失败',
+          retryable: ev.retryable !== false,
+          category: ev.category ?? ev.data?.category,
+        };
         batchFailed.value.push(item);
         job.value.failed = [...batchFailed.value];
       }

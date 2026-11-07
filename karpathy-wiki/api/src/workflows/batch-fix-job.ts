@@ -28,6 +28,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { withCompileLock } from '../compile-queue.js';
+import { friendlyLlmError, isRetryableLlmError } from '../utils/llm-error.js';
 import type { EngineAdapter, FixInput, FixProgressEvent } from '../types.js';
 
 // 作业状态。暂停请求不单独建状态：用 pauseRequested 标记，当前问题跑完落 paused。
@@ -42,6 +43,10 @@ export interface BatchFixEvent {
 export interface BatchFixFailedItem {
   issueKey: string;
   message: string;
+  // T04563：可重试性（缺省/旧快照按可重试降级）；认证失败/413/护栏拒绝为 false
+  retryable?: boolean;
+  // 失败类别：timeout / rate_limit / service_down / auth / request_too_large / budget / unknown
+  category?: string;
 }
 
 // 单个待修复项：稳定 key（前端生成，如 orphan:foo.md）+ 修复入参
@@ -126,6 +131,8 @@ interface JobEntry {
   subscribers: Set<BatchFixSink>;
   stopRequested: boolean;
   stopKind: 'pause' | 'cancel';
+  // T04563：当前项（或重试退避）的中止句柄；pause/cancel 直接 abort，无需等整项跑完
+  activeAbort: AbortController | null;
 }
 
 // 环形缓冲上限：597 项 × 多步事件量很大，只保留尾部用于断线重连回放；
@@ -142,6 +149,62 @@ const FALLBACK_TOKENS_PER_ISSUE = 17_200;
 const MEASURED_SAMPLE_THRESHOLD = 5;
 // 单样本无法量方差，用 ±50% 显式表达不确定性（明示规则，不是统计结论）
 const SINGLE_SAMPLE_SPREAD = 0.5;
+
+// T04563：项级容错默认值。config.ts 的 defaultConfig 写入同值（可配置口径在配置层）；
+// 这里保留一份，供直接构造管理器的测试/调用方在缺省时降级。
+// itemTimeoutMs 必须大于 harness 单次最坏耗时（Layer A：60s × 3 次重试 ≈ 186s），
+// 取 300s 以免把「还在正常跑的项」误判超时。
+export const DEFAULT_BATCH_FIX_OPTIONS: Required<BatchFixJobOptions> = {
+  maxRetries: 2,
+  baseDelayMs: 1000,
+  maxDelayMs: 30_000,
+  itemTimeoutMs: 300_000,
+};
+
+export interface BatchFixJobOptions {
+  /** 单项失败后的自动重试次数（不含首次尝试） */
+  maxRetries?: number;
+  /** 指数退避基数（毫秒），实际等待 = 基数 × 2^(n-1)，再叠加 50%~100% jitter */
+  baseDelayMs?: number;
+  /** 退避上限（毫秒） */
+  maxDelayMs?: number;
+  /** 单项（单次尝试）超时预算（毫秒） */
+  itemTimeoutMs?: number;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
+  });
+}
+
+function backoffDelay(attempt: number, opts: Required<BatchFixJobOptions>): number {
+  const ceiling = Math.min(opts.maxDelayMs, opts.baseDelayMs * 2 ** (attempt - 1));
+  // 半固定 + 半随机：避免多项连续失败时同拍重试再次撞上限流窗口
+  return Math.round(ceiling / 2 + Math.random() * (ceiling / 2));
+}
+
+function classifyFixFailure(outcome: FixOutcome): { retryable: boolean; category?: string } {
+  // 工作流显式声明（如 budget）优先，避免文案变化影响分类
+  if (outcome.retryable !== undefined) return { retryable: outcome.retryable, category: outcome.category };
+  const raw = outcome.error ?? outcome.errorMessage;
+  if (!raw) return { retryable: false, category: outcome.category };
+  return {
+    retryable: isRetryableLlmError(raw),
+    category: outcome.category ?? friendlyLlmError(raw).category,
+  };
+}
 
 function emptyStats(): DurationStats {
   return {
@@ -178,12 +241,17 @@ interface FixOutcome {
   gotDoneEvent: boolean;
   harnessSteps: number;
   tokens: number;
+  // T04563：原始异常（分类用）与工作流显式给出的可重试性/类别
+  error?: unknown;
+  retryable?: boolean;
+  category?: string;
 }
 
 export class BatchFixJobManager {
   private readonly jobsDir: string;
   private readonly statsFile: string;
   private readonly adapter: EngineAdapter;
+  private readonly options: Required<BatchFixJobOptions>;
   private readonly jobs = new Map<string, JobEntry>();
   // 串行落盘：同一 job 的并发写入互相覆盖，排队保证后写生效
   private writeChain: Promise<void> = Promise.resolve();
@@ -201,10 +269,16 @@ export class BatchFixJobManager {
     this.startupPrune.catch(() => undefined);
   }
 
-  constructor(jobsDir: string, adapter: EngineAdapter) {
+  constructor(jobsDir: string, adapter: EngineAdapter, options: BatchFixJobOptions = {}) {
     this.jobsDir = jobsDir;
     this.statsFile = path.join(jobsDir, 'stats.json');
     this.adapter = adapter;
+    this.options = {
+      maxRetries: Math.max(0, options.maxRetries ?? DEFAULT_BATCH_FIX_OPTIONS.maxRetries),
+      baseDelayMs: Math.max(0, options.baseDelayMs ?? DEFAULT_BATCH_FIX_OPTIONS.baseDelayMs),
+      maxDelayMs: Math.max(0, options.maxDelayMs ?? DEFAULT_BATCH_FIX_OPTIONS.maxDelayMs),
+      itemTimeoutMs: Math.max(1, options.itemTimeoutMs ?? DEFAULT_BATCH_FIX_OPTIONS.itemTimeoutMs),
+    };
     // T02888：快照回收原来只在下一次批量修复起跑时发生——用过一次就不再用的用户，
     // 终态快照会一直留在盘上，而清理页四类目标都不扫 batch-fix（看不到也删不掉）。
     // 快照是「断点续传/恢复」语义（与 run-state 同族），不并入清理删除面，
@@ -243,6 +317,7 @@ export class BatchFixJobManager {
       subscribers: new Set(),
       stopRequested: false,
       stopKind: 'pause',
+      activeAbort: null,
     };
     this.jobs.set(snapshot.jobId, entry);
     await this.pruneOldSnapshots();
@@ -279,12 +354,15 @@ export class BatchFixJobManager {
     return snap;
   }
 
-  /** 暂停：当前问题跑完后停下。FixInput 无 signal，无法中断进行中的 LLM 调用，故如实标注「等待当前项完成」。 */
+  /**
+   * 暂停：若有进行中的项，abort 其 signal 立即中断（LLM 调用随之中止），该项不计完成、
+   * 保持 nextIndex 不变，继续时从该项重跑；无进行中项时在下一轮迭代开头停下。
+   */
   async pause(jobId: string): Promise<BatchFixSnapshot | null> {
     return this.requestStop(jobId, 'pause');
   }
 
-  /** 取消：语义同暂停，但落 canceled 态；已完成项保留。 */
+  /** 取消：语义同暂停（中断当前项），但落 canceled 态；已完成项保留。 */
   async cancel(jobId: string): Promise<BatchFixSnapshot | null> {
     return this.requestStop(jobId, 'cancel');
   }
@@ -424,6 +502,9 @@ export class BatchFixJobManager {
     entry.stopRequested = true;
     entry.stopKind = kind;
     entry.snapshot.pauseRequested = true;
+    // T04563：立即中断进行中的 LLM 调用/退避等待；fixOne 会把它当「未结算」处理，
+    // nextIndex 不前移，继续时该项重跑。
+    entry.activeAbort?.abort();
     this.emit(entry, 'batch_stop_requested', { jobId, kind });
     await this.persist(entry);
     return entry.snapshot;
@@ -441,13 +522,16 @@ export class BatchFixJobManager {
           issueIndex: i,
           totalIssues: snap.total,
         });
-        await this.fixOne(entry, item, i);
-        snap.nextIndex = i + 1;
-        snap.doneCount = snap.nextIndex;
+        const settled = await this.fixOne(entry, item, i);
+        // T04563：被暂停/取消中断的中途项不算完成，nextIndex 不前移，继续时从该项重跑
+        if (settled) {
+          snap.nextIndex = i + 1;
+          snap.doneCount = snap.nextIndex;
+        }
         snap.elapsedMs = Date.now() - snap.startedAt;
         snap.currentIssueKey = '';
         await this.persist(entry);
-        if (entry.stopRequested) break;
+        if (!settled || entry.stopRequested) break;
       }
     });
     this.finalize(entry);
@@ -493,32 +577,118 @@ export class BatchFixJobManager {
   // 修复单个问题：把 adapter.healthCheckFix 的事件包装为带定位信息的批量事件。
   // T02922：流程成功的终态事件延后到定点复检之后——先裁定「消解/未消解」，
   // 再发 issue_done / issue_ineffective，保证「全部打绿」只代表问题真的消解了。
-  private async fixOne(entry: JobEntry, item: BatchFixItem, issueIndex: number): Promise<void> {
+  // T04563：项级自动重试（仅可重试错误）+ 项级超时 + 暂停/取消中断。
+  // 返回值 = 该项是否已结算：成功/最终失败都算结算（nextIndex 前移）；
+  // 被暂停/取消中断且未跑完的中途项返回 false，保持 nextIndex 不变，继续时重跑。
+  private async fixOne(entry: JobEntry, item: BatchFixItem, issueIndex: number): Promise<boolean> {
     const snap = entry.snapshot;
-    const startedAt = Date.now();
-    const outcome = await this.runFixStream(entry, item, issueIndex);
-    // 下限钳 1ms：recordDuration 拒绝 <=0，而瞬时完成的桩流程 Date.now() 差可能为 0
-    const ms = Math.max(1, Date.now() - startedAt);
-    if (!outcome.gotDoneEvent) outcome.errorMessage = '修复流提前结束（未收到完成事件）';
+    const opts = this.options;
+    const maxAttempts = Math.max(1, opts.maxRetries + 1);
+    let outcome: FixOutcome | null = null;
+    let firstAttemptMs = 0;
+    let totalMs = 0;
+    let retryable = false;
+    let category: string | undefined;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const controller = new AbortController();
+      entry.activeAbort = controller;
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, opts.itemTimeoutMs);
+      const attemptStartedAt = Date.now();
+      try {
+        outcome = await this.runFixStream(entry, item, issueIndex, {
+          ...item.input,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+        if (entry.activeAbort === controller) entry.activeAbort = null;
+      }
+      const attemptMs = Math.max(1, Date.now() - attemptStartedAt);
+      totalMs += attemptMs;
+      if (attempt === 1) firstAttemptMs = attemptMs;
+      if (timedOut) {
+        outcome.errorMessage = `修复超时：超过项级时限 ${opts.itemTimeoutMs}ms`;
+        outcome.category = 'timeout';
+        outcome.retryable = true;
+      } else if (!outcome.gotDoneEvent) {
+        outcome.errorMessage = '修复流提前结束（未收到完成事件）';
+      }
+      if (outcome.succeeded) break;
+      // 用户暂停/取消：不计失败、不推进 nextIndex（若这次已跑完成功，上方 break 后按结算处理）
+      if (entry.stopRequested) return false;
+      ({ retryable, category } = classifyFixFailure(outcome));
+      if (retryable && attempt < maxAttempts) {
+        const delay = backoffDelay(attempt, opts);
+        this.emit(entry, 'progress', {
+          step: 'retry',
+          status: 'running',
+          message: `第 ${attempt} 次自动重试（${category ?? '瞬时错误'}）：${outcome.errorMessage}`,
+          retryable: true,
+          category,
+          issueIndex,
+          totalIssues: snap.total,
+          issueKey: item.issueKey,
+        });
+        await this.waitBackoff(entry, delay);
+        if (entry.stopRequested) return false;
+        continue;
+      }
+      break;
+    }
+
+    if (!outcome) return false;
     if (outcome.succeeded) {
       await this.finishSuccessfulFix(entry, item, issueIndex, outcome);
+      // 成功项记完整耗时（含重试的真实 LLM 成本）
+      await this.recordDuration(totalMs, { steps: outcome.harnessSteps, tokens: outcome.tokens });
     } else {
       snap.failCount++;
-      snap.failed.push({ issueKey: item.issueKey, message: outcome.errorMessage });
+      snap.failed.push({ issueKey: item.issueKey, message: outcome.errorMessage, retryable, category });
+      this.emit(entry, 'issue_error', {
+        step: 'done',
+        status: 'error',
+        message: outcome.errorMessage,
+        retryable,
+        category,
+        data: { harnessSteps: outcome.harnessSteps, tokens: outcome.tokens },
+        issueIndex,
+        totalIssues: snap.total,
+        issueKey: item.issueKey,
+        issueDone: true,
+      });
+      // 失败项只记首次尝试耗时：T02922 要求失败也计样本（否则估算越跑越乐观），
+      // 但重试/退避的额外耗时不能把单次成本抬高（T04563）。
+      await this.recordDuration(firstAttemptMs, { steps: outcome.harnessSteps, tokens: outcome.tokens });
     }
-    // 耗时样本口径：只要 LLM 流程跑过就计入（成功/未消解/失败都消耗真实时间），
-    // 否则无效项白跑 LLM 却不计样本，估算会越跑越乐观。T02924：同时累计 step/token 样本。
-    await this.recordDuration(ms, { steps: outcome.harnessSteps, tokens: outcome.tokens });
     const stats = await this.readStats();
     snap.avgMsPerIssue = stats.avgMs;
     snap.avgStepsPerIssue = Math.round(stats.avgSteps * 10) / 10;
+    return true;
+  }
+
+  // 重试退避：期间把 controller 暴露给 requestStop，暂停/取消可立即打断等待
+  private async waitBackoff(entry: JobEntry, ms: number): Promise<void> {
+    const controller = new AbortController();
+    entry.activeAbort = controller;
+    try {
+      await sleep(ms, controller.signal);
+    } finally {
+      if (entry.activeAbort === controller) entry.activeAbort = null;
+    }
   }
 
   // 消费修复流：逐事件转发；抛出异常时补一条终态错误事件，保证订阅端总能收到结束信号。
+  // T04563：终态错误先不广播——是否重试由 fixOne 按可重试性裁定，避免中间尝试被计成失败项。
   private async runFixStream(
     entry: JobEntry,
     item: BatchFixItem,
     issueIndex: number,
+    input: FixInput,
   ): Promise<FixOutcome> {
     // T02924：终端事件带出的实测往返步数/token（缺省 0 → 不计入 step/token 均值）
     const outcome: FixOutcome = {
@@ -530,24 +700,14 @@ export class BatchFixJobManager {
       tokens: 0,
     };
     try {
-      for await (const ev of this.adapter.healthCheckFix(item.input)) {
+      for await (const ev of this.adapter.healthCheckFix(input)) {
         this.emitFixEvent(entry, ev, item, issueIndex, outcome);
       }
     } catch (err: unknown) {
       outcome.succeeded = false;
       outcome.gotDoneEvent = true;
+      outcome.error = err;
       outcome.errorMessage = err instanceof Error ? err.message : String(err);
-      this.emit(entry, 'issue_error', {
-        step: 'done',
-        status: 'error',
-        message: outcome.errorMessage,
-        issueIndex,
-        totalIssues: entry.snapshot.total,
-        issueKey: item.issueKey,
-        issueDone: true,
-        harnessSteps: outcome.harnessSteps,
-        tokens: outcome.tokens,
-      });
     }
     return outcome;
   }
@@ -580,7 +740,10 @@ export class BatchFixJobManager {
       return;
     }
     outcome.errorMessage = ev.message || '修复失败';
-    this.emit(entry, 'issue_error', wrapped);
+    if (ev.data?.category !== undefined) outcome.category = ev.data.category;
+    if (ev.data?.retryable !== undefined) outcome.retryable = ev.data.retryable;
+    if (ev.category !== undefined) outcome.category = ev.category;
+    if (ev.retryable !== undefined) outcome.retryable = ev.retryable;
   }
 
   // 成功后的定点复检：先裁定「消解/未消解」，再广播终态事件。
@@ -707,6 +870,9 @@ export class BatchFixJobManager {
       // 旧快照（T02922 之前落盘）没有这两个字段，补齐避免前端读到 undefined
       snapshot.ineffectiveCount ??= 0;
       snapshot.ineffective ??= [];
+      // T04563：旧快照的失败项没有 retryable → 按「可重试」降级，避免老记录被误判为永久失败
+      snapshot.failed = (snapshot.failed ?? []).map((f) => ({ ...f, retryable: f.retryable !== false }));
+      snapshot.ineffective = snapshot.ineffective.map((f) => ({ ...f, retryable: f.retryable !== false }));
       // T02924：同理补齐 step 均值，旧作业面板不显示 undefined
       snapshot.avgStepsPerIssue ??= 0;
       const entry: JobEntry = {
@@ -716,6 +882,7 @@ export class BatchFixJobManager {
         subscribers: new Set(),
         stopRequested: false,
         stopKind: 'pause',
+        activeAbort: null,
       };
       this.jobs.set(jobId, entry);
       return entry;

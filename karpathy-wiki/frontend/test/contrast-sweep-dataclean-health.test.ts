@@ -1,6 +1,6 @@
 // T04449 口径推广·第三组：数据清洗页（DataClean.vue）+ 体检页（Health.vue）。
 // 与首组/第二组同一缺陷族：把为深色霓虹底设计的强调色基名直接写进 color / border(-color) / outline，
-// 在浅底主题上跌破 WCAG AA。本组覆盖两页全部 62 处「基色当前景」消费点（清洗页 33 + 体检页 29），
+// 在浅底主题上跌破 WCAG AA。本组覆盖两页全部 63 处「基色当前景」消费点（清洗页 33 + 体检页 30），
 // 其中包含 CSS 扫描看不见的模板内联 style（清洗页 3 处）——它们同样是用户可见文字。
 //
 // 口径边界（写清楚，避免下一组误判）：
@@ -92,7 +92,7 @@ const AUDIT: AuditRow[] = [
   { label: '清洗页·AI 新增项标记', fg: 'var(--accent-readable)', bg: CARD, kind: 'text' },
   { label: '清洗页·AI 流转箭头', fg: 'var(--accent-readable)', bg: CARD, kind: 'text' },
   { label: '清洗页·AI 分组代表页（淡青 tint 面）', fg: 'var(--accent-readable)', bg: 'var(--accent-cyan-a10, rgba(0, 255, 200, 0.1))', kind: 'text' },
-  // —— 体检页（29，含 T04460 转真的 2 处琥珀前景）——
+  // —— 体检页（30，含 T04460 转真的 2 处琥珀前景 + T04563 的需人工处理提示）——
   { label: '体检页·主按钮 hover 描边', fg: 'var(--accent-readable)', bg: CARD, kind: 'ui' },
   { label: '体检页·主按钮 hover 文字', fg: 'var(--accent-readable)', bg: CARD, kind: 'text' },
   { label: '体检页·批量修复按钮文字（红族）', fg: 'var(--pink-readable)', bg: CARD, kind: 'text' },
@@ -125,23 +125,25 @@ const AUDIT: AuditRow[] = [
   // 因此纳入逐主题实算
   { label: '体检页·任务统计「未消解」琥珀文字', fg: 'var(--warning-readable)', bg: CARD, kind: 'text' },
   { label: '体检页·估算依据「低置信」琥珀文字', fg: 'var(--warning-readable)', bg: CARD, kind: 'text' },
+  // T04563：永久失败项（认证/413/预算）的「需人工处理」提示
+  { label: '体检页·需人工处理提示（红族）', fg: 'var(--pink-readable)', bg: CARD, kind: 'text' },
 ];
 
 /** readable 消费点总数（数 token 名出现次数，不受单行规则 / 内联 style / !important 排版影响） */
 const readableRefCount = (src: string) => (src.match(/-readable/g) || []).length;
 
 describe('T04449 推广第三组：清洗页/体检页前景逐主题达标', () => {
-  it('8 主题 × 62 面全部达 AA（文本 4.5 / 非文本 3.0）', () => {
+  it('8 主题 × 63 面全部达 AA（文本 4.5 / 非文本 3.0）', () => {
     const failures = auditThemes(AUDIT, themes);
     expect(failures, formatFailures(failures)).toEqual([]);
   });
 
   it('清单规模与两页实现严格对齐（防止清单与代码脱钩空转）', () => {
-    expect(AUDIT.length).toBe(62);
+    expect(AUDIT.length).toBe(63);
     const dc = readFileSync(join(ROOT, FILES[0]), 'utf8');
     const he = readFileSync(join(ROOT, FILES[1]), 'utf8');
     expect(readableRefCount(dc), 'DataClean.vue 的 readable 消费点数与清单不一致').toBe(33);
-    expect(readableRefCount(he), 'Health.vue 的 readable 消费点数与清单不一致').toBe(29);
+    expect(readableRefCount(he), 'Health.vue 的 readable 消费点数与清单不一致').toBe(30);
   });
 
   it('每个包裹表达式括号平衡（防止接入器吃掉右括号）', () => {

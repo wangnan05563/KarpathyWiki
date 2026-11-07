@@ -101,7 +101,8 @@ describe('health store · T02922 已消解 / 未消解分列', () => {
 
     expect(store.batchDoneKeys.has('orphan:a.md')).toBe(true);
     expect(store.batchIneffective).toEqual([
-      { issueKey: 'orphan:b.md', message: '流程完成但问题未消解' },
+      // T04563：快照里的旧项无 retryable 字段，装载时按可重试降级
+      { issueKey: 'orphan:b.md', message: '流程完成但问题未消解', retryable: true },
     ]);
     expect(store.batchFailed).toEqual([]);
     expect(store.batchIneffectiveCount).toBe(1);

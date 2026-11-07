@@ -46,7 +46,14 @@ function defaultConfig(): AppConfig {
     budget: { maxSteps: 20, tokenBudget: 50000 },
     server: { host: 'localhost', port: 3000 },
     localOnly: false,
-    healthCheck: { staleDays: 30 },
+    healthCheck: {
+      staleDays: 30,
+      // T04563：批量修复项级容错默认值（与 workflows/batch-fix-job.ts 的兜底常量同值）。
+      // 自动重试只针对可重试错误（超时/限流/5xx），指数退避 + jitter；项级超时须大于
+      // harness 单次最坏耗时（60s × 3 次 ≈ 186s），取 300s 避免误杀正常长任务。
+      fixRetry: { maxRetries: 2, baseDelayMs: 1000, maxDelayMs: 30000 },
+      fixItemTimeoutMs: 300000,
+    },
     tunnel: {
       provider: 'cloudflare',
       localPort: 0,
@@ -393,7 +400,12 @@ function mergeConfigObjects(defaults: AppConfig, parsed: Partial<AppConfig>): Ap
     llm: { ...defaults.llm, ...parsed.llm },
     budget: { ...defaults.budget, ...parsed.budget },
     server: { ...defaults.server, ...parsed.server },
-    healthCheck: { ...defaults.healthCheck, ...parsed.healthCheck },
+    healthCheck: {
+      ...defaults.healthCheck,
+      ...parsed.healthCheck,
+      // T04563：重试参数是嵌套对象，浅合并会让用户只写 maxRetries 时丢失另外两个默认值
+      fixRetry: { ...defaults.healthCheck.fixRetry, ...parsed.healthCheck?.fixRetry },
+    },
     tunnel: { ...defaults.tunnel, ...parsed.tunnel },
     // 为什么用条件合并而非展开：parsed.logging 是可选的，展开后 level 会变成 string | undefined
     logging: mergeSection(defaults.logging, parsed.logging),

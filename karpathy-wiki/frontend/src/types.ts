@@ -517,9 +517,12 @@ export interface FixProgressEvent {
   status: 'running' | 'done' | 'error';
   message: string;
   tool?: string;
-  data?: { path?: string };
+  data?: { path?: string; harnessSteps?: number; tokens?: number; category?: string; retryable?: boolean };
   // T02954：单修复定点复检裁定；ineffective 事件为 false
   resolved?: boolean;
+  // T04563：批量失败项的失败类别与可重试性（认证失败/413/预算耗尽为 false）
+  retryable?: boolean;
+  category?: string;
 }
 
 // 批量修复请求体：items 为单个修复任务的有序列表，后端串行执行。
@@ -558,6 +561,9 @@ export type BatchFixJobStatus = 'running' | 'paused' | 'canceled' | 'completed';
 export interface BatchFixFailedItem {
   issueKey: string;
   message: string;
+  // T04563：缺省（旧快照）按可重试降级；false 表示认证/413/预算等需人工处理
+  retryable?: boolean;
+  category?: string;
 }
 
 export interface BatchFixJobSnapshot {

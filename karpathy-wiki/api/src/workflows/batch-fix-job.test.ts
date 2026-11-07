@@ -149,6 +149,7 @@ describe('BatchFixJobManager', { timeout: FS_HEAVY_TIMEOUT_MS }, () => {
 
   // T02922 口径：失败项也消耗了真实 LLM 时间，必须计入耗时样本（不排除），
   // 否则估算只看到成功项、越跑越乐观。此处锁「进 failed 清单」与「进样本」两件事。
+  // T04563：failed 项附带可重试性；不可重试错误不消耗重试次数（本条为 unknown → false）。
   it('失败项计入 failed 清单，同时仍计入耗时样本（T02922 口径）', async () => {
     const manager = new BatchFixJobManager(dir, fakeAdapter((input) =>
       String(input.target) === 'bad.md'
@@ -159,7 +160,9 @@ describe('BatchFixJobManager', { timeout: FS_HEAVY_TIMEOUT_MS }, () => {
     const done = await waitFor(() => manager.getSnapshot(started.jobId), (s) => s.status === 'completed');
     expect(done.successCount).toBe(1);
     expect(done.failCount).toBe(1);
-    expect(done.failed).toEqual([{ issueKey: 'orphan:bad.md', message: '模型返回异常' }]);
+    expect(done.failed).toEqual([
+      { issueKey: 'orphan:bad.md', message: '模型返回异常', retryable: false, category: 'unknown' },
+    ]);
     expect(done.doneKeys).toEqual(['orphan:ok.md']);
     await manager.flush();
     const stats = JSON.parse(await fs.readFile(path.join(dir, 'stats.json'), 'utf8')) as { samples: number };
@@ -257,5 +260,151 @@ describe('BatchFixJobManager', { timeout: FS_HEAVY_TIMEOUT_MS }, () => {
     expect(stats.samples).toBe(4);
     expect(stats.totalMs).toBe(10_000);
     expect(stats.avgMs).toBe(2500);
+  });
+
+  // ===== T04563 项级容错 =====
+
+  const fastRetry = { maxRetries: 2, baseDelayMs: 1, maxDelayMs: 2, itemTimeoutMs: 5000 };
+
+  it('可重试错误自动重试：首次网络错、第二次成功 → failCount=0 且只重试 1 次', async () => {
+    let attempts = 0;
+    const manager = new BatchFixJobManager(
+      dir,
+      fakeAdapter(() => {
+        attempts++;
+        if (attempts === 1) throw new Error('fetch failed: ECONNRESET');
+        return [{ step: 'done', status: 'done', message: 'ok' }];
+      }),
+      fastRetry,
+    );
+    const started = await manager.start(itemsOf(['a.md']));
+    const done = await waitFor(() => manager.getSnapshot(started.jobId), (s) => s.status === 'completed');
+    expect(attempts).toBe(2);
+    expect(done.failCount).toBe(0);
+    expect(done.successCount).toBe(1);
+    expect(done.failed).toEqual([]);
+    expect(done.doneKeys).toEqual(['orphan:a.md']);
+  });
+
+  it('永久失败不重试：连续 401 只尝试 1 次，failed 带 retryable=false / auth', async () => {
+    let attempts = 0;
+    const manager = new BatchFixJobManager(
+      dir,
+      fakeAdapter(() => {
+        attempts++;
+        throw new Error('LLM API error 401: unauthorized');
+      }),
+      fastRetry,
+    );
+    const started = await manager.start(itemsOf(['a.md']));
+    const done = await waitFor(() => manager.getSnapshot(started.jobId), (s) => s.status === 'completed');
+    expect(attempts).toBe(1);
+    expect(done.failCount).toBe(1);
+    expect(done.failed[0]).toMatchObject({
+      issueKey: 'orphan:a.md',
+      retryable: false,
+      category: 'auth',
+    });
+  });
+
+  it('错误事件显式标注 budget → 直接落可人工处理的失败，不自动重试', async () => {
+    let attempts = 0;
+    const manager = new BatchFixJobManager(
+      dir,
+      fakeAdapter(() => {
+        attempts++;
+        return [
+          {
+            step: 'done',
+            status: 'error',
+            message: '超出步数/Token 预算，未完成修复（已执行 50 步）',
+            data: { category: 'budget', retryable: false },
+          },
+        ];
+      }),
+      fastRetry,
+    );
+    const started = await manager.start(itemsOf(['a.md']));
+    const done = await waitFor(() => manager.getSnapshot(started.jobId), (s) => s.status === 'completed');
+    expect(attempts).toBe(1);
+    expect(done.failed[0]).toMatchObject({ retryable: false, category: 'budget' });
+  });
+
+  it('暂停会 abort 进行中项的 signal，该项不计完成也不计失败，继续时从该项重跑', async () => {
+    let captured: AbortSignal | undefined;
+    let markStarted!: () => void;
+    const running = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const adapter = {
+      healthCheckFix: async function* (input: FixInput): AsyncIterable<FixProgressEvent> {
+        captured = input.signal;
+        markStarted();
+        await new Promise<void>((resolve) => {
+          input.signal?.addEventListener('abort', () => resolve(), { once: true });
+          setTimeout(resolve, 500);
+        });
+        if (input.signal?.aborted) throw new Error('This operation was aborted');
+        yield { step: 'done', status: 'done', message: 'ok' };
+      },
+    } as unknown as EngineAdapter;
+    const manager = new BatchFixJobManager(dir, adapter, { ...fastRetry, maxRetries: 0 });
+    const started = await manager.start(itemsOf(['a.md', 'b.md']));
+    await running;
+    await manager.pause(started.jobId);
+    const paused = await waitFor(() => manager.getSnapshot(started.jobId), (s) => s.status === 'paused');
+    expect(captured?.aborted).toBe(true);
+    expect(paused.doneCount).toBe(0);
+    expect(paused.nextIndex).toBe(0);
+    expect(paused.successCount).toBe(0);
+    expect(paused.failCount).toBe(0);
+  });
+
+  it('项级超时：无响应项被 abort 并按 timeout 记为可重试失败', async () => {
+    const adapter = {
+      healthCheckFix: async function* (input: FixInput): AsyncIterable<FixProgressEvent> {
+        await new Promise<void>((resolve) => {
+          input.signal?.addEventListener('abort', () => resolve(), { once: true });
+          setTimeout(resolve, 5000);
+        });
+        throw new Error('This operation was aborted');
+      },
+    } as unknown as EngineAdapter;
+    const manager = new BatchFixJobManager(dir, adapter, { maxRetries: 0, baseDelayMs: 1, itemTimeoutMs: 30 });
+    const started = await manager.start(itemsOf(['a.md']));
+    const done = await waitFor(() => manager.getSnapshot(started.jobId), (s) => s.status === 'completed');
+    expect(done.failCount).toBe(1);
+    expect(done.failed[0]).toMatchObject({ retryable: true, category: 'timeout' });
+    expect(done.failed[0].message).toContain('项级时限');
+  });
+
+  it('旧快照的失败项无 retryable 字段 → 装载时按可重试降级', async () => {
+    const jobId = 'legacy-job';
+    const legacy = {
+      jobId,
+      status: 'paused',
+      total: 1,
+      doneCount: 1,
+      successCount: 0,
+      failCount: 1,
+      ineffectiveCount: 0,
+      ineffective: [{ issueKey: 'orphan:y.md', message: '旧未消解' }],
+      currentIssueKey: '',
+      pauseRequested: false,
+      startedAt: 1,
+      updatedAt: 1,
+      elapsedMs: 1,
+      avgMsPerIssue: 1,
+      avgStepsPerIssue: 0,
+      doneKeys: [],
+      failed: [{ issueKey: 'orphan:x.md', message: '旧失败' }],
+      items: [],
+      nextIndex: 1,
+    };
+    await fs.writeFile(path.join(dir, `${jobId}.json`), JSON.stringify(legacy), 'utf8');
+    const reopened = new BatchFixJobManager(dir, fakeAdapter(() => []));
+    const loaded = await reopened.getSnapshot(jobId);
+    expect(loaded?.failed[0]).toMatchObject({ issueKey: 'orphan:x.md', retryable: true });
+    expect(loaded?.ineffective[0]).toMatchObject({ issueKey: 'orphan:y.md', retryable: true });
   });
 });

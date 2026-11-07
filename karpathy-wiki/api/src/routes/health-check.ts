@@ -4,7 +4,7 @@ import type { EngineAdapter, FixInput, FixProgressEvent, BatchFixRequest } from 
 import { withCompileLock } from '../compile-queue.js';
 import { createSSESender, setupSSE } from '../utils/sse.js';
 import { type IsolationGuards, createIsolationGuards } from '../middleware/auth.js';
-import { BatchFixJobManager, type BatchFixSink } from '../workflows/batch-fix-job.js';
+import { BatchFixJobManager, type BatchFixSink, type BatchFixJobOptions } from '../workflows/batch-fix-job.js';
 import { getDataDir } from '../utils/runtime.js';
 
 // 快照瘦身：items 可能上千条（597 项批量 × 每项 target），对外响应只给状态与失败清单，
@@ -95,8 +95,9 @@ export function registerHealthCheckRoute(
   adapter: EngineAdapter,
   guards: IsolationGuards = createIsolationGuards(),
   jobsDir: string = path.join(getDataDir(), '.harness', 'batch-fix'),
+  batchFixOptions: BatchFixJobOptions = {},
 ) {
-  const batchJobs = new BatchFixJobManager(jobsDir, adapter);
+  const batchJobs = new BatchFixJobManager(jobsDir, adapter, batchFixOptions);
   batchJobs.startStartupPrune();
 
   app.post('/api/health-check', { preHandler: guards.requireAdmin }, async (_request, reply) => {
