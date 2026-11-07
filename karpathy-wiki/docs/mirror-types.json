@@ -177,8 +177,9 @@
     {
       "api": "FixInput",
       "frontend": "FixRequest",
-      "verdict": "aligned",
-      "reason": "同名比对照不到的一对：批量修复请求体里的 items 元素，后端叫 FixInput、前端叫 FixRequest，字段集合必须逐字相同"
+      "verdict": "api-superset",
+      "apiOnly": ["signal"],
+      "reason": "同名比对照不到的一对：批量修复请求体里的 items 元素，后端叫 FixInput、前端叫 FixRequest。T04563 起后端 FixInput 增加 signal（进程内 AbortSignal，由服务端暂停/超时注入，不可序列化、不随请求体传输），故登记为后端独有字段"
     }
   ]
 }
