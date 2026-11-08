@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { API_BASE, apiFetch, downloadVaultFile } from '../utils/apiBase';
+import { apiErrorMessage } from '../utils/apiError';
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { TreeInstance } from 'element-plus';
-import { Search, Check, Close, CircleClose, Location, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, MoreFilled, FullScreen, Download, Edit } from '@element-plus/icons-vue';
+import { Search, Check, Close, CircleClose, Location, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, MoreFilled, FullScreen, Download, Edit, Refresh } from '@element-plus/icons-vue';
 import { consumeSSE } from '../utils/sse';
 import { useCompileStore } from '../stores/compile';
 import { usePermission } from '../composables/usePermission';
@@ -1564,6 +1565,30 @@ async function downloadCurrent() {
   }
 }
 
+// T04538：单页重索引——后端 POST /api/search/reindex-page 挂 requireAdmin，此前前端零调用方。
+// 仅管理员可见；请求走 apiFetch 注入 Bearer，错误统一经 apiErrorMessage 映射（与 T04531 口径一致）。
+const reindexingPage = ref(false);
+async function reindexActivePage() {
+  if (!isAdmin.value || reindexingPage.value) return;
+  const path = activeTab.value?.path;
+  if (!path) return;
+  reindexingPage.value = true;
+  try {
+    const res = await apiFetch(`${API_BASE}/search/reindex-page`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${data.error ?? ''}`);
+    ElMessage.success(`已重建本页向量：${path}`);
+  } catch (err) {
+    ElMessage.error(apiErrorMessage('重建本页向量失败', err));
+  } finally {
+    reindexingPage.value = false;
+  }
+}
+
 // 从列表（看板/日历卡片）直接下载文档，带 @click.stop 避免触发卡片打开详情
 // downloadingPage：防快速连点重复下载（评审发现 #4）
 const downloadingPage = ref(false);
@@ -2601,6 +2626,15 @@ onMounted(async () => {
                 data-tip="下载当前页面为 Markdown 文件"
                 :loading="downloading"
                 @click="downloadCurrent"
+              ></el-button>
+              <el-button
+                v-if="isAdmin && mode === 'knowledge' && activeTab?.path && !editing"
+                size="small"
+                :icon="Refresh"
+                :loading="reindexingPage"
+                data-tip="重建当前页面的语义索引（仅管理员）"
+                data-testid="reindex-page-btn"
+                @click="reindexActivePage"
               ></el-button>
               <!-- T00294：文档浏览栏右上角全屏查看/编辑图标（打开全屏遮罩浏览或编辑文本） -->
               <IconActionButton

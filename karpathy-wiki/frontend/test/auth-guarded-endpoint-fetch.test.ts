@@ -185,6 +185,12 @@ describe('受守卫接口禁止裸 fetch（T04531 跨包普查锁）', () => {
       expect(guarded.has('POST /api/search/rebuild')).toBe(true);
     });
 
+    it('单页重索引入口走凭据通道且端点在守卫清单内（T04538）', () => {
+      const browse = fs.readFileSync(path.join(FRONT_SRC, 'views/Browse.vue'), 'utf8');
+      expect(guarded.has('POST /api/search/reindex-page')).toBe(true);
+      expect(browse).toMatch(/apiFetch\(`\$\{API_BASE\}\/search\/reindex-page`/);
+    });
+
     it('已知的其他受守卫接口在清单内（覆盖 requireAuth / requireAdmin 两档）', () => {
       expect(guarded.has('GET /api/config')).toBe(true);
       expect(guarded.has('GET /api/threads')).toBe(true);
