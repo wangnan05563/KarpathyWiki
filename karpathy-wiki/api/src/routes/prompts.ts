@@ -124,6 +124,8 @@ export function registerPromptsRoute(
   // 为什么 PUT 而非 POST：语义为"替换文件全部内容"，符合 PUT 幂等语义
   app.put<{ Params: { name: string } }>(
     '/api/prompts/:name',
+    // T04578：覆写 prompts/*.md 属管理操作（错误配置可让整条编译链失效），档位与 test-run 一致（仅管理员）
+    { preHandler: guards.requireAdmin },
     async (request, reply) => {
       const { name } = request.params;
       if (!PROMPT_WHITELIST_SET.has(name)) {

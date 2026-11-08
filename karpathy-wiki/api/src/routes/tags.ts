@@ -38,7 +38,11 @@ export function registerTagsRoute(
   // GET /api/tags/pending
   // 列出所有含 ai_tags 字段的页面，供前端 Browse.vue 展示待审核列表
   // § 只读 GET 限流 300 req/min（P1-4）：与 files/graph/stats/schema 同档位，Browse 频繁刷新场景
-  app.get('/api/tags/pending', { config: { rateLimit: { max: 300, timeWindow: '1 minute' } } }, async (_req, reply) => {
+  app.get('/api/tags/pending', {
+    config: { rateLimit: { max: 300, timeWindow: '1 minute' } },
+    // T04578：列出全库待审核页（含页面路径与标签），需登录防匿名泄露（裁决口径：全部需登录）
+    preHandler: guards.requireAuth,
+  }, async (_req, reply) => {
     try {
       const pages = await listPendingTagPages(vault);
       reply.send({ pages });
@@ -74,7 +78,10 @@ export function registerTagsRoute(
 
   // PUT /api/tags/confirm
   // 确认 tag：从 ai_tags 移到 tags（合并去重，幂等）
-  app.put('/api/tags/confirm', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.put('/api/tags/confirm', {
+    // T04578：把 ai_tags 并入页面 frontmatter tags 属写操作，需登录（裁决口径：全部需登录）
+    preHandler: guards.requireAuth,
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as { path?: string; tag?: string } | null;
     const pagePath = body?.path ?? '';
     const tag = body?.tag ?? '';
