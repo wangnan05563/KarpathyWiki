@@ -218,26 +218,32 @@ describe('补算期增量与重建/暴力扫描逐条等价（T04186）', () => 
     expect(got).toEqual(bruteForceRecall(dataDir, Q, 10));
   });
 
-  it('补算批量超过账本上限：放弃增量，退回整目录重建且结果仍正确', () => {
+  it('补算批量超过账本上限：块级失效只重建脏块，不整目录重建且结果仍正确（T04474）', () => {
     const dataDir = freshDir();
     const rng = mulberry32(4242);
-    seedPage(dataDir, 'seed/0.md', [randomVec(rng, 3)]);
+    // 先建一个含 800 页的矩阵并缓存：块级失效既要有「脏块」可摘旧贴新，也要有「干净块」可整块保留。
+    // 800 行按 VEC_BLOCK_ROWS=256 分块 → 块0[0,256) 块1[256,512) 块2[512,768) 块3[768,800)。
+    for (let i = 0; i < 800; i++) seedPage(dataDir, `base/page-${i}.md`, [randomVec(rng, 3)]);
     vectorRecall(dataDir, Q, 10);
     expect(getVectorCacheStats().rebuilds).toBe(1);
 
-    // 一次补 401 页且中间不查询：账本已满，继续攒增量没有意义（下一次查询按老口径重建）
-    for (let i = 0; i < 401; i++) seedPage(dataDir, `bulk/page-${i}.md`, [randomVec(rng, 3)]);
-    const got = vectorRecall(dataDir, Q, 10);
+    // 整页重写前 401 页且中间不查询：超过失效预算 → 块级失效（保留账本，只重建脏块）。
+    // 这些页在旧矩阵里有行（dropped>0）：块0 全脏、块1 半脏（256..400 脏 / 401..511 干净）、
+    // 块2、块3 全干净（整块 memcpy 保留）。新行按 rowid 追加尾部，行序仍等于全表重扫。
+    for (let i = 0; i < 401; i++) seedPage(dataDir, `base/page-${i}.md`, [randomVec(rng, 3)]);
+    // limit 取满（>800）让对照覆盖整份矩阵：任何一处旧 rowid 没失效（残留/重复行）都无处遁形
+    const got = vectorRecall(dataDir, Q, 1000);
     const stats = getVectorCacheStats();
-    expect(stats.rebuilds).toBe(2);
-    expect(stats.incrementalPages).toBe(0);
-    expect(got).toEqual(bruteForceRecall(dataDir, Q, 10));
+    expect(stats.rebuilds).toBe(1); // 块级失效没有付出整目录重建（旧口径这里会是 2）
+    expect(stats.incrementalPages).toBe(401); // 401 页改动由块级增量消化
+    expect(got).toEqual(bruteForceRecall(dataDir, Q, 1000));
+    expect(new Set(got.map(keyOf)).size).toBe(got.length); // 旧 rowid 区间确实失效，无重复行
 
-    // 重建之后账本重新开张：后续补算继续吃增量的收益
-    seedPage(dataDir, 'bulk/after.md', [randomVec(rng, 3)]);
-    expect(vectorRecall(dataDir, Q, 10)).toEqual(bruteForceRecall(dataDir, Q, 10));
-    expect(getVectorCacheStats().rebuilds).toBe(2);
-    expect(getVectorCacheStats().incrementalPages).toBe(1);
+    // 块级失效之后账本重新开张：后续补算继续吃增量收益
+    seedPage(dataDir, 'base/after.md', [randomVec(rng, 3)]);
+    expect(vectorRecall(dataDir, Q, 1000)).toEqual(bruteForceRecall(dataDir, Q, 1000));
+    expect(getVectorCacheStats().rebuilds).toBe(1);
+    expect(getVectorCacheStats().incrementalPages).toBe(402);
   });
 
   it('模型隔离在增量路径同样成立：补算进来的行只进自己那套模型的矩阵', () => {

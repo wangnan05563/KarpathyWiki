@@ -329,16 +329,28 @@ interface DirVectorCache {
   bytes: number;
   /** key = `${model ?? ''}\0${dim}`：不同模型/不同维度是不可比的两套向量空间 */
   matrices: Map<string, VectorMatrix>;
-  /** T04186：自 gen 之后本进程改动过向量的页面（集合即可，追加次序由 rowid 决定）。
-   *  null = 账本已满、放弃增量，下一次代号变化直接整目录重建。 */
-  pendingPages: Set<string> | null;
+  /** T04186：自 gen 之后本进程改动过向量的页面（集合即可，追加次序由 rowid 决定）。 */
+  pendingPages: Set<string>;
+  /** T04474：待同步页集合超过失效预算（MAX_PENDING_VEC_PAGES）时置位——弃账粒度从「整本账」
+   *  降到「块」：不再弃账整目录重建，而是保留账本、查询侧只重建脏块（干净块整块搬运）。
+   *  消化一轮增量后复位。 */
+  pendingOverflow: boolean;
   /** 记账口径下这些改动应当把代号推进到的值（chunk_vecs 每行增删改由触发器推 1） */
   expectGen: number;
 }
 
-/** 单次增量同步的页面数上限：超过即放弃记账退回全量重建（补算期一次查几百页已足够，
- *  再大说明写入远快于查询，全量重建本来就是更省的做法） */
+/** 失效预算：待同步页集合超过它，弃账粒度从「整本账」降到「块」（T04474）——
+ *  不再 null 整本账退回整目录重建，而是保留账本、查询侧只重建脏块、干净块整块搬运。
+ *  与 IN(...) 分批大小语义无关，后者已拆成 VEC_IN_BATCH_SIZE。 */
 const MAX_PENDING_VEC_PAGES = 400;
+
+/** 块级失效的矩阵行分块粒度：按 rowid 区间（= 展平数组的位置区间）把矩阵切成块，
+ *  脏块逐行摘旧贴新、干净块整块 memcpy 保留。块大小只影响搬运成本，不影响结果与行序。 */
+const VEC_BLOCK_ROWS = 256;
+
+/** listPageVectorRows 的 IN(...) 绑定参数分批大小：受 SQLite SQLITE_MAX_VARIABLE_NUMBER 约束，
+ *  与失效预算（MAX_PENDING_VEC_PAGES）是两回事——调低账本上限不再连带把分批变小（T04474 拆耦合）。 */
+const VEC_IN_BATCH_SIZE = 999;
 
 const DEFAULT_VECTOR_CACHE_MB = 128;
 const vectorCaches = new Map<string, DirVectorCache>();
@@ -427,10 +439,12 @@ function readVecGen(d: SyncDb): number {
 function noteVecPageMutation(dataDir: string, pagePath: string, vecRowsTouched: number): void {
   if (vecRowsTouched <= 0) return; // 没碰到向量行 → 代号一格没动（重切分但本页从未有向量）
   const dir = vectorCaches.get(dataDir);
-  if (!dir || !dir.pendingPages) return;
+  if (!dir) return;
   dir.expectGen += vecRowsTouched;
   dir.pendingPages.add(pagePath);
-  if (dir.pendingPages.size > MAX_PENDING_VEC_PAGES) dir.pendingPages = null;
+  // T04474：超阈不再整本弃账（那会退回整目录重建）；保留账本、标记块级失效，
+  // 查询侧只重建脏块、干净块不动。账本仍由 expectGen 对账，旁路裸写照样退回重建。
+  if (dir.pendingPages.size > MAX_PENDING_VEC_PAGES) dir.pendingOverflow = true;
 }
 
 /** 待同步页面在库中现存的向量行（rid 定次序，model/dim 决定落到哪一份矩阵） */
@@ -447,8 +461,8 @@ interface PendingVecRow {
  *  同一 rowid 行序；分批 IN 查询避开绑定参数上限。 */
 function listPageVectorRows(d: SyncDb, pages: string[]): PendingVecRow[] {
   const out: PendingVecRow[] = [];
-  for (let i = 0; i < pages.length; i += MAX_PENDING_VEC_PAGES) {
-    const slice = pages.slice(i, i + MAX_PENDING_VEC_PAGES);
+  for (let i = 0; i < pages.length; i += VEC_IN_BATCH_SIZE) {
+    const slice = pages.slice(i, i + VEC_IN_BATCH_SIZE);
     const rows = (d
       .prepare(`
         SELECT v.rowid AS rid, v.page_path AS page_path, v.chunk_index AS chunk_index, v.vec AS vec, v.dim AS dim, v.model AS model
@@ -555,7 +569,7 @@ function buildMatrix(rows: Iterable<VectorRow>, dim: number): VectorMatrix {
  *  而保留行彼此次序不变——「保留段原序 + 新行按 rowid 排在尾部」正是全表扫描的次序，
  *  同分并列名次（keepTopK 的先到先得）因而也与重建路径完全相同。
  *  这份性质还让增量幂等：中途新建的矩阵已含新行，再摘再贴结果不变。 */
-function reshapeMatrix(m: VectorMatrix, droppedPages: Set<string>, adds: PendingVecRow[], dropped: number): VectorMatrix {
+function reshapeMatrix(m: VectorMatrix, droppedPages: Set<string>, adds: PendingVecRow[], dropped: number, blockMode: boolean): VectorMatrix {
   const dim = m.dim;
   const allocated = m.count + adds.length;
   const data = new Float32Array(allocated * dim);
@@ -572,6 +586,35 @@ function reshapeMatrix(m: VectorMatrix, droppedPages: Set<string>, adds: Pending
       chunkIndexes[i] = m.chunkIndexes[i];
     }
     filled = m.count;
+  } else if (blockMode) {
+    // T04474 块级失效：按 rowid 区间（数组位置区间）把旧矩阵切成块。
+    // 干净块（不含待同步页）整块 memcpy 保留——「保留块不动」；脏块逐行摘掉旧 rowid 区间的行。
+    // 块内行序、块间次序都不变，新行仍在尾部按 rowid 追加，故与全表重扫逐条一致。
+    for (let base = 0; base < m.count; base += VEC_BLOCK_ROWS) {
+      const end = Math.min(base + VEC_BLOCK_ROWS, m.count);
+      let dirty = false;
+      for (let i = base; i < end; i++) {
+        if (droppedPages.has(m.pagePaths[i])) { dirty = true; break; }
+      }
+      if (!dirty) {
+        data.set(m.data.subarray(base * dim, end * dim), filled * dim);
+        norms.set(m.norms.subarray(base, end), filled);
+        for (let i = base; i < end; i++) {
+          pagePaths[filled] = m.pagePaths[i];
+          chunkIndexes[filled] = m.chunkIndexes[i];
+          filled++;
+        }
+      } else {
+        for (let i = base; i < end; i++) {
+          if (droppedPages.has(m.pagePaths[i])) continue;
+          data.set(m.data.subarray(i * dim, (i + 1) * dim), filled * dim);
+          norms[filled] = m.norms[i];
+          pagePaths[filled] = m.pagePaths[i];
+          chunkIndexes[filled] = m.chunkIndexes[i];
+          filled++;
+        }
+      }
+    }
   } else {
     for (let i = 0; i < m.count; i++) {
       if (droppedPages.has(m.pagePaths[i])) continue;
@@ -609,11 +652,11 @@ function reshapeMatrix(m: VectorMatrix, droppedPages: Set<string>, adds: Pending
   };
 }
 
-/** 把记账到的页面改动应用到已缓存矩阵。返回 false = 增量做不了（账对不上 / 已弃账 / 会超内存预算），
+/** 把记账到的页面改动应用到已缓存矩阵。返回 false = 增量做不了（账对不上 / 会超内存预算），
  *  由调用方按原口径整目录重建。 */
 function applyPendingVecOps(d: SyncDb, dir: DirVectorCache, gen: number): boolean {
   const pages = dir.pendingPages;
-  if (!pages || dir.expectGen !== gen) return false;
+  if (dir.expectGen !== gen) return false;
   if (pages.size === 0) {
     dir.gen = gen;
     return true;
@@ -635,7 +678,7 @@ function applyPendingVecOps(d: SyncDb, dir: DirVectorCache, gen: number): boolea
   }
   if (cachedVectorBytes + projectedDelta > vectorCacheBudgetBytes()) return false;
   for (const p of plans) {
-    const next = reshapeMatrix(p.matrix, pages, p.adds, p.dropped);
+    const next = reshapeMatrix(p.matrix, pages, p.adds, p.dropped, dir.pendingOverflow);
     dir.bytes += next.bytes - p.matrix.bytes;
     cachedVectorBytes += next.bytes - p.matrix.bytes;
     dir.matrices.set(p.key, next);
@@ -643,6 +686,7 @@ function applyPendingVecOps(d: SyncDb, dir: DirVectorCache, gen: number): boolea
   vectorCacheCounters.incrementalPages += pages.size;
   dir.gen = gen;
   dir.pendingPages = new Set();
+  dir.pendingOverflow = false;
   dir.expectGen = gen;
   return true;
 }
@@ -715,7 +759,7 @@ function recallCandidates(
     }
   }
   if (!dir) {
-    dir = { gen, bytes: 0, matrices: new Map<string, VectorMatrix>(), pendingPages: new Set<string>(), expectGen: gen };
+    dir = { gen, bytes: 0, matrices: new Map<string, VectorMatrix>(), pendingPages: new Set<string>(), pendingOverflow: false, expectGen: gen };
     vectorCaches.set(dataDir, dir);
   }
   const key = `${model ?? ''}\u0000${queryVec.length}`;
