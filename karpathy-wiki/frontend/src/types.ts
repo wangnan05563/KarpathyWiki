@@ -424,6 +424,13 @@ export interface SchemaContent {
   content: string;
 }
 
+// 定根后失效的绝对路径（T04558 后端只探测不改写，经 GET /api/config 透出）
+export interface ConfigPathWarning {
+  field: string;
+  path: string;
+  reason: string;
+}
+
 // 配置响应（GET /api/config，API Key 脱敏）
 // batch/logging 字段与后端 AppConfig.batch/logging 对齐（type-sync-rule BR-026）
 export interface ConfigData {
@@ -453,6 +460,8 @@ export interface ConfigData {
   };
   // 子智能体（多步 Agent）开关：与后端 AppConfig.enableSubAgents 对齐，默认关闭。
   enableSubAgents?: boolean;
+  // T04579：路径失效告警（服务端只告警不改写），配置页顶部据此渲染警示条
+  pathWarnings?: ConfigPathWarning[];
 }
 
 // ===== 工具配置类型（与后端 types.ts 对齐，type-sync-rule）=====

@@ -11,7 +11,7 @@ import IconActionButton from '../components/IconActionButton.vue';
 import StateBlock from '../components/StateBlock.vue';
 import ThemeSwitcher from '../components/ThemeSwitcher.vue';
 import MarkdownRenderer from '../components/MarkdownRenderer.vue';
-import type { ConfigData, SchemaContent, ReloadResult, SchemaCommit, DiffLine, AiConfig, LlmPreset, AiTestResult, ToolsConfig, McpServerEntry, QqConfigData, PromptFile, PromptTestRunEvent } from '../types';
+import type { ConfigData, ConfigPathWarning, SchemaContent, ReloadResult, SchemaCommit, DiffLine, AiConfig, LlmPreset, AiTestResult, ToolsConfig, McpServerEntry, QqConfigData, PromptFile, PromptTestRunEvent } from '../types';
 import { apiErrorMessage } from '../utils/apiError';
 import { mergeMcpJsonIntoServers, type McpJsonFile } from '../utils/mcpConfigMode';
 import { consumeSSE } from '../utils/sse';
@@ -81,6 +81,36 @@ import LocalDataBackupPanel from '../components/LocalDataBackupPanel.vue';
 
 const activeTab = ref<ConfigTabName>('config');
 const config = ref<ConfigData | null>(null);
+
+// ===== 路径失效告警（T04579 承接 T04558）=====
+// 服务端定根后发现绝对路径失效只告警、不改写；这里只负责展示与给「重新选择」指引入口，
+// 任何情况下都不自动改写配置值（纠正动作必须由用户在 config.json / 数据迁移页显式完成）。
+const pathWarnings = ref<ConfigPathWarning[]>([]);
+const showPathGuide = ref(false);
+const pathGuideWarning = ref<ConfigPathWarning | null>(null);
+
+const PATH_FIELD_LABELS: Record<string, string> = {
+  vaultPath: '知识库目录',
+  'auth.usersFilePath': '用户库文件',
+  'auth.auditLogPath': '审计日志',
+  'urlCrawl.incrementalStatePath': '增量抓取状态',
+  'logging.logFilePath': '日志文件',
+};
+
+function pathFieldLabel(field: string): string {
+  return PATH_FIELD_LABELS[field] ?? field;
+}
+
+function openPathGuide(warning: ConfigPathWarning): void {
+  pathGuideWarning.value = warning;
+  showPathGuide.value = true;
+}
+
+function goToMigrateTab(): void {
+  showPathGuide.value = false;
+  // 系统配置本身仅管理员可达，这里仍按统一闸门判断，避免深链/角色变化留下的残留状态
+  if (canOpenTab('migrate')) activeTab.value = 'migrate';
+}
 
 // ===== 朗读设置（按用户维度隔离）=====
 // 配置由 useTtsStore 统一管理，store 内部按当前登录用户（authStore.user.id）读取/写入本地存储，
@@ -425,6 +455,8 @@ async function loadConfig() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     config.value = data;
+    // T04579：路径失效告警只展示、不自动纠正；缺失/非数组时按「无告警」处理
+    pathWarnings.value = Array.isArray(data.pathWarnings) ? (data.pathWarnings as ConfigPathWarning[]) : [];
     // 子智能体开关初始状态与服务端保持一致
     subAgentsEnabled.value = Boolean(data.enableSubAgents);
   } catch (err) {
@@ -3307,6 +3339,25 @@ async function importConfig() {
           aria-label="系统配置"
         >
           <div class="config-section">
+            <!-- T04579：定根后失效的绝对路径（服务端只告警不改写）→ 顶部警示条 + 「重新选择」指引 -->
+            <div v-if="pathWarnings.length > 0" class="key-warning path-warning" data-testid="path-warning">
+              <div class="warning-icon">!</div>
+              <div class="warning-text path-warning-text">
+                <strong>配置里有 {{ pathWarnings.length }} 个路径在磁盘上不存在</strong>
+                <p>可能由换盘、换机器或目录被移动导致。本页只做提示，不会自动改写配置值。</p>
+                <ul class="path-warning-list">
+                  <li v-for="warning in pathWarnings" :key="warning.field" class="path-warning-item">
+                    <span class="path-warning-main">
+                      <span class="path-warning-field">{{ pathFieldLabel(warning.field) }}</span>
+                      <code class="path-warning-path">{{ warning.path }}</code>
+                      <span class="path-warning-reason">{{ warning.reason }}</span>
+                    </span>
+                    <button type="button" class="neon-btn path-warning-action" @click="openPathGuide(warning)">重新选择</button>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
             <!-- §12.3-7 热加载操作栏 -->
             <div class="reload-bar">
               <span class="section-desc">直接改 config.json 后点这里，运行时参数无需重启即可应用；标了「需重启服务」的字段仍要重启</span>
@@ -5246,6 +5297,26 @@ async function importConfig() {
       </div>
     </div>
 
+    <!-- T04579：路径失效后的「重新选择」指引。浏览器拿不到服务端绝对路径，
+         故这里不提供假目录选择器，只给两条可落地的修正路径，且绝不代写配置。 -->
+    <AppModal v-model="showPathGuide" title="重新选择配置路径" width="520px">
+      <div class="path-guide">
+        <p class="path-guide-lead">路径由服务端持有，浏览器无法直接选择服务器上的目录。请任选一种方式修正：</p>
+        <p v-if="pathGuideWarning" class="path-guide-current">
+          当前失效项：<strong>{{ pathFieldLabel(pathGuideWarning.field) }}</strong>
+          <code>{{ pathGuideWarning.path }}</code>（{{ pathGuideWarning.reason }}）
+        </p>
+        <ol class="path-guide-steps">
+          <li>编辑服务端 config.json 中对应字段为新路径，回到本页点「热加载配置」；标了「需重启服务」的字段仍需重启。</li>
+          <li>或在「数据迁移」页导入修正后的配置导出文件（覆盖模式会先把旧配置备份到 config.json.bak）。</li>
+        </ol>
+      </div>
+      <template #footer>
+        <el-button size="small" @click="showPathGuide = false">知道了</el-button>
+        <el-button size="small" type="primary" @click="goToMigrateTab">去数据迁移</el-button>
+      </template>
+    </AppModal>
+
     <!-- T02467 + T02622（PRD §10 C1）：重启指引与受控重启入口。
          服务端的三道门（确认 / 空闲判定 / 延迟退出）不替代这里的手动路径：
          装机版自拉起失败、开发模式没有监听进程时都会超时，界面必须如实说「没重启」并给步骤。 -->
@@ -5873,6 +5944,75 @@ async function importConfig() {
   font-size: 11px;
   font-family: var(--font-mono);
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+}
+
+/* T04579：路径失效列表（外观复用 .key-warning，这里只排列表与指引弹窗） */
+.path-warning-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.path-warning-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-glass);
+  border-radius: 6px;
+}
+
+.path-warning-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.path-warning-field {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.path-warning-path {
+  overflow-wrap: anywhere;
+}
+
+.path-warning-reason {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.path-warning-action {
+  flex: none;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.path-guide-lead,
+.path-guide-current {
+  margin: 0 0 10px;
+  color: var(--text-base);
+  overflow-wrap: anywhere;
+}
+
+.path-guide-current code {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-glass);
+}
+
+.path-guide-steps {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-base);
+  line-height: 1.7;
 }
 
 .reload-bar {
