@@ -994,7 +994,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .ml-mini.play {
-  color: #ffffff;
+  color: var(--m-on-primary, #ffffff);
   background: var(--m-primary, #1554d1);
   border-color: var(--m-primary, #1554d1);
 }
@@ -1039,7 +1039,7 @@ onBeforeUnmount(() => {
   background: var(--m-fill, #f4f5f7);
 }
 .ml-qitem.active .ml-q-order {
-  color: #ffffff;
+  color: var(--m-on-primary, #ffffff);
   background: var(--m-primary, #1554d1);
 }
 .ml-q-icon { font-size: 15px; flex-shrink: 0; }
@@ -1154,7 +1154,7 @@ onBeforeUnmount(() => {
 .ml-toast-enter-from,
 .ml-toast-leave-to { opacity: 0; transform: translate(-50%, 8px); }
 .ml-error { color: var(--m-danger, #d93636); font-size: 12px; margin: 0; }
-.ml-warn { color: #b8791f; font-size: 12px; margin: 0; }
+.ml-warn { color: var(--m-warning-fg, #8a5200); font-size: 12px; margin: 0; }
 
 /* 预览视图（阅读型） */
 .ml-preview {
@@ -1270,7 +1270,7 @@ onBeforeUnmount(() => {
   height: 46px;
   font-size: 18px;
   background: var(--m-primary, #1554d1);
-  color: #ffffff;
+  color: var(--m-on-primary, #ffffff);
   border: none;
 }
 .ml-btn:disabled { opacity: 0.5; }
@@ -1306,7 +1306,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   font-size: 10px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--m-on-primary, #ffffff);
   background: var(--m-primary, #1554d1);
   border-radius: 6px;
   padding: 1px 6px;
@@ -1326,7 +1326,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   background: var(--m-primary, #1554d1);
-  color: #ffffff;
+  color: var(--m-on-primary, #ffffff);
   cursor: pointer;
 }
 .ml-locate-fab:active { transform: scale(0.92); }

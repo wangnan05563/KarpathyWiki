@@ -196,7 +196,7 @@ function onKeydown(e: KeyboardEvent) {
   font-size: 16px;
   color: #ffffff;
   background: rgba(255, 255, 255, 0.10);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.38);
   border-radius: 12px;
   outline: none;
   transition: border-color 0.15s ease, background 0.15s ease;
@@ -205,11 +205,11 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 .mlogin-input::placeholder {
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .mlogin-input:focus {
-  border-color: rgba(255, 255, 255, 0.42);
+  border-color: rgba(255, 255, 255, 0.55);
   background: rgba(255, 255, 255, 0.14);
 }
 
@@ -241,17 +241,17 @@ function onKeydown(e: KeyboardEvent) {
   font-weight: 700;
   letter-spacing: 1px;
   color: #ffffff;
-  background: #2b7de1;
+  background: #1f6ad1;
   border: none;
   border-radius: 12px;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(43, 125, 225, 0.28);
+  box-shadow: 0 8px 24px rgba(31, 106, 209, 0.28);
   transition: transform 0.1s ease, box-shadow 0.15s ease;
 }
 
 .mlogin-btn:active:not(:disabled) {
   transform: translateY(1px);
-  box-shadow: 0 4px 14px rgba(43, 125, 225, 0.28);
+  box-shadow: 0 4px 14px rgba(31, 106, 209, 0.28);
 }
 
 .mlogin-btn:disabled {

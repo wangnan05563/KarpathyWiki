@@ -20,23 +20,25 @@
   --m-border: #ededed;        /* 分割线 / 浅边框 */
   --m-border-2: #e2e4e8;      /* 输入框等较强边框 */
   --m-text: #111111;          /* 主文本 */
-  --m-text-2: #777777;        /* 次要灰 */
-  --m-text-3: #9aa0a6;        /* 三级提示灰 */
+  --m-text-2: #5f646b;        /* 次要文本（T04467 压暗：原 #777 在卡片面仅 4.48）*/
+  --m-text-3: #666b73;        /* 三级提示灰（T04467 压暗：原 #9aa0a6 仅 2.64）*/
+  --m-muted: #666b73;         /* 弱化文本：此前未覆盖，glass 的 #9f92bd 漏进浅白皮肤只有 2.87 */
   --m-primary: #1554d1;       /* 深蓝主色 */
   --m-primary-press: #0f3f9e;
   --m-primary-soft: rgba(21, 84, 209, 0.08);
-  --m-danger: #d93636;
+  --m-danger: #c62828;        /* 危险色（T04467 压暗：原 #d93636 在 danger-soft 面仅 4.13）*/
   /* 主题派生变量：组件内不允许硬编码色值（FR-24 验收 grep #fff/#111 为零），
      深浅两套值分别定义在 light 与 dark 变量块 */
   --m-on-primary: #ffffff;          /* 主色底上的文字 */
+  --m-on-danger: #ffffff;           /* 危险底色上的文字 */
   --m-code-fg: #1a2b4a;             /* 行内代码前景 */
   --m-mask: rgba(17, 17, 17, 0.4);  /* 底部弹出面板遮罩 */
   --m-stripe: rgba(244, 245, 247, 0.5);      /* 表格偶数行 */
-  --m-danger-border: rgba(217, 54, 54, 0.35);
-  --m-danger-soft: rgba(217, 54, 54, 0.08);
+  --m-danger-border: rgba(198, 40, 40, 0.35);
+  --m-danger-soft: rgba(198, 40, 40, 0.08);
   --m-primary-border: rgba(21, 84, 209, 0.35); /* 链接下划虚线 */
   --m-warning-soft: rgba(249, 171, 0, 0.12);
-  --m-warning-fg: #b76e00;
+  --m-warning-fg: #8a5200;    /* T04467 压暗：原 #b76e00 在 warn-soft 面仅 3.80 */
   --m-radius: 10px;
   --m-radius-lg: 14px;
   --m-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
@@ -445,12 +447,14 @@ html[data-theme="dark"] .mlogin-root.theme-light {
   --m-border-2: #30363d;
   --m-text: #e6edf3;
   --m-text-2: #9aa4b2;
-  --m-text-3: #6e7681;
+  --m-text-3: #8b949e;        /* T04467：原 #6e7681 在 --m-fill 面仅 4.34 */
+  --m-muted: #8b949e;
   --m-primary: #4d8dff;
-  --m-primary-press: #3b76e0;
-  --m-primary-soft: rgba(77, 141, 255, 0.14);
+  --m-primary-press: #5f97ff; /* T04467：暗色下按压态必须比主色更亮，否则深字压 #3b76e0 只有 4.10 */
+  --m-primary-soft: rgba(77, 141, 255, 0.08); /* T04467：0.14 时主色文字压 tint 仅 4.42，降到 0.08 实算 4.82 */
   --m-danger: #f85149;
-  --m-on-primary: #ffffff;
+  --m-on-primary: #0d1117;    /* 浅蓝主色配深字（T04467 实算 5.92）*/
+  --m-on-danger: #0d1117;     /* #f85149 配深字（T04467 实算 5.65）*/
   --m-code-fg: #79c0ff;
   --m-mask: rgba(0, 0, 0, 0.6);
   --m-stripe: rgba(255, 255, 255, 0.04);

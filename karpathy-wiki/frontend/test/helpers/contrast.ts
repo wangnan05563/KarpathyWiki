@@ -11,6 +11,8 @@ export const THEMES_DIR = join(ROOT, 'src/styles/themes');
 export const STYLE_CSS = join(ROOT, 'src/style.css');
 /** T04469：dark 主题的整套变量写在 tokens.css（不在 styles/themes/ 下），loadThemes() 天然看不见它 */
 export const TOKENS_CSS = join(ROOT, 'src/styles/tokens.css');
+/** T04467：移动端浅色皮肤的 --m-* 覆盖块（glass 在 style.css :root，light/dark 覆盖都在这个文件） */
+export const MOBILE_LIGHT_CSS = join(ROOT, 'src/styles/mobile-light.css');
 /** T04524：模态面口径需要 EP 遮罩色——从安装副本现读，不写死数值（升版改了遮罩必须让锁跟着变） */
 export const NODE_MODULES = join(ROOT, 'node_modules');
 
@@ -48,7 +50,7 @@ export function parseDecls(css: string): Map<string, string> {
 }
 
 /** :root 兜底主题 + styles/themes/ 下每个主题；主题未声明的 token 回落 :root（与浏览器一致） */
-export function loadThemes(): ThemeTokens[] {
+export function loadThemes(opts: { mobileSkins?: boolean } = {}): ThemeTokens[] {
   const rootDecl = parseDecls(stripComments(readFileSync(STYLE_CSS, 'utf8')).match(/:root\s*\{([\s\S]*?)\n\}/)![1]);
   const themes: ThemeTokens[] = [{ name: 'default(:root)', decls: new Map(rootDecl) }];
   const files = readdirSync(THEMES_DIR).filter((f) => f.endsWith('.css') && f !== 'index.css').sort();
@@ -65,7 +67,56 @@ export function loadThemes(): ThemeTokens[] {
     for (const [k, v] of rootDecl) if (!merged.has(k)) merged.set(k, v);
     themes.push({ name: theme, decls: merged });
   }
+  // T04467：移动皮肤是运行时切换的两套取值（glass=:root / light=light 块 / light+桌面 dark=暗色覆盖），
+  // 与桌面 [data-theme] 主题不是一套命名空间。默认不返回它们：现有 8 主题锁按 loadThemes().length
+  // 登记了计数，无条件追加会让 14 把锁同时漂移（T04469 处理 dark 时踩过同一个坑）。
+  if (opts.mobileSkins) themes.push(...loadMobileThemes());
   return themes;
+}
+
+/** 大括号配平取某个选择器块的全部声明（同名多块合并，先到先得）；移动皮肤块不是 [data-theme] 形状，不能复用 themeBlockDecls */
+export function blockDecls(css: string, selector: string): Map<string, string> {
+  const own = new Map<string, string>();
+  const body = stripComments(css);
+  for (let at = body.indexOf(selector); at >= 0; at = body.indexOf(selector, at + 1)) {
+    let i = body.indexOf('{', at + selector.length);
+    if (i < 0) break;
+    let depth = 1;
+    const start = ++i;
+    while (i < body.length && depth > 0) {
+      if (body[i] === '{') depth++;
+      else if (body[i] === '}') depth--;
+      i++;
+    }
+    for (const [k, v] of parseDecls(body.slice(start, i - 1))) if (!own.has(k)) own.set(k, v);
+  }
+  return own;
+}
+
+const mergeDecls = (base: Map<string, string>, ...layers: Map<string, string>[]) => {
+  const out = new Map(base);
+  for (const layer of layers) for (const [k, v] of layer) out.set(k, v);
+  return out;
+};
+
+/**
+ * T04467：移动端三套实际生效取值。
+ * - mobile-glass：style.css :root 的 --m-*（MobileShell 未加 theme-light 时的默认皮肤）
+ * - mobile-light：:root + mobile-light.css 的 .theme-light 块
+ * - mobile-light-dark：浅色块 + html[data-theme="dark"] 覆盖块（桌面暗色联动，T01765）
+ * 与 ThemeTokens 同形状，直接喂给 auditThemes/ worstRatio。
+ */
+export function loadMobileThemes(): ThemeTokens[] {
+  const root = parseRootDecls();
+  const ml = readFileSync(MOBILE_LIGHT_CSS, 'utf8');
+  const light = blockDecls(ml, '.mobile-root.theme-light,');
+  const dark = blockDecls(ml, 'html[data-theme="dark"] .mobile-root.theme-light,');
+  if (light.size === 0 || dark.size === 0) throw new Error('mobile-light.css 的浅色/暗色覆盖块解析为空');
+  return [
+    { name: 'mobile-glass', decls: new Map(root) },
+    { name: 'mobile-light', decls: mergeDecls(root, light) },
+    { name: 'mobile-light-dark', decls: mergeDecls(root, light, dark) },
+  ];
 }
 
 /** :root 兜底主题的声明（loadThemes() 第一项用的同一份解析） */
@@ -290,6 +341,44 @@ export function pageOf(decls: Map<string, string>): RGB {
   const card = resolve('var(--bg-card-solid)', decls);
   if ('stops' in card) throw new Error('卡片面不应是渐变');
   return composite(card.solid, page);
+}
+
+export interface MobileSurfaces {
+  /** 页面可见底：--m-bg 压在 --bg-void 上（glass 的 --m-bg 是半透明） */
+  page: RGB;
+  /** 卡片/导航等 --m-surface（半透明，压在 page 上） */
+  surface: RGB;
+  /** --m-fill / --m-fill-2 等填充层（压在 surface 上） */
+  fill: RGB;
+  fill2: RGB;
+  primarySoft: RGB;
+  dangerSoft: RGB;
+  warningSoft: RGB;
+}
+
+/**
+ * T04467：移动端面口径。桌面 pageOf() 找的是 --bg-card-solid / --bg-void，
+ * 那是 aurora 卡片的合成链；移动子树根本不消费这两个 token，套用它会把整族实算算偏。
+ * 移动端从 --m-bg 起算：page → surface → fill/tint 三层，与组件里的叠放顺序一致。
+ */
+export function mobileSurfaces(decls: Map<string, string>): MobileSurfaces {
+  const solidOf = (expr: string): RGB => {
+    const r = resolve(expr, decls);
+    if ('stops' in r) throw new Error(`移动端面不应是渐变：${expr}`);
+    return r.solid;
+  };
+  const page = composite(solidOf('var(--m-bg)'), solidOf('var(--bg-void)'));
+  const surface = composite(solidOf('var(--m-surface)'), page);
+  const layer = (token: string) => composite(solidOf(`var(${token})`), surface);
+  return {
+    page,
+    surface,
+    fill: layer('--m-fill'),
+    fill2: layer('--m-fill-2'),
+    primarySoft: layer('--m-primary-soft'),
+    dangerSoft: layer('--m-danger-soft'),
+    warningSoft: layer('--m-warning-soft'),
+  };
 }
 
 export interface AuditFailure {

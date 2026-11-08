@@ -282,8 +282,8 @@ defineEmits<{ (e: 'open-feature', key: FeatureKey): void }>();
 }
 
 .mme-role.role-guest {
-  background: var(--m-border, #ececee);
-  color: var(--m-muted, #777777);
+  background: var(--m-fill, #f4f5f7);
+  color: var(--m-muted, #5f646b);
 }
 
 .mme-card {
@@ -394,7 +394,7 @@ defineEmits<{ (e: 'open-feature', key: FeatureKey): void }>();
 
 .mme-warn-text {
   font-size: 12px;
-  color: #b76e00;
+  color: var(--m-warning-fg, #8a5200);
 }
 
 .mme-field {
@@ -430,7 +430,7 @@ defineEmits<{ (e: 'open-feature', key: FeatureKey): void }>();
 }
 
 .mme-input::placeholder {
-  color: #aaaaaa;
+  color: var(--m-text-3, #666b73);
 }
 
 select.mme-input {
@@ -448,7 +448,7 @@ select.mme-input {
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  color: #ffffff;
+  color: var(--m-on-primary, #ffffff);
   background: var(--m-primary, #0f4c81);
   border: none;
   border-radius: 10px;
@@ -502,7 +502,7 @@ select.mme-input {
   min-height: 46px;
   font-size: 15px;
   font-weight: 600;
-  color: #d93025;
+  color: var(--m-danger, #c62828);
   background: var(--m-surface, #ffffff);
   border: 1px solid var(--m-border, #ececee);
   border-radius: 10px;

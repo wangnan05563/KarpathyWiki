@@ -1403,7 +1403,7 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   border: none;
   background: var(--m-primary, #1554d1);
-  color: #ffffff;
+  color: var(--m-on-primary, #ffffff);
   font-size: 26px;
   display: flex;
   align-items: center;
@@ -1523,12 +1523,12 @@ onBeforeUnmount(() => {
 }
 
 /* FR-22 终态视觉区分（T01737/T01738）：与桌面端一致的中断/失败边条，
-   颜色消费语义变量（--warning/--danger），FR-24 暗色模式自动适配 */
+   颜色消费移动端语义变量（--m-warning-fg / --m-danger），三套皮肤统一且暗色自动适配 */
 .mq-bubble.assistant.status-interrupted {
-  border-left: 3px solid var(--warning, #e6a23c);
+  border-left: 3px solid var(--m-warning-fg, #8a5200);
 }
 .mq-bubble.assistant.status-error {
-  border-left: 3px solid var(--danger, #f56c6c);
+  border-left: 3px solid var(--m-danger, #c62828);
 }
 
 /* FR-22 失败重试按钮（移动端）：小尺寸幽灵按钮，常驻失败/中断气泡内 */
@@ -1650,7 +1650,7 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   border: none;
   background: var(--m-primary, #1554d1);
-  color: #ffffff;
+  color: var(--m-on-primary, #ffffff);
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
@@ -1659,7 +1659,7 @@ onBeforeUnmount(() => {
 }
 .mq-send:active { background: var(--m-primary-press, #0f3f9e); }
 .mq-send:disabled { opacity: 0.45; cursor: not-allowed; }
-.mq-stop { background: var(--m-danger, #d93636); color: #fff; }
+.mq-stop { background: var(--m-danger, #c62828); color: var(--m-on-danger, #ffffff); }
 
 /* ===== 底部弹窗（白底） ===== */
 .mq-sheet-mask {
@@ -1854,7 +1854,7 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   border: none;
   background: var(--m-primary, #1554d1);
-  color: #ffffff;
+  color: var(--m-on-primary, #ffffff);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
