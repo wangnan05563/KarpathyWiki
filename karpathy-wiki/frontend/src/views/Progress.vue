@@ -211,6 +211,13 @@ onMounted(() => {
   } else if (store.pendingPayload && !store.isDone && store.isCompiling && !store.isCancelled) {
     clearBatchSnapshot();
     startCompileFlow(store.pendingPayload);
+  } else if (needResume && store.currentJobId) {
+    // T04550：刷新后按 jobId 重连，服务端从 lastSeq+1 回放断连窗口的事件
+    clearBatchSnapshot();
+    store.reconnectCompileJob();
+  } else if (store.batchInterrupted && store.currentJobId) {
+    // T04550：批量作业没有 runId resume 通道，刷新后同样按 jobId 续订
+    store.reconnectCompileJob();
   } else if (needResume && store.currentRunId) {
     // §优化方案3：切走时正在编译且记录了 runId → 调用 resume 接口恢复未完成的编译
     // 为什么独立分支：runCompileStream 会重置状态从头开始，与 resume 语义冲突

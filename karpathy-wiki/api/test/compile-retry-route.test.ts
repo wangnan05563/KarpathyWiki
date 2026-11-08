@@ -99,7 +99,11 @@ describe('POST /api/compile/retry', () => {
     expect(res.headers['content-type']).toContain('text/event-stream');
     expect(adapter.compileFromRaw).toHaveBeenCalledWith('raw/中国票据业务系统接口规范V1.4.md');
     const events = parseSSEEvents(res.payload);
-    expect(events.map((e) => e.event)).toEqual(['progress', 'done']);
+    // T04550：首帧 job 携带 jobId（刷新重连用），随后才是业务事件
+    expect(events.map((e) => e.event)).toEqual(['job', 'progress', 'done']);
+    const job = events[0].data as { jobId?: string };
+    expect(typeof job.jobId).toBe('string');
+    expect(job.jobId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it('非 raw/ 下的路径或非 .md 一律 400（防路径穿越）', async () => {

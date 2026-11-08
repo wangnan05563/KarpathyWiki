@@ -95,8 +95,9 @@ describe('compile store - 流静默断开兜底 (T03438)', () => {
     // T04508：两条消费路径从 Progress.vue 搬进 stores/compile.ts（流归 store 才不被切页杀掉）
     const src = fs.readFileSync(path.resolve(__dirname, '../src/stores/compile.ts'), 'utf8');
     const parts = src.split('await consumeSSE(response, handleStreamEvent, controller.signal);');
-    // 两条消费路径：runCompileStream（首次投递）与 runResumeStream（断点续传）
-    expect(parts).toHaveLength(3);
+    // 三条消费路径：runCompileStream（首次投递）、runResumeStream（断点续传）、
+    // reconnectCompileJob（T04550 按 jobId 续订）
+    expect(parts).toHaveLength(4);
     for (const after of parts.slice(1)) {
       expect(after.slice(0, 400)).toContain('handleStreamEnd()');
     }

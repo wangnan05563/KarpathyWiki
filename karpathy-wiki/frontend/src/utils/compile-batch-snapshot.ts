@@ -15,6 +15,9 @@ export interface BatchCompileSnapshot {
   isCancelled: boolean;
   errorMessage: string;
   doneMessage: string;
+  // T04550：服务端作业标识与已收事件序号，刷新后凭二者续订补齐丢失帧
+  jobId?: string;
+  lastSeq?: number;
   savedAt: number;
 }
 

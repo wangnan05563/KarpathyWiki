@@ -4,7 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import type { EngineAdapter, CompileInput, BatchCompileConfig, AppConfig, ProgressEvent } from '../types.js';
 import { withCompileLock } from '../compile-queue.js';
-import { createSSESender } from '../utils/sse.js';
+import { createSSESender, setupSSE } from '../utils/sse.js';
+import {
+  CompileJobManager,
+  type CompileJobKind,
+  type CompileJobRunner,
+  type CompileJobSink,
+} from '../workflows/compile-job.js';
 import {
   CompileIdempotency,
   fileContentKey,
@@ -135,7 +141,7 @@ type RetryContext = {
   fileCount?: number;
   fileName?: string;
   rawPath: string;
-  send: (event: string, data: unknown) => boolean;
+  emit: (event: string, data: unknown) => void;
 };
 
 // fileIndex 缺省时原样透传，避免单文件重试的 data 里多出无意义字段
@@ -151,14 +157,14 @@ function withRetryGroup(ctx: RetryContext, ev: ProgressEvent) {
 function emitRetryEvent(ctx: RetryContext, ev: ProgressEvent): 'done' | 'failed' | undefined {
   const payload = withRetryGroup(ctx, ev);
   if (ev.step !== 'done') {
-    ctx.send(ev.data?.path && ev.data?.title ? 'page' : 'progress', payload);
+    ctx.emit(ev.data?.path && ev.data?.title ? 'page' : 'progress', payload);
     return undefined;
   }
   if (ctx.fileIndex === undefined) {
-    ctx.send('done', payload);
+    ctx.emit('done', payload);
   } else if (ev.status === 'error') {
     // 批量分组重试：沿用 file_error，前端既有处理会刷新分组错误态与重试入口
-    ctx.send('file_error', {
+    ctx.emit('file_error', {
       step: 'finalize',
       status: 'error',
       message: ev.message || '编译失败',
@@ -172,7 +178,7 @@ function emitRetryEvent(ctx: RetryContext, ev: ProgressEvent): 'done' | 'failed'
       retryable: ev.retryable,
     });
   } else {
-    ctx.send('file_done', payload);
+    ctx.emit('file_done', payload);
   }
   return ev.status === 'error' ? 'failed' : 'done';
 }
@@ -182,10 +188,10 @@ function emitRetryFailure(ctx: RetryContext, err: unknown): void {
   const message = err instanceof Error ? err.message : String(err);
   const retryable = isRetryableLlmError(err);
   if (ctx.fileIndex === undefined) {
-    ctx.send('error', { step: 'finalize', status: 'error', message, retryable });
+    ctx.emit('error', { step: 'finalize', status: 'error', message, retryable });
     return;
   }
-  ctx.send('file_error', {
+  ctx.emit('file_error', {
     step: 'finalize',
     status: 'error',
     message,
@@ -242,6 +248,34 @@ export function registerCompileRoute(
   // T03591 幂等表：按内容指纹挡住「同一份内容正在编译」的重复/并发提交。
   // 每个 route 注册对应一个实例（进程内、单测可隔离），语义见 compile-idempotency.ts。
   const idempotency = new CompileIdempotency();
+  // T04550：编译作业注册表。作业与 HTTP 连接解耦——断连只退订，显式 cancel 才停。
+  const jobs = new CompileJobManager();
+
+  // 建立连接并启动作业：job 事件先于所有业务事件下发，前端据此持久化 jobId 供刷新重连。
+  function startJobOnConnection(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    sender: ReturnType<typeof createSSESender>,
+    kind: CompileJobKind,
+    runner: CompileJobRunner,
+  ): void {
+    const snapshot = jobs.start(kind, runner);
+    sender.send('job', { jobId: snapshot.jobId, kind, status: 'running', lastSeq: 0 });
+    const sink: CompileJobSink = {
+      // createSSESender 不写 SSE id 字段，seq 只能随 data 下发，供前端 fromSeq 续订
+      onEvent: (event, data, seq) => {
+        sender.send(event, data && typeof data === 'object'
+          ? { ...(data as Record<string, unknown>), seq }
+          : data);
+      },
+      isAborted: sender.isAborted,
+      end: sender.safeEnd,
+    };
+    jobs.subscribe(snapshot.jobId, sink, 0);
+    // 连接断开只解除订阅：作业继续在后台跑，刷新后凭 jobId 续订回放
+    reply.raw.on('close', () => jobs.unsubscribe(snapshot.jobId, sink));
+  }
+
   app.post('/api/compile', {
     // 破坏性端点更严格限流：compile 触发 LLM + 写 vault，10/min 防滥用
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
@@ -259,18 +293,18 @@ export function registerCompileRoute(
     });
 
     // 通过工厂创建 SSE sender：客户端 abort 时 send 自动短路，safeEnd 容错结束流
-    const { send, isAborted, safeEnd } = createSSESender(reply, request, { heartbeatMs: SSE_HEARTBEAT_MS });
+    const sender = createSSESender(reply, request, { heartbeatMs: SSE_HEARTBEAT_MS });
 
     // 幂等占位：同内容已在编译 → 回放当前进度快照后直接收流，不新建任务
     const begun = idempotency.begin(idempotencyKey);
     if (begun.kind === 'running') {
-      send('deduped', {
+      sender.send('deduped', {
         step: 'deduped',
         status: 'running',
         message: '相同内容正在编译中，已复用该任务的进度',
         data: { ...begun.snapshot },
       });
-      safeEnd();
+      sender.safeEnd();
       if (input.type === 'file') {
         await fs.unlink(input.content).catch(() => {});
       }
@@ -282,51 +316,55 @@ export function registerCompileRoute(
     let streamStatus: 'done' | 'failed' = 'failed';
     let lastMessage: string | undefined;
 
-    try {
-      // §12.3-5：串行队列包装，保证并发 compile 请求不产生 index.md/log.md 追加竞态。
-      // withCompileLock 等待前一个 compile 完成后才开始消费本次迭代。
-      await withCompileLock(async () => {
-        for await (const ev of adapter.compile(input, appConfig)) {
-          // 客户端已断开：提前退出迭代避免继续触发 LLM 调用与 vault 写入
-          if (isAborted()) break;
-          lastMessage = ev.message;
-          idempotency.touch(idempotencyKey, { step: ev.step, message: ev.message });
-          // 区分进度事件与页面生成事件：data 含 path/title 视为 page 事件
-          // FR-10-1: generate_tags 步骤归为 progress 事件（无 path/title）
-          if (ev.step === 'done') {
-            streamStatus = ev.status === 'error' ? 'failed' : 'done';
-            send('done', ev);
-          } else if (ev.data?.path && ev.data?.title) {
-            send('page', ev);
-          } else {
-            send('progress', ev);
+    // T04550：runner 只认「显式取消」，不再看连接状态——刷新断连不中断编译
+    const runner: CompileJobRunner = async (ctx) => {
+      try {
+        // §12.3-5：串行队列包装，保证并发 compile 请求不产生 index.md/log.md 追加竞态。
+        await withCompileLock(async () => {
+          for await (const ev of adapter.compile(input, appConfig)) {
+            // 用户显式取消：提前退出迭代避免继续触发 LLM 调用与 vault 写入
+            if (ctx.cancelled()) break;
+            lastMessage = ev.message;
+            idempotency.touch(idempotencyKey, { step: ev.step, message: ev.message });
+            // 区分进度事件与页面生成事件：data 含 path/title 视为 page 事件
+            // FR-10-1: generate_tags 步骤归为 progress 事件（无 path/title）
+            if (ev.step === 'done') {
+              streamStatus = ev.status === 'error' ? 'failed' : 'done';
+              ctx.emit('done', ev);
+            } else if (ev.data?.path && ev.data?.title) {
+              ctx.emit('page', ev);
+            } else {
+              ctx.emit('progress', ev);
+            }
           }
+        });
+      } catch (err: unknown) {
+        // 为什么同时调用 request.log.error：SSE 错误只推前端，后端日志流需独立记录以便排障
+        request.log.error(
+          { err, inputType: input.type },
+          'compile SSE stream error',
+        );
+        streamStatus = 'failed';
+        ctx.emit('error', {
+          step: 'finalize',
+          status: 'error',
+          message: err instanceof Error ? err.message : String(err),
+          retryable: isRetryableLlmError(err),
+        });
+      } finally {
+        // 中断（用户取消）也按 failed 收口：否则同内容会被一直挡在「编译中」直到 TTL 过期
+        idempotency.finish(idempotencyKey, idempotencyToken, {
+          status: ctx.cancelled() ? 'failed' : streamStatus,
+          message: lastMessage,
+        });
+        // 清理临时文件：仅 file 模式落盘了临时文件，避免 tmp 目录残留泄漏
+        if (input.type === 'file') {
+          await fs.unlink(input.content).catch(() => {});
         }
-      });
-    } catch (err: unknown) {
-      // 为什么同时调用 request.log.error：SSE 错误只推前端，后端日志流需独立记录以便排障
-      request.log.error(
-        { err, inputType: input.type },
-        'compile SSE stream error',
-      );
-      send('error', {
-        step: 'finalize',
-        status: 'error',
-        message: err instanceof Error ? err.message : String(err),
-        retryable: isRetryableLlmError(err),
-      });
-    } finally {
-      // 客户端中途断开也按 failed 收口：否则同内容会被一直挡在「编译中」直到 TTL 过期
-      idempotency.finish(idempotencyKey, idempotencyToken, {
-        status: isAborted() ? 'failed' : streamStatus,
-        message: lastMessage,
-      });
-      // 清理临时文件：仅 file 模式落盘了临时文件，避免 tmp 目录残留泄漏
-      if (input.type === 'file') {
-        await fs.unlink(input.content).catch(() => {});
       }
-      safeEnd();
-    }
+      return { status: streamStatus, message: lastMessage };
+    };
+    startJobOnConnection(request, reply, sender, 'single', runner);
   });
 
   // §11.2 断点续传：POST /api/compile/resume/:runId
@@ -349,36 +387,41 @@ export function registerCompileRoute(
       });
 
       // 通过工厂创建 SSE sender：客户端 abort 时 send 自动短路，safeEnd 容错结束流
-      const { send, isAborted, safeEnd } = createSSESender(reply, request, { heartbeatMs: SSE_HEARTBEAT_MS });
+      const sender = createSSESender(reply, request, { heartbeatMs: SSE_HEARTBEAT_MS });
 
-      try {
-        await withCompileLock(async () => {
-          for await (const ev of adapter.resumeCompile(runId)) {
-            // 客户端已断开：提前退出迭代避免继续触发 LLM 调用与 vault 写入
-            if (isAborted()) break;
-            if (ev.step === 'done') {
-              send('done', ev);
-            } else if (ev.data?.path && ev.data?.title) {
-              send('page', ev);
-            } else {
-              send('progress', ev);
+      const runner: CompileJobRunner = async (ctx) => {
+        let status: 'done' | 'failed' = 'done';
+        try {
+          await withCompileLock(async () => {
+            for await (const ev of adapter.resumeCompile(runId)) {
+              // 用户显式取消：提前退出迭代避免继续触发 LLM 调用与 vault 写入
+              if (ctx.cancelled()) break;
+              if (ev.step === 'done') {
+                status = ev.status === 'error' ? 'failed' : 'done';
+                ctx.emit('done', ev);
+              } else if (ev.data?.path && ev.data?.title) {
+                ctx.emit('page', ev);
+              } else {
+                ctx.emit('progress', ev);
+              }
             }
-          }
-        });
-      } catch (err: unknown) {
-        // 为什么同时调用 request.log.error：SSE 错误只推前端，后端日志流需独立记录以便排障
-        request.log.error(
-          { err, runId },
-          'compile resume SSE stream error',
-        );
-        send('error', {
-          step: 'finalize',
-          status: 'error',
-          message: err instanceof Error ? err.message : String(err),
-        });
-      } finally {
-        safeEnd();
-      }
+          });
+        } catch (err: unknown) {
+          // 为什么同时调用 request.log.error：SSE 错误只推前端，后端日志流需独立记录以便排障
+          request.log.error(
+            { err, runId },
+            'compile resume SSE stream error',
+          );
+          status = 'failed';
+          ctx.emit('error', {
+            step: 'finalize',
+            status: 'error',
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+        return { status };
+      };
+      startJobOnConnection(request, reply, sender, 'resume', runner);
     },
   );
 
@@ -434,18 +477,18 @@ export function registerCompileRoute(
     });
 
     // 通过工厂创建 SSE sender：客户端 abort 时 send 自动短路，safeEnd 容错结束流
-    const { send, isAborted, safeEnd } = createSSESender(reply, request, { heartbeatMs: SSE_HEARTBEAT_MS });
+    const sender = createSSESender(reply, request, { heartbeatMs: SSE_HEARTBEAT_MS });
 
     // 幂等占位：同一文件集合正在编译 → 回放当前进度快照，不再启动第二轮 LLM 调用
     const begun = idempotency.begin(batchKey);
     if (begun.kind === 'running') {
-      send('batch_deduped', {
+      sender.send('batch_deduped', {
         step: 'batch_done',
         status: 'running',
         message: '相同文件集合正在批量编译中，已复用该任务的进度',
         data: { ...begun.snapshot, fileCount: validFiles.length },
       });
-      safeEnd();
+      sender.safeEnd();
       return;
     }
     const idempotencyToken = begun.token;
@@ -454,68 +497,72 @@ export function registerCompileRoute(
       await retainOriginal(request, { name: f.displayName || f.name, buffer: f.buffer, mimeType: f.mimeType }, 'batch');
     }
 
-    // 推送文件列表与被拒绝项，前端据此渲染初始分组
-    send('batch_start', {
-      step: 'batch_start',
-      status: 'running',
-      message: `开始批量编译 ${validFiles.length} 个文件`,
-      data: {
-        fileCount: validFiles.length,
-        rejected,
-      },
-    });
-
-    // 临时文件路径列表，无论成功失败都需清理
-    const tmpPaths: string[] = [];
     const fileCount = validFiles.length;
+    // T04550：整批是一个后台作业，断连不中断；batch_start 也要进缓冲，重连时前端才有分组容器
+    const runner: CompileJobRunner = async (ctx) => {
+      // 临时文件路径列表，无论成功失败都需清理
+      const tmpPaths: string[] = [];
+      const batchCtx: BatchFileContext = {
+        adapter,
+        appConfig,
+        idempotency,
+        batchKey,
+        fileCount,
+        emit: ctx.emit,
+        cancelled: ctx.cancelled,
+        log: request.log,
+      };
 
-    const batchCtx: BatchFileContext = {
-      adapter,
-      appConfig,
-      idempotency,
-      batchKey,
-      fileCount,
-      send,
-      isAborted,
-      log: request.log,
-    };
-
-    let batchHasError = false;
-    try {
-      // batch 整体作为 withCompileLock 的一个任务，保证与其他 compile/resume 请求串行
-      await withCompileLock(async () => {
-        batchHasError = await runBatchFiles(batchCtx, validFiles, tmpPaths);
+      // 推送文件列表与被拒绝项，前端据此渲染初始分组
+      ctx.emit('batch_start', {
+        step: 'batch_start',
+        status: 'running',
+        message: `开始批量编译 ${fileCount} 个文件`,
+        data: {
+          fileCount,
+          rejected,
+        },
       });
 
-      // 整体完成事件：任一文件失败即标记为 error，让批量结果页正确显示"出错了"
-      send('batch_done', {
-        step: 'done',
-        status: batchHasError ? 'error' : 'done',
-        message: batchHasError
-          ? `批量编译完成，但部分文件失败，请查看下方文件详情`
-          : `批量编译完成，共处理 ${fileCount} 个文件`,
-        data: { fileCount, hasError: batchHasError },
-      });
-    } catch (err: unknown) {
-      request.log.error({ err }, 'batch compile SSE stream error');
-      send('error', {
-        step: 'finalize',
-        status: 'error',
-        message: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      // T03591：中断（客户端断开）同样收口为 failed，允许稍后重试同一文件集合；
-      // 只有整批跑完且无失败文件才记为 done。
-      idempotency.finish(batchKey, idempotencyToken, {
-        status: !isAborted() && !batchHasError ? 'done' : 'failed',
-        message: batchHasError ? '部分文件失败' : undefined,
-      });
-      // 清理临时文件：避免 tmp 目录残留
-      for (const tmp of tmpPaths) {
-        await fs.unlink(tmp).catch(() => {});
+      let batchHasError = false;
+      try {
+        // batch 整体作为 withCompileLock 的一个任务，保证与其他 compile/resume 请求串行
+        await withCompileLock(async () => {
+          batchHasError = await runBatchFiles(batchCtx, validFiles, tmpPaths);
+        });
+
+        // 整体完成事件：任一文件失败即标记为 error，让批量结果页正确显示"出错了"
+        ctx.emit('batch_done', {
+          step: 'done',
+          status: batchHasError ? 'error' : 'done',
+          message: batchHasError
+            ? `批量编译完成，但部分文件失败，请查看下方文件详情`
+            : `批量编译完成，共处理 ${fileCount} 个文件`,
+          data: { fileCount, hasError: batchHasError },
+        });
+      } catch (err: unknown) {
+        request.log.error({ err }, 'batch compile SSE stream error');
+        batchHasError = true;
+        ctx.emit('error', {
+          step: 'finalize',
+          status: 'error',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        // T03591：用户取消同样收口为 failed，允许稍后重试同一文件集合；
+        // 只有整批跑完且无失败文件才记为 done。
+        idempotency.finish(batchKey, idempotencyToken, {
+          status: ctx.cancelled() || batchHasError ? 'failed' : 'done',
+          message: batchHasError ? '部分文件失败' : undefined,
+        });
+        // 清理临时文件：避免 tmp 目录残留
+        for (const tmp of tmpPaths) {
+          await fs.unlink(tmp).catch(() => {});
+        }
       }
-      safeEnd();
-    }
+      return { status: batchHasError ? 'failed' : 'done' };
+    };
+    startJobOnConnection(request, reply, sender, 'batch', runner);
   });
 
   // T03591 免上传重试：POST /api/compile/retry
@@ -552,46 +599,99 @@ export function registerCompileRoute(
       'X-Accel-Buffering': 'no',
     });
 
-    const { send, isAborted, safeEnd } = createSSESender(reply, request, { heartbeatMs: SSE_HEARTBEAT_MS });
+    const sender = createSSESender(reply, request, { heartbeatMs: SSE_HEARTBEAT_MS });
 
     const retryKey = rawPathKey(rawPath);
     const begun = idempotency.begin(retryKey);
     if (begun.kind === 'running') {
-      send('deduped', {
+      sender.send('deduped', {
         step: 'deduped',
         status: 'running',
         message: '这份资料正在重新编译中，已复用该任务的进度',
         data: { ...begun.snapshot, fileIndex, fileCount, fileName },
       });
-      safeEnd();
+      sender.safeEnd();
       return;
     }
     const idempotencyToken = begun.token;
     let streamStatus: 'done' | 'failed' = 'failed';
     let lastMessage: string | undefined;
 
-    const retryCtx: RetryContext = { fileIndex, fileCount, fileName, rawPath, send };
-    try {
-      await withCompileLock(async () => {
-        for await (const ev of adapter.compileFromRaw!(rawPath)) {
-          if (isAborted()) break;
-          lastMessage = ev.message;
-          idempotency.touch(retryKey, { step: ev.step, message: ev.message });
-          const outcome = emitRetryEvent(retryCtx, ev);
-          if (outcome) streamStatus = outcome;
-        }
-      });
-    } catch (err: unknown) {
-      request.log.error({ err, rawPath }, 'compile retry SSE stream error');
-      emitRetryFailure(retryCtx, err);
-    } finally {
-      idempotency.finish(retryKey, idempotencyToken, {
-        status: isAborted() ? 'failed' : streamStatus,
-        message: lastMessage,
-      });
-      safeEnd();
-    }
+    // T04550：重试同样作为后台作业，刷新断连不中断
+    const runner: CompileJobRunner = async (ctx) => {
+      const retryCtx: RetryContext = { fileIndex, fileCount, fileName, rawPath, emit: ctx.emit };
+      try {
+        await withCompileLock(async () => {
+          for await (const ev of adapter.compileFromRaw!(rawPath)) {
+            if (ctx.cancelled()) break;
+            lastMessage = ev.message;
+            idempotency.touch(retryKey, { step: ev.step, message: ev.message });
+            const outcome = emitRetryEvent(retryCtx, ev);
+            if (outcome) streamStatus = outcome;
+          }
+        });
+      } catch (err: unknown) {
+        request.log.error({ err, rawPath }, 'compile retry SSE stream error');
+        streamStatus = 'failed';
+        emitRetryFailure(retryCtx, err);
+      } finally {
+        idempotency.finish(retryKey, idempotencyToken, {
+          status: ctx.cancelled() ? 'failed' : streamStatus,
+          message: lastMessage,
+        });
+      }
+      return { status: streamStatus, message: lastMessage };
+    };
+    startJobOnConnection(request, reply, sender, 'retry', runner);
   });
+
+  // T04550：作业状态查询。前端刷新后先查它判断「还在跑 / 已终态」，再决定是否续订事件。
+  app.get<{ Params: { jobId: string } }>(
+    '/api/compile/jobs/:jobId',
+    async (request, reply) => {
+      const snapshot = jobs.getSnapshot(request.params.jobId);
+      if (!snapshot) return void reply.code(404).send({ error: '作业不存在或已过期' });
+      void reply.send(snapshot);
+    },
+  );
+
+  // T04550：事件续订。先回放 seq >= fromSeq 的缓冲事件，再转为直播；终态作业回放后直接收流。
+  app.get<{ Params: { jobId: string }; Querystring: { fromSeq?: string } }>(
+    '/api/compile/jobs/:jobId/events',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { jobId } = request.params as { jobId: string };
+      const snapshot = jobs.getSnapshot(jobId);
+      if (!snapshot) return void reply.code(404).send({ error: '作业不存在或已过期' });
+
+      setupSSE(reply);
+      const sender = createSSESender(reply, request, { heartbeatMs: SSE_HEARTBEAT_MS });
+      const sink: CompileJobSink = {
+        onEvent: (event, data, seq) => {
+          sender.send(event, data && typeof data === 'object'
+            ? { ...(data as Record<string, unknown>), seq }
+            : data);
+        },
+        isAborted: sender.isAborted,
+        end: sender.safeEnd,
+      };
+      const raw = Number((request.query as { fromSeq?: string }).fromSeq);
+      const fromSeq = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+      // 先回快照：缓冲可能已裁剪掉终态帧，前端凭 status 仍能落到正确终态
+      sender.send('job', { ...snapshot });
+      jobs.subscribe(jobId, sink, fromSeq);
+      reply.raw.on('close', () => jobs.unsubscribe(jobId, sink));
+    },
+  );
+
+  // T04550：显式取消。只置标记由 runner 在检查点退出；断连不再推断为用户取消。
+  app.post<{ Params: { jobId: string } }>(
+    '/api/compile/jobs/:jobId/cancel',
+    async (request, reply) => {
+      const snapshot = jobs.cancel(request.params.jobId);
+      if (!snapshot) return void reply.code(404).send({ error: '作业不存在或已过期' });
+      void reply.send(snapshot);
+    },
+  );
 }
 
 // 批量逐文件编译的实现体。刻意放在注册函数之后：批量链的 adapter.compile 消费点
@@ -605,8 +705,8 @@ type BatchFileContext = {
   idempotency: CompileIdempotency;
   batchKey: string;
   fileCount: number;
-  send: (event: string, data: unknown) => boolean;
-  isAborted: () => boolean;
+  emit: (event: string, data: unknown) => void;
+  cancelled: () => boolean;
   log: FastifyRequest['log'];
 };
 
@@ -618,11 +718,11 @@ async function streamBatchFileCompile(
   fileName: string,
 ): Promise<boolean> {
   let fileFailed = false;
-  const { adapter, appConfig, idempotency, batchKey, fileCount, send, isAborted, log } = ctx;
+  const { adapter, appConfig, idempotency, batchKey, fileCount, emit, cancelled, log } = ctx;
   try {
     for await (const ev of adapter.compile(input, appConfig)) {
       // 客户端已断开：提前退出迭代，停止当前文件的剩余步骤
-      if (isAborted()) break;
+      if (cancelled()) break;
       // T03591：让后来的重复提交能看到「当前编译到哪个文件/哪一步」
       idempotency.touch(batchKey, { step: ev.step, message: `${fileName}: ${ev.message}` });
       // 把 fileIndex/fileCount/fileName 注入到每个事件的 data，前端按 fileIndex 路由到对应分组
@@ -641,7 +741,7 @@ async function streamBatchFileCompile(
         // T03591：失败事件透传 rawPath/retryable，前端据此显示「免上传重试」入口。
         if (ev.status === 'error') {
           fileFailed = true;
-          send('file_error', {
+          emit('file_error', {
             step: 'finalize',
             status: 'error',
             message: ev.message || '编译失败',
@@ -655,12 +755,12 @@ async function streamBatchFileCompile(
             retryable: ev.retryable,
           });
         } else {
-          send('file_done', evWithData);
+          emit('file_done', evWithData);
         }
       } else if (ev.data?.path && ev.data?.title) {
-        send('page', evWithData);
+        emit('page', evWithData);
       } else {
-        send('progress', evWithData);
+        emit('progress', evWithData);
       }
     }
   } catch (err: unknown) {
@@ -670,7 +770,7 @@ async function streamBatchFileCompile(
       { err, fileName, fileIndex },
       'batch compile file error',
     );
-    send('file_error', {
+    emit('file_error', {
       step: 'finalize',
       status: 'error',
       message: `文件 ${fileName} 编译失败: ${errMsg}`,
@@ -691,7 +791,7 @@ async function runBatchFiles(
   let hasError = false;
   for (let i = 0; i < files.length; i++) {
     // 客户端已断开：提前退出循环，停止后续文件编译避免无谓 LLM 调用
-    if (ctx.isAborted()) break;
+    if (ctx.cancelled()) break;
     const f = files[i];
     // 落盘到临时文件：compile-workflow 通过 fs.readFile 读取后存档到 raw/
     const tmp = path.join(os.tmpdir(), `wiki-batch-${Date.now()}-${process.pid}-${i}-${f.name}`);
@@ -699,7 +799,7 @@ async function runBatchFiles(
     tmpPaths.push(tmp);
 
     // 单文件开始事件：前端据此创建分组容器
-    ctx.send('file_start', {
+    ctx.emit('file_start', {
       step: 'archive',
       status: 'running',
       message: `开始编译文件 ${i + 1}/${ctx.fileCount}: ${f.name}`,
@@ -712,7 +812,7 @@ async function runBatchFiles(
       continue;
     }
     // 文件结束事件：标记该分组完成（仅成功时），前端据此切换 UI 状态
-    ctx.send('file_complete', {
+    ctx.emit('file_complete', {
       step: 'finalize',
       status: 'done',
       message: `文件 ${i + 1}/${ctx.fileCount} 完成: ${f.name}`,

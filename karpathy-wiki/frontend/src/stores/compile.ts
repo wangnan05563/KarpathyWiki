@@ -39,6 +39,9 @@ interface PersistableCompileState {
   // 单文件模式才需要持久化 payload 元信息（FormData 不可直接序列化，只存类型标识）
   pendingPayloadType: 'url' | 'text' | null;
   pendingPayloadContent: string | null;
+  // T04550：服务端作业标识与已收事件序号，刷新后凭二者续订补齐丢失帧
+  jobId: string;
+  lastSeq: number;
 }
 
 // 草稿发布可持久化状态子集
@@ -172,6 +175,13 @@ export const useCompileStore = defineStore('compile', () => {
   //   或在 onMounted 时通过 GET /api/compile/runs 查找 status=running 的最新任务
   const currentRunId = ref<string>('');
 
+  // ===== T04550：服务端编译作业 =====
+  // 编译已改为服务端 job：断连不取消，刷新后凭 jobId 查状态 + 按 lastSeq 续订事件。
+  // 为什么与 currentRunId 并存：runId 是编译历史（可 resume 失败 run），jobId 是本次执行的生命周期。
+  const currentJobId = ref<string>('');
+  // 已收到的最大事件序号；服务端从 lastSeq + 1 开始回放
+  const lastStreamSeq = ref(0);
+
   // §优化方案1：单文件编译模式的步骤总数估算
   // 为什么需要估算：harness 是 LLM 驱动的循环，步骤数动态，无固定上限
   //   估算策略：基于历史日志（如 SHCPE 7 步）+ 4 个核心阶段（archive/read_schema/extract/generate_page）
@@ -265,6 +275,8 @@ export const useCompileStore = defineStore('compile', () => {
     currentStepStartedAt.value = 0;
     compileStartedAt.value = 0;
     currentRunId.value = '';
+    currentJobId.value = '';
+    lastStreamSeq.value = 0;
     // T04508：新一轮投递/重置必须收掉上一在途流，否则两条流同时往同一批字段写事件
     stopStream();
     batchInterrupted.value = false;
@@ -454,6 +466,8 @@ export const useCompileStore = defineStore('compile', () => {
       compileStartedAt: compileStartedAt.value,
       pendingPayloadType: payloadType,
       pendingPayloadContent: payloadContent,
+      jobId: currentJobId.value,
+      lastSeq: lastStreamSeq.value,
     };
     try {
       localStorage.setItem(COMPILE_STATE_STORAGE_KEY, JSON.stringify(state));
@@ -487,6 +501,8 @@ export const useCompileStore = defineStore('compile', () => {
       currentRunId.value = state.currentRunId ?? '';
       stageTimings.value = state.stageTimings ?? {};
       compileStartedAt.value = state.compileStartedAt ?? 0;
+      currentJobId.value = state.jobId ?? '';
+      lastStreamSeq.value = state.lastSeq ?? 0;
       // 恢复 pendingPayload（仅 url/text 类型，FormData 不可恢复）
       if (state.pendingPayloadType && state.pendingPayloadContent) {
         pendingPayload.value = {
@@ -529,6 +545,14 @@ export const useCompileStore = defineStore('compile', () => {
   function cancelCompile() {
     isCancelled.value = true;
     isCompiling.value = false;
+    // T04550：取消是显式动作——先让服务端停作业，再断本端流。
+    // 旧口径靠 abort 连接让后端把断连当取消；现在断连只退订，作业会继续跑。
+    const jobId = currentJobId.value;
+    if (jobId) {
+      void apiFetch(`${API_BASE}/compile/jobs/${jobId}/cancel`, { method: 'POST' }).catch(() => {
+        // 取消失败（作业已终态/过期）不影响本地取消态，前端不再继续渲染进度
+      });
+    }
     stopStream();
     persistProgress();
   }
@@ -693,6 +717,8 @@ export const useCompileStore = defineStore('compile', () => {
       isCancelled: isCancelled.value,
       errorMessage: errorMessage.value,
       doneMessage: doneMessage.value,
+      jobId: currentJobId.value,
+      lastSeq: lastStreamSeq.value,
     });
   }
 
@@ -716,11 +742,29 @@ export const useCompileStore = defineStore('compile', () => {
     isCancelled.value = snapshot.isCancelled;
     errorMessage.value = snapshot.errorMessage;
     doneMessage.value = snapshot.doneMessage;
+    currentJobId.value = snapshot.jobId ?? '';
+    lastStreamSeq.value = snapshot.lastSeq ?? 0;
     return snapshot.isCompiling && !snapshot.isDone && !snapshot.isCancelled;
   }
 
   // 消费一条 SSE 事件：先分发状态，再落盘
   function handleStreamEvent(eventType: string, parsed: unknown): void {
+    // T04550：记录事件序号，刷新/断线后从 lastSeq+1 续订
+    const seq = (parsed as { seq?: unknown } | null)?.seq;
+    if (typeof seq === 'number') lastStreamSeq.value = seq;
+    if (eventType === 'job') {
+      // 作业标识帧不是业务事件：只存 jobId（续订/取消都要用它）
+      const jobId = (parsed as { jobId?: unknown } | null)?.jobId;
+      if (typeof jobId === 'string' && jobId) currentJobId.value = jobId;
+      persistProgress();
+      return;
+    }
+    if (eventType === 'server-shutdown') {
+      // 服务端进程要退出：作业也随之消失，重连只会拿到 404；按既有中断口径收口
+      handleEvent(eventType, parsed);
+      persistProgress();
+      return;
+    }
     handleEvent(eventType, parsed);
     persistProgress();
   }
@@ -753,7 +797,8 @@ export const useCompileStore = defineStore('compile', () => {
       }
       await consumeSSE(response, handleStreamEvent, controller.signal);
       // T03438：流「干净结束」但不含终止事件时 fetch 不抛错，isCompiling 会永远留在 true。
-      // handleStreamEnd 内部只在仍在编译时兜底，正常完成/已取消时是空操作。
+      // T04550：流断了但服务端作业还在跑 → 按 jobId 续订；作业确实消失才落「已中断」。
+      if (isCompiling.value && currentJobId.value && (await reconnectCompileJob())) return fatal;
       handleStreamEnd();
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
@@ -800,6 +845,8 @@ export const useCompileStore = defineStore('compile', () => {
         throw new Error(`HTTP ${response.status}`);
       }
       await consumeSSE(response, handleStreamEvent, controller.signal);
+      // T04550：resume 也走服务端作业，断流后同样尝试续订（作业不存在才落中断）
+      if (isCompiling.value && currentJobId.value && (await reconnectCompileJob())) return fatal;
       handleStreamEnd();
       // T04094：续传结束后立即刷新历史列表，返回列表时状态已是后端落盘的最新值
       await loadRuns();
@@ -818,6 +865,73 @@ export const useCompileStore = defineStore('compile', () => {
       persistState();
     }
     return fatal;
+  }
+
+  // 用作业快照收敛终态：重放缓冲可能已裁剪掉终态帧，快照是最终事实来源
+  function applyJobSnapshot(snapshot: { status?: string; message?: string } | null): void {
+    if (!snapshot || isDone.value || isCancelled.value) return;
+    if (snapshot.status === 'done') {
+      isDone.value = true;
+      isCompiling.value = false;
+      if (!doneMessage.value && snapshot.message) doneMessage.value = snapshot.message;
+      finishAllStages();
+    } else if (snapshot.status === 'canceled') {
+      isCancelled.value = true;
+      isCompiling.value = false;
+      finishAllStages();
+    } else if (snapshot.status === 'failed') {
+      errorMessage.value = snapshot.message || '编译失败';
+      isCompiling.value = false;
+      finishAllStages();
+    }
+  }
+
+  // T04550：按 jobId 重连。刷新/断线后先查快照判断作业是否还在跑，
+  // 再从 lastSeq + 1 续订事件，补齐断连窗口丢掉的帧。
+  // 返回 false 表示作业不存在（服务重启/过期），调用方按既有中断口径收口。
+  async function reconnectCompileJob(): Promise<boolean> {
+    const jobId = currentJobId.value;
+    if (!jobId) return false;
+    let snapshot: { status?: string; message?: string } | null = null;
+    try {
+      const res = await apiFetch(`${API_BASE}/compile/jobs/${jobId}`);
+      if (!res.ok) return false;
+      snapshot = (await res.json()) as { status?: string; message?: string };
+    } catch {
+      return false;
+    }
+    const wasRunning = snapshot?.status === 'running';
+    if (wasRunning) {
+      if (isDone.value || isCancelled.value) return true;
+      isCompiling.value = true;
+    }
+    const controller = new AbortController();
+    streamAbortController = controller;
+    streamActive.value = true;
+    try {
+      const response = await apiFetch(
+        `${API_BASE}/compile/jobs/${jobId}/events?fromSeq=${lastStreamSeq.value + 1}`,
+        { signal: controller.signal },
+      );
+      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+      await consumeSSE(response, handleStreamEvent, controller.signal);
+      if (wasRunning) {
+        // 回放结束仍显示运行中：连接又断了，按既有口径声称「已中断」而不是假装成功
+        handleStreamEnd();
+      } else {
+        applyJobSnapshot(snapshot);
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') handleStreamEnd((err as Error).message);
+      return false;
+    } finally {
+      if (streamAbortController === controller) {
+        streamAbortController = null;
+        streamActive.value = false;
+      }
+      persistProgress();
+    }
+    return true;
   }
 
   // 批量编译预存：FormData 包含多个 files 字段
@@ -1200,6 +1314,9 @@ export const useCompileStore = defineStore('compile', () => {
     // T04508：编译流句柄与跨切页存活的在途/中断标识
     streamActive,
     batchInterrupted,
+    currentJobId,
+    lastStreamSeq,
+    reconnectCompileJob,
     runCompileStream,
     runResumeStream,
     restoreBatchSnapshot,

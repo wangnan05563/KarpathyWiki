@@ -103,7 +103,8 @@ describe('routes/compile.ts 编译路由', () => {
       });
       expect(res.statusCode).toBe(200);
       expect(res.headers['content-type']).toContain('text/event-stream');
-      const events = parseSSEEvents(res.payload);
+      // T04550：首帧 job 携带 jobId，业务事件从第二帧开始
+      const events = parseSSEEvents(res.payload).filter((e) => e.event !== 'job');
       expect(events.map((e) => e.event)).toEqual(['progress', 'page', 'done']);
       // 事件分类：data 含 path+title 的中间事件归 page，step=done 归 done
       expect(events[2].data.step).toBe('done');
@@ -215,7 +216,8 @@ describe('routes/compile.ts 编译路由', () => {
       const res = await app.inject({ method: 'POST', url: `/api/compile/resume/${runId}` });
       expect(res.statusCode).toBe(200);
       expect(adapter.resumeCompile).toHaveBeenCalledWith(runId);
-      const events = parseSSEEvents(res.payload);
+      // T04550：忽略首帧 job，只断言业务事件序列
+      const events = parseSSEEvents(res.payload).filter((e) => e.event !== 'job');
       expect(events.map((e) => e.event)).toEqual(['progress', 'done']);
     });
 
@@ -281,7 +283,8 @@ describe('routes/compile.ts 编译路由', () => {
         payload: body,
       });
       expect(res.statusCode).toBe(200);
-      const events = parseSSEEvents(res.payload);
+      // T04550：忽略首帧 job，业务事件从 batch_start 开始
+      const events = parseSSEEvents(res.payload).filter((e) => e.event !== 'job');
       expect(events[0].event).toBe('batch_start');
       expect(events[0].data.data.fileCount).toBe(2);
       expect(events[0].data.data.rejected).toEqual([]);
@@ -338,7 +341,8 @@ describe('routes/compile.ts 编译路由', () => {
         payload: body,
       });
       expect(res.statusCode).toBe(200);
-      const events = parseSSEEvents(res.payload);
+      // T04550：忽略首帧 job，业务事件从 batch_start 开始
+      const events = parseSSEEvents(res.payload).filter((e) => e.event !== 'job');
       expect(events[0].event).toBe('batch_start');
       expect(events[0].data.data.fileCount).toBe(1);
       expect(events[0].data.data.rejected[0].reason).toContain('超过 1MB 上限');
