@@ -39,6 +39,7 @@ import {
   FALLBACK_NO_COVERAGE_TEXT,
   FALLBACK_SERVICE_ERROR_TEXT,
   hasAnswerBody,
+  INCOMPLETE_ANSWER_NOTICE,
   isAccountLevelFailure,
   queryWorkflow,
   type QueryFailure,
@@ -63,6 +64,8 @@ let stubBody = '{"error":{"message":"stub upstream exploded","type":"server_erro
 // 为什么按请求体里的 stream 标志分叉，而不是按用例切整个桩：深度问答与降级第 2 级在同一次
 // 端到端里分别用流式/非流式发请求，只有一处判据能同时验到两级。
 let stubStreamContent: string | null = null;
+// T04516：流式「先回部分正文再断流」复现混排。null = 不启用；非 null 时写部分 delta 后销毁连接（不发 [DONE]）。
+let stubStreamPartial: string | null = null;
 const createdDirs: string[] = [];
 
 // OpenAI 流式协议帧：content 为空串时一帧 delta.content 都不发（正是「200 但零正文」的流式形态）
@@ -97,6 +100,17 @@ beforeAll(async () => {
       } catch {
         /* 非 JSON 请求体按非流式处理 */
       }
+      if (wantsStream && stubStreamPartial !== null) {
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        const frames = [
+          JSON.stringify({ choices: [{ index: 0, delta: { role: 'assistant' } }] }),
+          JSON.stringify({ choices: [{ index: 0, delta: { content: stubStreamPartial } }] }),
+        ].map((f) => `data: ${f}`).join('\n\n') + '\n\n';
+        // 不发 [DONE]、不 res.end()：写完部分增量即销毁连接，客户端 reader.read() 先拿到部分正文再 reject
+        // （terminated）——正是「流到一半才失败」。干净 end 会被 chatStream 当正常结束，复现不出混排。
+        res.write(frames, () => res.destroy());
+        return;
+      }
       if (wantsStream && stubStreamContent !== null) {
         res.writeHead(200, { 'content-type': 'text/event-stream' });
         res.end(sseFrames(stubStreamContent));
@@ -123,6 +137,7 @@ beforeEach(() => {
   stubStatus = 500;
   stubBody = '{"error":{"message":"stub upstream exploded","type":"server_error"}}';
   stubStreamContent = null;
+  stubStreamPartial = null;
   vaultDir = mkdtempSync(path.join(tmpdir(), 'wiki-t04176-'));
   createdDirs.push(vaultDir);
   stateDir = mkdtempSync(path.join(tmpdir(), 'wiki-t04176-state-'));
@@ -668,4 +683,61 @@ describe('T04456-F 空答案判定', () => {
     expect(phases).not.toContain('fallback-start');
     expect(joinedText(chunks)).toContain('复利');
   }, 30_000);
+});
+
+// ===========================================================================
+// G. T04516：流到一半失败时，半截答案与兜底文案混排的收口（裁决口径a：显式分隔）
+// 复现手法：桩 LLM 流式先回一段 delta 正文，再不发 [DONE] 直接销毁连接 → 客户端先吐出部分
+// 正文块、随后 reader.read() reject（terminated）→ 第 1 级 catch 时 harnessAnswerBodies>0 但
+// harnessSucceeded=false → 降级第 2 级（桩 500）也失败 → 第 3 级兜底。改造前兜底无缝接在半截
+// 答案后；口径a 要求先插「以上回答未完成」显式分隔再附兜底原因。
+// ===========================================================================
+describe('T04516-G 部分答案中途失败的混排收口', () => {
+  function joinedText(chunks: AnswerChunk[]): string {
+    return chunks.filter((c) => typeof c.text === 'string').map((c) => c.text as string).join('');
+  }
+
+  it('G1 复现并收口：流式先回部分正文再断流 → 部分答案后显式「未完成」分隔，再接兜底原因', async () => {
+    stubStatus = 500; // 第 2 级（非流式）仍失败 → 落到第 3 级兜底
+    stubStreamPartial = '知识库的价值体现在复利上，持续维护'; // 流到一半的部分正文
+    const stage = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const chunks = await collectWorkflow('知识库的价值体现在哪里', { stream: true });
+    const text = joinedText(chunks);
+    const phases = stagePhases(stage);
+    // 第 1 级真的中途失败（不是正常结束），且确实先流出了部分正文
+    expect(phases, '断流必须判为 harness-failed 而非 harness-done').toContain('harness-failed');
+    expect(phases).not.toContain('harness-done');
+    expect(text).toContain('持续维护');
+    // 显式分隔标记必须出现，且次序为：部分答案 → 未完成标记 → 兜底原因
+    expect(text).toContain(INCOMPLETE_ANSWER_NOTICE);
+    const partialIdx = text.indexOf('持续维护');
+    const noticeIdx = text.indexOf(INCOMPLETE_ANSWER_NOTICE);
+    const fallbackIdx = text.indexOf('问答服务暂不可用');
+    expect(partialIdx).toBeGreaterThanOrEqual(0);
+    expect(noticeIdx, '「未完成」标记必须排在部分答案之后').toBeGreaterThan(partialIdx);
+    expect(fallbackIdx, '兜底原因必须排在「未完成」标记之后').toBeGreaterThan(noticeIdx);
+    expect(chunks.some((c) => c.done), '兜底后仍要收口 done').toBe(true);
+  }, 30_000);
+
+  it('G2 负控制：首跳即失败（无任何部分答案）→ 兜底原样追加，不加「未完成」标记', async () => {
+    stubStatus = 500; // 非流式首跳即 500，没有部分正文流出
+    const chunks = await collectWorkflow('知识库的价值体现在哪里');
+    const text = joinedText(chunks);
+    expect(text).toContain('问答服务暂不可用');
+    expect(text, '没发出过部分答案就不该谎称「以上回答未完成」').not.toContain(INCOMPLETE_ANSWER_NOTICE);
+  }, 30_000);
+
+  it('G3 负控制：正常完整流式答案 → 不触发兜底、不加「未完成」标记', async () => {
+    stubStatus = 200;
+    stubStreamContent = '知识库的价值体现在复利上，持续维护的页面会随时间累积收益。';
+    const chunks = await collectWorkflow('知识库的价值体现在哪里', { stream: true });
+    const text = joinedText(chunks);
+    expect(text).toContain('复利');
+    expect(text).not.toContain(INCOMPLETE_ANSWER_NOTICE);
+    expect(text).not.toContain('问答服务暂不可用');
+  }, 30_000);
+
+  it('G4 标记措辞明确「未完成」语义（口径a 的核心分隔句）', () => {
+    expect(INCOMPLETE_ANSWER_NOTICE).toContain('以上回答未完成');
+  });
 });

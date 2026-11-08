@@ -1172,6 +1172,8 @@ async function* runSearchFallbackLevel(ctx: {
   outputModes: Set<OutputMode> | null;
   failures: QueryFailure[];
   neighborSink: string[];
+  // T04516：把本级实际流出的答案正文块数回传给 queryWorkflow，供第 3 级判「本轮是否已有部分答案」
+  answerBodySink: { count: number };
   skipCategory?: string;
   stage: (phase: string, extra?: Record<string, unknown>) => void;
 }): AsyncGenerator<AnswerChunk, boolean, unknown> {
@@ -1194,7 +1196,9 @@ async function* runSearchFallbackLevel(ctx: {
       createFallbackWithMultimodal(
       harnessConfig, vault, input, options, outputModes,
     ), vault, options.appConfig, neighborSink)) {
-      answerBodies += answerBodyChunks(chunk);
+      const bodies = answerBodyChunks(chunk);
+      answerBodies += bodies;
+      ctx.answerBodySink.count += bodies;
       yield chunk;
     }
     // T04456：本级走完却没吐出正文（模型回空/仅空白），不能算成功——
@@ -1396,6 +1400,10 @@ export const FALLBACK_SERVICE_ERROR_TEXT =
   '原因已记入服务端日志（[query-stage] harness-failed / fallback-failed）。请稍后重试；' +
   '若持续出现，请在「配置中心 → AI 服务」检查模型配置与网络。';
 
+// T04516 口径a：本轮已流出部分答案却中途失败时，先显式标记「未完成」再附兜底原因。
+// 不标记的话，半截答案会与「服务暂不可用」无缝拼在同一气泡里，用户误以为那就是完整回答。
+export const INCOMPLETE_ANSWER_NOTICE = '以上回答未完成。';
+
 // T04479：按 LLM 错误分类补一句「当下能做的下一步」。
 // 主诉现场不是代码缺陷，而是上游模型回 HTTP 429（免费额度限流）；但默认文案的指引是
 // 「检查模型配置与网络」——配置和网络都没有错，用户照着这句话把同一个问题重试了三轮
@@ -1592,9 +1600,11 @@ export async function* queryWorkflow(
   // 再打一次必然同样失败（现场：两级在 1s 内各回一次 429），只是多烧一次请求、多让用户等一轮。
   const harnessFailure = failures.find((f) => f.level === 'harness');
   const fallbackSkipped = isAccountLevelFailure(harnessFailure);
+  const fallbackAnswerBodies = { count: 0 };
   const fallbackSucceeded = yield* runSearchFallbackLevel({
     harnessConfig, vault, input: clarifyInput,
     options: { ...options, neighborSink }, outputModes, failures, neighborSink,
+    answerBodySink: fallbackAnswerBodies,
     skipCategory: fallbackSkipped ? harnessFailure?.category : undefined, stage,
   });
 
@@ -1606,7 +1616,10 @@ export async function* queryWorkflow(
   if (shouldEmit('answer', outputModes)) {
     // T04176：按失败原因选文案——库里真没有 vs 服务没跑通，是两句不同的话
     // T04479：第 2 级被跳过时要说「已跳过」，不能对用户声称「两次尝试都没有完成」
-    yield { text: composeFallbackText(failures, fallbackSkipped) };
+    // T04516 口径a：本轮已流出部分答案（任一级）时，先显式标记「未完成」再附兜底，避免半截答案与兜底无缝混排
+    const partialAnswerEmitted = harnessAnswerBodies + fallbackAnswerBodies.count > 0;
+    const fallbackText = composeFallbackText(failures, fallbackSkipped);
+    yield { text: partialAnswerEmitted ? `\n\n${INCOMPLETE_ANSWER_NOTICE}\n\n${fallbackText}` : fallbackText };
   }
   stage('workflow-done');
   yield { refs: [], done: true };
