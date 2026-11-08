@@ -6,9 +6,9 @@
 // 接入形态一律 var(--<家族>-readable, var(--<基色>[, #hex]))，原 fallback 原样保留。
 //
 // 本批的两点特殊性（结论都建立在逐主题实算上，不是惯例）：
-//  1) 两处 hover 深 tint 面（a25）：FloatingChat 建议 chip 与 MessageToolbar 删除按钮。
-//     接入后仍到不了文本 4.5——三个 readable 族**全部**不行（见 KNOWN_GAPS 的 ALT 实测），
-//     根因在面与取值，不在这条声明；本批只把 1.31~1.80 抬到 4.27~4.32 并把残差逐主题锁成精确值。
+//  1) 两处 hover 深 tint 面：FloatingChat 建议 chip 与 MessageToolbar 删除按钮。接入 readable 后
+//     在 a25 面上仍到不了 4.5（1.31~1.80 → 4.27~4.32），瓶颈是面本身。T04482 把这两处 hover 的
+//     淡底从 a25 降到 a12（与本批其余 hover 面同档），逐主题实算 5.0457 / 4.8071，21 点 × 8 主题归零。
 //  2) 一处跨家族按面选族：MultimodalOutputCard 的代码字色基名是紫，落点面却是青 tint（a12），
 //     留在紫族只有 4.48，改走青族 4.88 达标——延续批次 A2 About 的「按面选族」结论。
 import { describe, expect, it } from 'vitest';
@@ -38,8 +38,8 @@ const POINTS: Point[] = [
   { f: 'CitationText.vue', ln: 58, sel: 'sup.cite-ref', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
   { f: 'CitationText.vue', ln: 59, sel: 'sup.cite-ref', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'ContextUsageBadge.vue', ln: 108, sel: '.ctx-badge-inner:hover', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
-  { f: 'FloatingChat.vue', ln: 941, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a25)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'ui' },
-  { f: 'FloatingChat.vue', ln: 942, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a25)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'text' },
+  { f: 'FloatingChat.vue', ln: 941, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a12)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'ui' },
+  { f: 'FloatingChat.vue', ln: 942, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a12)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'text' },
   { f: 'FollowupsChips.vue', ln: 70, sel: '.followup-chip:hover:not(:disabled)', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
   { f: 'FollowupsChips.vue', ln: 71, sel: '.followup-chip:hover:not(:disabled)', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'GuideButton.vue', ln: 58, sel: '.guide-entry-btn:hover', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
@@ -48,38 +48,12 @@ const POINTS: Point[] = [
   { f: 'GuideOverlay.vue', ln: 266, sel: '.guide-step', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'MessageActions.vue', ln: 106, sel: '.action-btn:hover', face: 'var(--accent-cyan-a10)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'MessageActions.vue', ln: 109, sel: '.action-btn.active', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
-  { f: 'MessageToolbar.vue', ln: 587, sel: '.toolbar-btn.danger-btn:hover', face: 'var(--accent-pink-a25)', fg: 'var(--pink-readable)', bare: 'var(--neon-pink)', kind: 'text' },
+  { f: 'MessageToolbar.vue', ln: 587, sel: '.toolbar-btn.danger-btn:hover', face: 'var(--accent-pink-a12)', fg: 'var(--pink-readable)', bare: 'var(--neon-pink)', kind: 'text' },
   { f: 'MultimodalOutputCard.vue', ln: 267, sel: '.card-body :deep(.markdown-body code)', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-purple)', kind: 'text' },
   { f: 'ThemeSwitcher.vue', ln: 310, sel: '.theme-check', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'ThinkingBlock.vue', ln: 85, sel: '.thinking-block', face: 'var(--accent-purple-a04)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'ui' },
   { f: 'ThinkingBlock.vue', ln: 91, sel: '.thinking-block.live', face: 'var(--accent-purple-a08)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'ui' },
 ];
-
-/**
- * 接入后仍不达标的格（本批唯一 2 格，逐主题精确值冻结）。
- * 为什么不是「换个族」能修：ALT 是同一格按另两个 readable 族的实测最差值——三族全都上不了 4.5，
- * 说明瓶颈是 hover 规则自带的 a25 淡底（叠在浅底主题的卡片上已被抬亮）加 readable 取值本身。
- * 派生单 T04481 处理面/取值校准；校准完成后本表要删掉并把这两行挪进达标清单。
- * ⚠ T04480（macaron `--purple-readable` #7a628d → #76608a）顺带闭掉了本格的 macaron 一侧：
- *    该格紫 a25 淡底同向变好，实测 4.4465 → 4.6201 ≥ 4.5，故 values 里删掉 macaron 键。
- *    其余 6 个浅底主题的缺口仍在（瓶颈是 a25 淡底本身），属 T04482 未闭，本表不整表删除。
- */
-const KNOWN_GAPS: Record<string, { need: number; fam: string; values: Record<string, number>; alt: Record<string, number> }> = {
-  'FloatingChat.vue:L942 .suggestion-chip:hover': {
-    need: 4.5,
-    fam: 'var(--purple-readable)',
-    values: { 'default(:root)': 4.3216, creative: 4.3216, ecommerce: 4.4129, enterprise: 4.3361, 'light-business': 4.3789, product: 4.3308 },
-    // 换族修不掉：青族最差 3.68、粉族 3.47，比留在紫族更差
-    alt: { 'var(--accent-readable)': 3.6812, 'var(--pink-readable)': 3.4697 },
-  },
-  'MessageToolbar.vue:L587 .toolbar-btn.danger-btn:hover': {
-    need: 4.5,
-    fam: 'var(--pink-readable)',
-    values: { 'default(:root)': 4.3081, creative: 4.3081, ecommerce: 4.3591, enterprise: 4.3342, 'light-business': 4.2675, portfolio: 4.3745, product: 4.3241 },
-    // 青族最差值 4.4156 略高，但会把「删除」危险态刷成与普通按钮 hover 同一个青——1.4.1 的代价换 0.1 的比值，本批不换
-    alt: { 'var(--accent-readable)': 4.4156, 'var(--purple-readable)': 4.3331 },
-  },
-};
 
 const srcOf = (f: string) => readFileSync(join(ROOT, 'src/components', f), 'utf8');
 const FILES = [...new Set(POINTS.map((p) => p.f))];
@@ -108,11 +82,19 @@ const OWN_TINT_BG = /background[^;]*(?:var\(--accent-[\w-]+-a\d{2}\)|rgba\()/;
 
 const ratioOf = (fg: string, p: Point, t: (typeof THEMES)[number]) => worstRatio(fg, p.face, t.decls, pageOf(t.decls));
 
-const auditWith = (fgOf: (p: Point) => string): AuditFailure[] => {
+/** 接入前口径：两处 hover 在 T04482 降档前用的是 a25 面，基线数不能跟着新面漂移 */
+const PRE_FACE: Record<string, string> = {
+  'FloatingChat.vue:L941': 'var(--accent-purple-a25)',
+  'FloatingChat.vue:L942': 'var(--accent-purple-a25)',
+  'MessageToolbar.vue:L587': 'var(--accent-pink-a25)',
+};
+const preFaceOf = (p: Point) => PRE_FACE[`${p.f}:L${p.ln}`] ?? p.face;
+
+const auditWith = (fgOf: (p: Point) => string, faceOf: (p: Point) => string = (p) => p.face): AuditFailure[] => {
   const out: AuditFailure[] = [];
   for (const t of THEMES) {
     for (const p of POINTS) {
-      const r = ratioOf(fgOf(p), p, t);
+      const r = worstRatio(fgOf(p), faceOf(p), t.decls, pageOf(t.decls));
       if (r < THRESHOLD[p.kind]) out.push({ theme: t.name, label: `${p.f} ${p.sel} [L${p.ln}]`, ratio: r, threshold: THRESHOLD[p.kind] });
     }
   }
@@ -120,9 +102,9 @@ const auditWith = (fgOf: (p: Point) => string): AuditFailure[] => {
 };
 
 /** 接入前的裸基色事实数（实测，非估算）——本批 21 点 × 8 主题里 74 个组合未达标 */
-const BEFORE_FAILURES = auditWith((p) => p.bare).length;
+const BEFORE_FAILURES = auditWith((p) => p.bare, preFaceOf).length;
 
-/** 接入后的未达标格：必须恰好等于 KNOWN_GAPS 登记的 14 个组合（多一个即回归，少一个说明留档过期） */
+/** 接入后的未达标格：T04482 降档后必须为空（多一个即回归） */
 const AFTER_FAILURES = auditWith((p) => p.fg);
 
 const WRAPPED_LINES: Record<string, Array<{ line: string; count: number }>> = {
@@ -200,38 +182,22 @@ const TINT_BASE: Record<string, number> = {
   'ThinkingBlock.vue': 0,
 };
 
-/** 登记表键 → auditWith 的 label 形态：`File.vue .sel [L942]` */
-const gapLabel = (key: string) => {
-  const m = /^([\w.]+):L(\d+) (.+)$/.exec(key)!;
-  return `${m[1]} ${m[3]} [L${m[2]}]`;
-};
-
 describe('T04470 批次 C：13 个组件 21 面逐主题实算', () => {
   for (const t of THEMES) {
-    it(`${t.name}：未达标格只允许是 KNOWN_GAPS 登记过的格，且逐格值不得漂移`, () => {
+    it(`${t.name}：21 个消费点全部达 AA`, () => {
       const bad = AFTER_FAILURES.filter((x) => x.theme === t.name);
-      const want = Object.entries(KNOWN_GAPS)
-        .filter(([, g]) => g.values[t.name] !== undefined)
-        .map(([k]) => gapLabel(k))
-        .sort();
-      expect(bad.map((b) => b.label).sort(), `${t.name} 未达标格与留档不符`).toEqual(want);
-      for (const b of bad) {
-        const key = Object.keys(KNOWN_GAPS).find((k) => gapLabel(k) === b.label)!;
-        // 冻结到 4 位小数：面或 readable 取值被改动就会在这里红
-        expect(Number(b.ratio.toFixed(4)), `${key} · ${t.name}`).toBe(KNOWN_GAPS[key].values[t.name]);
-        expect(b.threshold).toBe(KNOWN_GAPS[key].need);
-      }
+      expect(bad.map((b) => `${b.label} = ${b.ratio.toFixed(4)}`), `${t.name} 仍有未达标格`).toEqual([]);
     });
   }
 
-  it('19 个可修格接入后全部达 AA；残差只有登记过的 13 个主题×格组合', () => {
+  it('21 个格接入 + 两处降档后全部达 AA；残差归零', () => {
     expect(POINTS.length).toBe(21);
     expect(FILES.length).toBe(13);
     expect(BEFORE_FAILURES, '接入前未达标组合数被改动——本批结论建立在这组实测上').toBe(74);
-    // 本批收口时残差为 14；T04480 校准 macaron 紫 readable 后 FloatingChat L942 的 macaron 一侧闭掉 → 13
-    expect(AFTER_FAILURES.length).toBe(13);
+    // 原 14 个残差（T04480 闭掉 macaron 紫一侧 → 13），T04482 把两处 hover 的 a25 面降到 a12 后归零
+    expect(AFTER_FAILURES).toEqual([]);
     const repaired = 74 - AFTER_FAILURES.length;
-    expect(repaired).toBe(61);
+    expect(repaired).toBe(74);
   });
 
   it('13 个文件的裸基色前景声明全部归零（与索引锁同一口径的规模锁）', () => {
@@ -306,7 +272,7 @@ describe('T04470 批次 C：13 个组件 21 面逐主题实算', () => {
     expect(cross.map((x) => `${x.f}:L${x.ln}`)).toEqual(['MultimodalOutputCard.vue:L267']);
   });
 
-  it('选族不许随手换：青族 16 点换粉/紫各破 4 点，紫族 4 点换青/粉各破 1 点', () => {
+  it('选族不许随手换：青族 16 点换粉/紫各破 4 点；降档后紫/粉两组换族均不再破', () => {
     const labels = (ps: Point[]) => ps.map((p) => `${p.f}:L${p.ln}`).sort();
     const breaks = (pool: Point[], fam: string) => pool.filter((p) => THEMES.some((t) => ratioOf(`var(--${fam}-readable)`, p, t) < THRESHOLD[p.kind]));
     const cyanPts = POINTS.filter((p) => p.fg === 'var(--accent-readable)');
@@ -318,16 +284,13 @@ describe('T04470 批次 C：13 个组件 21 面逐主题实算', () => {
     const wantCyanBreak = ['AttachmentUploader.vue:L213', 'FollowupsChips.vue:L71', 'GuideButton.vue:L58', 'MultimodalOutputCard.vue:L267'];
     expect(labels(breaks(cyanPts, 'pink'))).toEqual(wantCyanBreak);
     expect(labels(breaks(cyanPts, 'purple'))).toEqual(wantCyanBreak);
-    expect(labels(breaks(purplePts, 'accent'))).toEqual(['FloatingChat.vue:L942']);
-    expect(labels(breaks(purplePts, 'pink'))).toEqual(['FloatingChat.vue:L942']);
-    // 粉族唯一的点（删除按钮 hover）换族也修不掉：换青在 enterprise/light-business 仍破，换紫破 4 个主题
+    // T04482 降档到 a12 后，原 a25 面上「换族也修不掉」的两格随面一起消失：三族在两组落点均达标。
+    expect(labels(breaks(purplePts, 'accent'))).toEqual([]);
+    expect(labels(breaks(purplePts, 'pink'))).toEqual([]);
     const pinkPts = POINTS.filter((p) => p.fg === 'var(--pink-readable)');
-    expect(labels(breaks(pinkPts, 'accent'))).toEqual(['MessageToolbar.vue:L587']);
-    expect(labels(breaks(pinkPts, 'purple'))).toEqual(['MessageToolbar.vue:L587']);
-    expect(THEMES.filter((t) => ratioOf('var(--accent-readable)', pinkPts[0], t) < THRESHOLD.text).map((t) => t.name).sort()).toEqual([
-      'enterprise',
-      'light-business',
-    ]);
+    expect(pinkPts.length).toBe(1);
+    expect(labels(breaks(pinkPts, 'accent'))).toEqual([]);
+    expect(labels(breaks(pinkPts, 'purple'))).toEqual([]);
   });
 
   it('包裹表达式括号平衡且行尾未丢（防止接入器吃掉字符）', () => {
@@ -340,20 +303,15 @@ describe('T04470 批次 C：13 个组件 21 面逐主题实算', () => {
     }
   });
 
-  it('残差格换族也修不掉：登记表里的 alt 实测值同样低于阈值（防止派生单被「换个族」误关）', () => {
-    for (const [key, g] of Object.entries(KNOWN_GAPS)) {
-      const [file, rest] = key.split(':L');
-      const ln = Number(rest.match(/^\d+/)![0]);
-      const p = POINTS.find((x) => x.f === file && x.ln === ln)!;
-      for (const [fg, worst] of Object.entries(g.alt)) {
-        const got = Math.min(...THEMES.map((t) => ratioOf(fg, p, t)));
-        expect(Number(got.toFixed(4)), `${key} 按 ${fg} 实算最差值漂移`).toBe(Number(worst.toFixed(4)));
-        expect(got, `${key} 按 ${fg} 竟然达标了——说明面/口径变了，留档要重评`).toBeLessThan(g.need);
-      }
-      // 登记表里逐主题值也必须与实算一致（面被改动即红）
-      for (const [theme, v] of Object.entries(g.values)) {
-        const t = THEMES.find((x) => x.name === theme)!;
-        expect(Number(ratioOf(g.fam, p, t).toFixed(4)), `${key} · ${theme} 值漂移`).toBe(v);
+  it('降档后的 a12 面对三个 readable 族都达标（残差根因是 a25 面，不是族）', () => {
+    // T04482 在 a25 面上实测三族全不达标（3.47~4.42）；降档到 a12 后三族全部 ≥4.64。
+    // 这条同时锁住「不改 readable 取值」的结论：族取值一旦被调浅，先红的会是原来的配对族，
+    // 但只要某个 alt 族掉线也说明面/取值口径变了，残差需要重评。
+    for (const key of ['FloatingChat.vue:L942', 'MessageToolbar.vue:L587']) {
+      const p = POINTS.find((x) => `${x.f}:L${x.ln}` === key)!;
+      for (const fam of ['var(--accent-readable)', 'var(--pink-readable)', 'var(--purple-readable)']) {
+        const fails = THEMES.filter((t) => ratioOf(fam, p, t) < THRESHOLD.text).map((t) => t.name);
+        expect(fails, `${key} 按 ${fam} 未达标：${fails.join(',')}`).toEqual([]);
       }
     }
   });

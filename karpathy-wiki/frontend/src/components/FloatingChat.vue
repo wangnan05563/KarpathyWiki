@@ -937,7 +937,7 @@ onBeforeUnmount(() => {
 }
 
 .suggestion-chip:hover {
-  background: var(--accent-purple-a25);
+  background: var(--accent-purple-a12);
   border-color: var(--purple-readable, var(--neon-purple));
   color: var(--purple-readable, var(--neon-purple));
 }

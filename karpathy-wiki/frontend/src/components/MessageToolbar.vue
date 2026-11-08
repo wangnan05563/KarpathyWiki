@@ -583,7 +583,7 @@ function handleFeedback(type: 'up' | 'down') {
 
 /* 删除按钮：hover 时使用主题粉色警示色，与其他操作按钮视觉区分 */
 .toolbar-btn.danger-btn:hover {
-  background: var(--accent-pink-a25, rgba(255, 0, 110, 0.25));
+  background: var(--accent-pink-a12, rgba(255, 0, 110, 0.12));
   color: var(--pink-readable, var(--neon-pink, #ff006e));
 }
 

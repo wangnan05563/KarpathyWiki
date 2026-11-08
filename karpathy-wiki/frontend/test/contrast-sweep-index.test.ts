@@ -110,19 +110,18 @@ const WIRING_DONE: Record<string, number> = {
   'src/components/TocTree.vue': 3, // T04470 批次 B2
   'src/components/TtsController.vue': 3, // T04470 批次 B2
   // ↓ 批次 C：长尾 13 个文件 21 处，全部走 readable 包裹（本批无状态点光晕惯用法）。
-  //   其中 2 处（FloatingChat L942 / MessageToolbar L587）接完后在部分浅底主题上仍差 AA 一线
-  //   ——三个 readable 族在该面上的最低值都到不了 4.5，属「面取值」问题不是「族」问题，
-  //   实测值与换族反证锁在 contrast-sweep-components-c.test.ts 的 KNOWN_GAPS，已建派生单裁决。
+  //   其中 2 处（FloatingChat L942 / MessageToolbar L587）原 a25 hover 面上仍差 AA 一线，
+  //   T04482 把淡底降到 a12 后逐主题达标（三族实测均 ≥4.64），残差归零。
   'src/components/AttachmentUploader.vue': 2, // T04470 批次 C
   'src/components/CitationModal.vue': 1, // T04470 批次 C
   'src/components/CitationText.vue': 2, // T04470 批次 C
   'src/components/ContextUsageBadge.vue': 1, // T04470 批次 C
-  'src/components/FloatingChat.vue': 2, // T04470 批次 C（含 1 处跨家族按面选族；另 1 处为已登记残差）
+  'src/components/FloatingChat.vue': 2, // T04470 批次 C（含 1 处跨家族按面选族；hover 面 T04482 降档）
   'src/components/FollowupsChips.vue': 2, // T04470 批次 C
   'src/components/GuideButton.vue': 2, // T04470 批次 C
   'src/components/GuideOverlay.vue': 2, // T04470 批次 C
   'src/components/MessageActions.vue': 2, // T04470 批次 C
-  'src/components/MessageToolbar.vue': 1, // T04470 批次 C（已登记残差）
+  'src/components/MessageToolbar.vue': 1, // T04470 批次 C（hover 面 T04482 降档）
   'src/components/MultimodalOutputCard.vue': 1, // T04470 批次 C
   'src/components/ThemeSwitcher.vue': 1, // T04470 批次 C
   'src/components/ThinkingBlock.vue': 2, // T04470 批次 C
