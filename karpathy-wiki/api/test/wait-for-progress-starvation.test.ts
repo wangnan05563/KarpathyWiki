@@ -24,16 +24,33 @@ const TEST_DIR = __dirname;
 const SELF = 'wait-for-progress-starvation.test.ts';
 
 /**
- * 牙齿用例的「同比例缩小契约」：NO_TIMER_CHAIN ÷ 20（与前端版同一推导）。
- * 判据的形状（欠账不进分子、cap 每轮都判、floor 与 idle 缺一不可）与尺度无关，但真实预算要
- * 81~121 轮真实宏任务才走完——全套并行时被拖到十倍以上就会把本文件变成**新的**偶发红源
- * （本单要消灭的正是这类等待）。所以 A/C/D/F 用 ÷20 的样本；真实数值由 B/E 两腿现场复现，两头都不缺。
+ * 牙齿用例的尺度：**预算一律以「健康上限的整数轮」表述**（T04514 同步前端 T04471）。
+ *
+ * 阈值一旦按实测抬离 25ms，固定毫秒会与「每轮进账 = 阈值」脱钩，判红会退化到第 1 轮，
+ * 「连续无进展」这条语义就根本没被测到。现在 floor/idle/cap 写成 4/2/10 轮：
+ * 无论阈值实测出来是多少，A/C/F 都恰好落在第 5 轮、D 落在第 11 轮。
+ * 真实毫秒由 B/E 两腿现场复现（用真实 NO_TIMER_CHAIN 与 2036ms 样本），两头都不缺。
  */
 const TEETH = {
-  floorMs: NO_TIMER_CHAIN.floorMs / 20,
-  idleMs: NO_TIMER_CHAIN.idleMs / 20,
-  capMs: NO_TIMER_CHAIN.capMs / 20,
+  floorMs: 4 * HEALTHY_POLL_MS,
+  idleMs: 2 * HEALTHY_POLL_MS,
+  capMs: 10 * HEALTHY_POLL_MS,
 } as const;
+
+/** 合成节拍取健康上限本身：`gap > HEALTHY_POLL_MS` 为假 → 欠账恒为 0，每轮进账恰好一个阈值 */
+const STEADY_GAP_MS = HEALTHY_POLL_MS;
+
+/** 判红轮次的闭式：越线条件是 `ours > floorMs`，而 ours 每轮进账恰好一个节拍 → 第 floor/节拍 + 1 轮 */
+const TRIP_ROUND = Math.floor(TEETH.floorMs / STEADY_GAP_MS) + 1;
+
+/** 同理，硬上限在第 cap/节拍 + 1 轮越线（与签名是否变化无关） */
+const CAP_TRIP_ROUND = Math.floor(TEETH.capMs / STEADY_GAP_MS) + 1;
+
+/** T04461 的现场样本：一次轮询之间被饿 2036ms。它必须始终高于阈值，否则欠账判据形同虚设 */
+const STARVED_ROUND_MS = 2_036;
+
+/** 「永远被饿」这一档的节拍：够大以证明欠账续不了命，够小以不超过任何契约上限 */
+const HUNGRY_GAP_MS = 5_000;
 
 /** 本文件用例的 vitest 超时：判据按合成时钟走，与墙钟无关，唯一开销是 <10 轮宏任务；给 2 倍默认余量 */
 const CASE_TIMEOUT_MS = 10_000;
@@ -85,20 +102,13 @@ async function failureOf(promise: Promise<unknown>): Promise<Error> {
   }
 }
 
-/**
- * 判红时刻的下界（从契约推导，不写经验数）：每轮实算恰好 HEALTHY_POLL_MS，
- * idle 分支要求 `ours > floor` 且 `idleOurs > idle`，两者同步增长 → 最早一轮满足的是
- * `floor(idle / HEALTHY_POLL_MS) + 1`（严格大于，所以整除时不能取 ceil）。
- * 这条下界是「归因」的牙齿：判据若退回纯墙钟，被饿样本会在第 1 轮就判红，
- * 而取证字段本身仍打印得出合规的数——只看数字看不出退化，只看上界也看不出退化。
- */
-const earliestIdleTripRound = Math.floor(TEETH.idleMs / HEALTHY_POLL_MS) + 1;
+const HELPER_SRC = () => readFileSync(path.join(TEST_DIR, 'helpers', 'waitForProgress.ts'), 'utf8');
 
 describe('T04473 · waitForProgress 判据：欠账扣得掉，牙齿不能一起磨掉', () => {
   it(
     'A · 节拍健康且签名不变时，仍在契约预算判红，没有因为改造而被放宽',
     async () => {
-      const clock = new SyntheticClock([HEALTHY_POLL_MS]); // 每轮恰好贴着健康上限：欠账恒为 0
+      const clock = new SyntheticClock([STEADY_GAP_MS]); // 每轮恰好贴着健康上限：欠账恒为 0
       const wait = waitForProgress('A · 永远不落定的作业状态', () => (clock.step(), false), {
         ...TEETH,
         progress: () => 'status=pending',
@@ -109,14 +119,11 @@ describe('T04473 · waitForProgress 判据：欠账扣得掉，牙齿不能一�
       expect(err.message).toMatch(/无进展实算/);
       const { starve, ours } = reportedMs(err.message);
       expect(starve).toBe(0);
-      /**
-       * 判红必须落在 floor+idle 这一拍：每轮实算 HEALTHY_POLL_MS，
-       * 上界用同一口径推导（+2 轮余量），不写经验数。
-       */
-      const firstTrippingRound = Math.ceil((TEETH.floorMs + TEETH.idleMs) / HEALTHY_POLL_MS);
-      expect(clock.round).toBeLessThanOrEqual(firstTrippingRound + 2);
-      expect(clock.round).toBeGreaterThanOrEqual(earliestIdleTripRound);
-      expect(ours).toBeGreaterThan(TEETH.idleMs); // 确实在预算到点时判红，而不是提前也不是靠 cap
+      // 判红轮次与实算都必须落在闭式解上——阈值被抬高却没人同步预算，这里就会偏
+      expect(clock.round).toBe(TRIP_ROUND);
+      expect(ours).toBe(TRIP_ROUND * STEADY_GAP_MS);
+      expect(ours).toBeGreaterThan(TEETH.floorMs); // 确实在预算到点时判红，而不是提前也不是靠 cap
+      expect(ours).toBeLessThanOrEqual(TEETH.capMs); // 且没有走到硬上限那条路上
       expect(clock.starvedMs()).toBe(0);
     },
     CASE_TIMEOUT_MS,
@@ -125,8 +132,9 @@ describe('T04473 · waitForProgress 判据：欠账扣得掉，牙齿不能一�
   it(
     'B · 复刻被饿 2036ms 的节拍：新判据放行，旧墙钟判据按样本量出来必红',
     async () => {
+      expect(STARVED_ROUND_MS).toBeGreaterThan(HEALTHY_POLL_MS);
       // 现场样本形态：轮 1 亚毫秒、轮 2 之间被饿 2036ms（这两轮签名毫无变化），轮 3 终点落进状态。
-      const clock = new SyntheticClock([1, 2_036, 1]);
+      const clock = new SyntheticClock([1, STARVED_ROUND_MS, 1]);
       const doneAtRound = 3;
       const result = await waitForProgress(
         'B · 作业状态行落到终值（真实 NO_TIMER_CHAIN 预算）',
@@ -156,7 +164,7 @@ describe('T04473 · waitForProgress 判据：欠账扣得掉，牙齿不能一�
   it(
     'C · 每轮被饿 5000ms 也续不了命：终点永不到时照旧判红（欠账不进预算的分子）',
     async () => {
-      const clock = new SyntheticClock([5_000]);
+      const clock = new SyntheticClock([HUNGRY_GAP_MS]);
       const wait = waitForProgress('C · 被机器拖死但也永远不出现的状态', () => (clock.step(), false), {
         ...TEETH,
         progress: () => 'status=pending',
@@ -166,13 +174,11 @@ describe('T04473 · waitForProgress 判据：欠账扣得掉，牙齿不能一�
       expect(err).toBeInstanceOf(Error);
       expect(err.message).toMatch(/无进展实算|硬上限/);
       const { starve, ours } = reportedMs(err.message);
-      // 判红时的实算仍在契约预算内（每轮只算 HEALTHY_POLL_MS），而墙钟虚耗是它的百倍——
-      // 这正是「记账而不是放大预算」的证据。
-      expect(ours).toBeLessThanOrEqual(TEETH.idleMs + HEALTHY_POLL_MS);
-      expect(starve).toBeGreaterThan(ours * 100);
-      const firstTrippingRound = Math.ceil((TEETH.floorMs + TEETH.idleMs) / HEALTHY_POLL_MS);
-      expect(clock.round).toBeLessThanOrEqual(firstTrippingRound + 2);
-      expect(clock.round).toBeGreaterThanOrEqual(earliestIdleTripRound);
+      // 判红时的实算恰好等于「轮数 × 健康上限」：每轮 5000ms 的虚耗全部记进欠账，一分不进预算。
+      expect(clock.round).toBe(TRIP_ROUND);
+      expect(ours).toBe(TRIP_ROUND * HEALTHY_POLL_MS);
+      expect(starve).toBe(TRIP_ROUND * (HUNGRY_GAP_MS - HEALTHY_POLL_MS));
+      expect(starve).toBeGreaterThan(ours * 10); // 虚耗与预算仍差一个数量级以上
       expect(err.message).toContain('轮询');
     },
     CASE_TIMEOUT_MS,
@@ -181,7 +187,7 @@ describe('T04473 · waitForProgress 判据：欠账扣得掉，牙齿不能一�
   it(
     'D · 签名一直在动但终点不到时，由硬上限判红（旧实现挂在 else if 上，永远不会红）',
     async () => {
-      const clock = new SyntheticClock([HEALTHY_POLL_MS]);
+      const clock = new SyntheticClock([STEADY_GAP_MS]);
       let churn = 0;
       const wait = waitForProgress('D · 一直在改但到不了终点的链路', () => (clock.step(), false), {
         ...TEETH,
@@ -193,10 +199,9 @@ describe('T04473 · waitForProgress 判据：欠账扣得掉，牙齿不能一�
       expect(err.message).toContain('硬上限');
       const { starve } = reportedMs(err.message);
       expect(starve).toBe(0);
-      // 上限按 capMs 推：每轮实算 HEALTHY_POLL_MS，第 ceil(cap/HEALTHY_POLL)+1 轮起必判（签名变化不影响）
-      expect(clock.round).toBeLessThanOrEqual(Math.ceil(TEETH.capMs / HEALTHY_POLL_MS) + 2);
-      expect(clock.round).toBeGreaterThanOrEqual(Math.floor(TEETH.capMs / HEALTHY_POLL_MS) + 1);
-      expect(churn).toBeGreaterThan(1); // 确实一直在「有进展」，旧判据会一直跳过 cap
+      // 上限按 capMs 的闭式落点判（每轮实算一个健康上限，签名变化不影响）
+      expect(clock.round).toBe(CAP_TRIP_ROUND);
+      expect(churn).toBeGreaterThanOrEqual(CAP_TRIP_ROUND); // 确实一直在「有进展」，旧判据会一直跳过 cap
     },
     CASE_TIMEOUT_MS,
   );
@@ -206,9 +211,10 @@ describe('T04473 · pollUntil 必须同口径（api 专有的一条循环，漏�
   it(
     'E · 慢读落在非最后一轮：欠账被扣掉、用例放行；同一样本按旧墙钟判据必红',
     async () => {
+      expect(STARVED_ROUND_MS).toBeGreaterThan(HEALTHY_POLL_MS);
       // pollUntil 的一轮 = setTimeout(0) + 一次 read()，所以 read 的耗时就是这一轮的节拍。
       // 第 2 次读被饿 2036ms，第 3 次读到终值——慢读不能被判成被测链路卡死。
-      const clock = new SyntheticClock([1, 2_036, 1]);
+      const clock = new SyntheticClock([1, STARVED_ROUND_MS, 1]);
       const terminalAt = 3;
       const { value, wait } = await pollUntil(
         'E · 读作业记录直到状态落定',
@@ -240,7 +246,7 @@ describe('T04473 · pollUntil 必须同口径（api 专有的一条循环，漏�
   it(
     'F · 每次读都被饿 5000ms 且终点永不到 → pollUntil 照旧判红（欠账不进分子）',
     async () => {
-      const clock = new SyntheticClock([5_000]);
+      const clock = new SyntheticClock([HUNGRY_GAP_MS]);
       const run = pollUntil(
         'F · 永远读不到终值的作业',
         () => (clock.step(), { status: 'pending' }),
@@ -251,9 +257,10 @@ describe('T04473 · pollUntil 必须同口径（api 专有的一条循环，漏�
       expect(err).toBeInstanceOf(Error);
       expect(err.message).toMatch(/无进展实算|硬上限/);
       const { starve, ours } = reportedMs(err.message);
-      expect(ours).toBeLessThanOrEqual(TEETH.idleMs + HEALTHY_POLL_MS);
-      expect(starve).toBeGreaterThan(ours * 100);
-      expect(clock.round).toBeGreaterThanOrEqual(earliestIdleTripRound); // 判红时刻同样不许退到墙钟
+      expect(clock.round).toBe(TRIP_ROUND);
+      expect(ours).toBe(TRIP_ROUND * HEALTHY_POLL_MS);
+      expect(starve).toBe(TRIP_ROUND * (HUNGRY_GAP_MS - HEALTHY_POLL_MS));
+      expect(starve).toBeGreaterThan(ours); // 虚耗不进预算，但仍被取证为调度器欠账
       // 判红信息必须把最后一次读到的值带出来——pollUntil 的证据面就是这个值，去掉它等于退回盲判
       expect(err.message).toContain('"status":"pending"');
     },
@@ -274,7 +281,7 @@ describe('T04473 · 合成时钟只能出现在本单测里（不许拿它给生
   });
 
   it('判据口径锁：两条循环都按「墙钟 − 欠账」实算，且没有顺手放大契约数', () => {
-    const src = readFileSync(path.join(TEST_DIR, 'helpers', 'waitForProgress.ts'), 'utf8');
+    const src = HELPER_SRC();
     expect(src).toContain('export const HEALTHY_POLL_MS');
     // waitForProgress 与 pollUntil 各一份记账——只有一条循环带欠账，就是本单没做完
     expect(src.match(/const ours = elapsed - starveMs;/g) ?? []).toHaveLength(2);
@@ -285,5 +292,72 @@ describe('T04473 · 合成时钟只能出现在本单测里（不许拿它给生
     expect(src).toContain('NO_TIMER_CHAIN = { floorMs: 1_000, idleMs: 2_000, capMs: 3_000 }');
     // 只允许一份主循环：不得在本 helper 里长出第三套等待
     expect(src.match(/for \(;;\)/g) ?? []).toHaveLength(1);
+  });
+});
+
+describe('T04514 · 阈值必须是实测派生：数与来源成对，改一个不改另一个就是放水', () => {
+  it('HEALTHY_POLL_MS 等于注释登记的 2×P95 取整值，且落在正常总体与偷走总体之间', () => {
+    const src = HELPER_SRC();
+    const value = /export const HEALTHY_POLL_MS = (\d+);/.exec(src);
+    const p50 = /P50=(\d+(?:\.\d+)?)ms/.exec(src);
+    const p95 = /P95=(\d+(?:\.\d+)?)ms/.exec(src);
+    const p99 = /P99=(\d+(?:\.\d+)?)ms/.exec(src);
+    expect(value, '读不到 HEALTHY_POLL_MS 的当前值').toBeTruthy();
+    for (const [match, name] of [
+      [p50, 'P50'],
+      [p95, 'P95'],
+      [p99, 'P99'],
+    ] as const) {
+      expect(match, `注释里没有登记实测分位 ${name}——阈值就成了估的`).toBeTruthy();
+    }
+    const n = Number(value?.[1]);
+    const derived = Math.ceil((2 * Number(p95?.[1])) / 50) * 50;
+    expect(n, `阈值 ${n} 与注释登记的 P95=${p95?.[1]} 推出的 ${derived} 不一致`).toBe(derived);
+    expect(n).toBeGreaterThanOrEqual(2 * Number(p95?.[1]));
+    // 上界锁的方向随实测剖面而定（T04514 实测结论，不是照搬前端）：
+    // 前端双峰——P99 贴近「被偷总体」，故锁 n < P99，越过正常总体就记欠账；
+    // 本侧 singleFork 单进程实测单峰紧致（P99=16 仍是正常总体尾部，max=18，476 轮 0 轮 >25ms），
+    // 没有独立的被偷总体，故锁 n > P99：阈值必须高于整个正常总体，正常节拍永不被冤枉成欠账。
+    // 「被偷总体仍算欠账」这一侧由下面 n < 现场样本(2036ms) 单独盯住。两条共同守住「阈值分开正常与被偷」。
+    expect(n, `阈值 ${n} 未高于实测正常总体尾部 P99=${p99?.[1]}，会把正常节拍冤枉成欠账`).toBeGreaterThan(Number(p99?.[1]));
+    expect(n, `阈值 ${n} 已不小于 T04461 的现场样本 ${STARVED_ROUND_MS}ms，偶发红会回归`).toBeLessThan(STARVED_ROUND_MS);
+    expect(src).not.toContain('本侧未实测');
+    expect(src).not.toContain('暂存 25ms');
+    expect(src).not.toContain('亚毫秒级');
+  });
+});
+
+describe('T04514 · 取证出口：默认不写盘，写盘不落在被测节拍里', () => {
+  it('落盘只有一处真正的写调用，且默认被环境变量短路', () => {
+    const src = HELPER_SRC();
+    expect(src).toContain('const POLL_SAMPLE_DUMP = process.env.T04471_POLL_DUMP');
+    expect(src).toContain('if (!POLL_SAMPLE_DUMP) return;');
+    expect(src.match(/appendFileSync\(POLL_SAMPLE_DUMP/g) ?? []).toHaveLength(1);
+  });
+
+  it('两个轮询循环体内都没有任何写盘：I/O 耗时一旦进循环，分布测的就是自己', () => {
+    const src = HELPER_SRC();
+    const waitStart = src.indexOf('for (;;)');
+    const pollStart = src.indexOf('while (!predicate(last))');
+    const end = src.indexOf('契约派生的定时等待');
+    expect(waitStart).toBeGreaterThanOrEqual(0);
+    expect(pollStart).toBeGreaterThan(waitStart);
+    expect(end, '找不到 pollUntil 之后的边界锚点，本锁的扫描面无法确定').toBeGreaterThan(pollStart);
+    expect(src.slice(waitStart, pollStart)).not.toContain('appendFileSync');
+    expect(src.slice(pollStart, end)).not.toContain('appendFileSync');
+  });
+
+  it('两个出口共六个收口各落一次样本，且都带合成时钟标记与逐轮 gaps', () => {
+    const src = HELPER_SRC();
+    expect(src.match(/synthetic: isSynthetic, gaps/g) ?? []).toHaveLength(6);
+    expect(src.match(/const isSynthetic = options\.now !== undefined;/g) ?? []).toHaveLength(2);
+    expect(src.match(/const gaps: number\[\] = \[\];/g) ?? []).toHaveLength(2);
+    expect(src.match(/gaps\.push\(gap\);/g) ?? []).toHaveLength(2);
+    expect(src.match(/if \(POLL_SAMPLE_DUMP\) gaps\.push\(at - prevRoundAt\);/g) ?? []).toHaveLength(2);
+  });
+
+  it('采样开关没被写进 vitest 配置（常驻打开会把一次性取证变成默认行为）', () => {
+    const cfg = readFileSync(path.join(TEST_DIR, '..', 'vitest.config.ts'), 'utf8');
+    expect(cfg).not.toContain('T04471_POLL_DUMP');
   });
 });

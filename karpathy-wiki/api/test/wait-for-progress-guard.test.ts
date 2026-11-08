@@ -235,8 +235,8 @@ describe('T02836 api 侧固定时长等待防退化守护', () => {
     expect(feSrc, 'frontend 阈值已偏离 T04471 实测派生的 100（改数请连同本用例一起改）').toContain(
       'export const HEALTHY_POLL_MS = 100;',
     );
-    expect(apiSrc, 'api 阈值已偏离暂存值 25（重定见 T04514，改数请连同本用例一起改）').toContain(
-      'export const HEALTHY_POLL_MS = 25;',
+    expect(apiSrc, 'api 阈值已偏离 T04514 实测派生的 50（改数请连同本用例一起改）').toContain(
+      'export const HEALTHY_POLL_MS = 50;',
     );
     // 同一组出口名（前端版没有 pollUntil 时也不许 api 侧静默分叉）
     for (const name of ['waitForProgress', 'contractSleep', 'ProgressWaitOptions']) {

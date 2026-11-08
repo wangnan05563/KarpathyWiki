@@ -153,7 +153,7 @@ describe('T03612 /wiki/api 注入桥的 multipart 透传', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body).not.toContain('缺少 file 字段');
-    expect(parseSSEEvents(res.body).map((e) => e.event)).toEqual(['progress', 'page', 'done']);
+    expect(parseSSEEvents(res.body).map((e) => e.event)).toEqual(['job', 'progress', 'page', 'done']);
     // 路由对文件名做白名单 sanitize（全角括号→下划线），这里断言中文字符与字节都保住了
     expect(receivedName).toContain('合同扫描件');
     expect(received).not.toBeNull();
@@ -195,7 +195,7 @@ describe('T03612 /wiki/api 注入桥的 multipart 透传', () => {
       payload: JSON.stringify({ type: 'text', content: '# 直接粘贴的文本资料' }),
     });
     expect(res.statusCode).toBe(200);
-    expect(parseSSEEvents(res.body).map((e) => e.event)).toEqual(['progress', 'page', 'done']);
+    expect(parseSSEEvents(res.body).map((e) => e.event)).toEqual(['job', 'progress', 'page', 'done']);
     const input = (adapter.compile as ReturnType<typeof vi.fn>).mock.calls[0][0] as CompileInput;
     expect(input.type).toBe('text');
     expect(input.content).toContain('直接粘贴的文本资料');

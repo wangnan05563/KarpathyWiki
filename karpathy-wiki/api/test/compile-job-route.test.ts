@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import Fastify from 'fastify';
 import { registerCompileRoute } from '../src/routes/compile.js';
 import type { EngineAdapter } from '../src/types.js';
+import { NO_TIMER_CHAIN, pollUntil } from './helpers/waitForProgress.js';
 
 function deferred() {
   let resolve!: () => void;
@@ -58,11 +59,12 @@ describe('compile job 路由 (T04550)', () => {
 
       gate.resolve();
       // 等作业收尾
-      let snapshot = running;
-      for (let i = 0; i < 50 && snapshot.status === 'running'; i++) {
-        await new Promise((r) => setTimeout(r, 20));
-        snapshot = await (await fetch(`${base}/api/compile/jobs/${jobId}`)).json() as { status: string };
-      }
+      const { value: snapshot } = await pollUntil(
+        'compile job 收尾',
+        async () => await (await fetch(`${base}/api/compile/jobs/${jobId}`)).json() as { status: string },
+        (snapshot) => snapshot.status !== 'running',
+        NO_TIMER_CHAIN,
+      );
       expect(snapshot.status).toBe('done');
 
       // 从 seq 1 之后的帧回放：done 事件必须还在（断连窗口丢失的帧可补齐）
@@ -115,11 +117,12 @@ describe('compile job 路由 (T04550)', () => {
       cancelled = true;
       gate.resolve();
 
-      let snapshot = cancelledSnap;
-      for (let i = 0; i < 50 && snapshot.status === 'running'; i++) {
-        await new Promise((r) => setTimeout(r, 20));
-        snapshot = await (await fetch(`${base}/api/compile/jobs/${jobId}`)).json() as { status: string };
-      }
+      const { value: snapshot } = await pollUntil(
+        'compile job cancel 收尾',
+        async () => await (await fetch(`${base}/api/compile/jobs/${jobId}`)).json() as { status: string },
+        (snapshot) => snapshot.status !== 'running',
+        NO_TIMER_CHAIN,
+      );
       expect(cancelled).toBe(true);
       expect(snapshot.status).toBe('canceled');
       controller.abort();

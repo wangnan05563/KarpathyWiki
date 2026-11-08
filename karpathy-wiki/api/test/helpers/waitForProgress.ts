@@ -27,7 +27,22 @@
 
 // T02836：预算里唯一的产品侧契约常量，直接从被测模块导入而非抄数值——
 // 生产侧把标记轮询改成 400ms 时，这里的下限随之变大，不会出现「常量漂移而用例仍绿」。
+import { appendFileSync } from 'node:fs';
 import { MARKER_POLL_MS } from '../../src/cleanup-mutex.js';
+
+/**
+ * T04514 取证出口（移植自前端 T04471）：设了环境变量 `T04471_POLL_DUMP=<jsonl 路径>` 才逐轮留存
+ * 节拍样本，默认完全不走这条路。落盘只发生在一次等待**结束时**（正常返回或判红抛出），
+ * 绝不在轮询循环里做 I/O——写文件自身的耗时会落进下一轮的 gap，把要测的东西测脏，分布就失去意义了。
+ * 循环里唯一的代价是 `gaps.push(gap)`（一个数组追加）。api 侧两个出口（waitForProgress / pollUntil）
+ * 都走同一个 dump：pollUntil 的一轮含一次真实 read()，它的节拍同样是本侧分布的一部分。
+ */
+const POLL_SAMPLE_DUMP = process.env.T04471_POLL_DUMP;
+
+function dumpPollSamples(entry: { label: string; rounds: number; elapsedMs: number; starveMs: number; outcome: string; synthetic: boolean; gaps: number[] }): void {
+  if (!POLL_SAMPLE_DUMP) return;
+  appendFileSync(POLL_SAMPLE_DUMP, `${JSON.stringify({ pid: process.pid, ...entry })}\n`);
+}
 
 export interface ProgressWaitOptions {
   /** 契约下限：早于此不判「无进展」失败。必须由被测代码的阈值/轮询间隔推导，不能随手大数 */
@@ -48,19 +63,29 @@ export interface ProgressWaitOptions {
 }
 
 /**
- * 健康轮询的单轮节拍上限。**这个数在本侧还没量过，不许照抄前端的数值。**
+ * 健康轮询的单轮节拍上限。**这个数是量出来的，不是估的**（T04514）。
  *
- * 前端版（`frontend/test/helpers/waitForProgress.ts`）在 T04471 里按 4 轮全量并行的实测分位把
- * 阈值从 25ms 抬到了 100ms（P50=15 / P95=44 / P99=144，双峰分布，978 个轮次样本）。**那组分布不迁移到本侧**：
- * 这里的运行时是 node 环境、被测链路与并发剖面都不同（同一句「亚毫秒级」在两台上可以差一个数量级），
- * 照抄数值等于把一个没测过的口径当成事实——正是 T04471 要消灭的毛病。
+ * 样本来源：本文件的取证出口（`T04471_POLL_DUMP`）在 **2 轮全量**（134 文件，vitest 走仓库默认配置
+ * `pool:'forks' + singleFork` 单进程）里逐轮留存的**真实时钟**单轮间隔；合成时钟用例（A~F 那几条腿）
+ * 按 `synthetic` 标记筛掉，不计入分布。共 92 次等待 / **476 个轮次样本**。
+ * 实测分位：P50=1ms  P90=7ms  P95=13.25ms  P99=16ms  P99.9=17.05ms  最大值 18ms  均值 2.42ms。
  *
- * 所以本侧暂存 25ms（判据偏松的方向不会误杀），按实测重定由派生单 T04514 承接：
- * 采样出口、双峰判据与「数与来源成对锁」都照前端那份移植过来，测出来是多少就写多少。
- * 超出上限的部分判为「事件循环被外部占用」（并行 worker 的同步代码、GC、进程调度），
- * 不计进无进展/上限预算——预算的放大量不是常量，而是逐轮实测出来的，这是它不等同于「把超时调大」的地方。
+ * 分布是**单峰紧致**的——这是与前端（T04471 双峰）最根本的不同，决定了上界锁的方向：
+ * 本侧门禁配置是 singleFork 单进程，没有跨 worker 的同步代码挤压事件循环，476 轮里 **0 轮超过 25ms**，
+ * 正常总体止于 ~18ms。前端那组「P99 贴近被偷总体」的双峰剖面不迁移到本侧，照抄 100 或照搬 n<P99 都是错的。
+ *
+ * 阈值仍按同一公式取 **`ceil(2 × P95 / 50) × 50 = 50`**：
+ *  - 下界 `2 × P95 = 26.5`：正常总体的极端（含 P95 的机器抖动）一律不记欠账；
+ *  - 上界落在「整个正常总体（max=18）之上、T04461 现场欠账样本（2036ms）之下」。
+ * 因为本侧 P99=16 仍是**正常总体的尾部**而非被偷总体，starvation 测试的上界锁在本侧取 `n > P99`
+ * （阈值必须高于整个正常总体，正常节拍永不被冤枉），被偷总体由 `n < 2036` 那条现场样本锁单独盯住。
+ * 两侧共同的不变量是「阈值把正常总体与被偷总体分开」：前端双峰故 n<P99，本侧单峰故 n>P99。
+ * 改了数没改注释、或改了注释没改数，都会被「阈值必须是实测派生」那节判红。
+ *
+ * 超出上限的部分判为「事件循环被外部占用」（GC、进程调度），不计进无进展/上限预算——
+ * 预算的放大量不是常量，而是逐轮实测出来的，这是它不等同于「把超时调大」的地方。
  */
-export const HEALTHY_POLL_MS = 25;
+export const HEALTHY_POLL_MS = 50;
 
 export interface WaitResult {
   /** 从调用到谓词成立实际等待的墙钟毫秒（供取证断言） */
@@ -104,6 +129,8 @@ export async function waitForProgress(
   const idleMs = options.idleMs ?? floorMs;
   const capMs = options.capMs ?? floorMs + idleMs + 1_000;
   const nowFn = options.now ?? Date.now;
+  /** 合成时钟下的节拍不是机器真实分布（starvation 用例的 A~F 腿），取证时必须能筛掉 */
+  const isSynthetic = options.now !== undefined;
   const startedAt = nowFn();
   let lastProgressAt = startedAt;
   let lastSignature = options.progress?.() ?? '-';
@@ -113,13 +140,23 @@ export async function waitForProgress(
   /** 上次进展时点的欠账快照：用它算「自上次进展以来」的欠账，而不是全程欠账 */
   let starveAtProgress = 0;
   let prevRoundAt = startedAt;
+  /** T04514：逐轮节拍样本，只在取证模式下落盘（见 dumpPollSamples） */
+  const gaps: number[] = [];
   for (;;) {
     rounds++;
     if (predicate()) {
-      return { elapsedMs: nowFn() - startedAt, rounds, starveMs };
+      const at = nowFn();
+      // 闭合轮的间隔（上一轮判定点到终点成立这一段）必须进样本：结构与其它轮完全一样
+      // （一次 await + 一次 predicate），漏掉它会让实测尾部系统性偏小。判据本身不受影响
+      // （成功路径没有预算可判），所以这条只走取证出口。
+      if (POLL_SAMPLE_DUMP) gaps.push(at - prevRoundAt);
+      const result = { elapsedMs: at - startedAt, rounds, starveMs };
+      dumpPollSamples({ label, rounds, elapsedMs: result.elapsedMs, starveMs, outcome: 'ok', synthetic: isSynthetic, gaps });
+      return result;
     }
     const now = nowFn();
     const gap = now - prevRoundAt;
+    gaps.push(gap);
     prevRoundAt = now;
     if (gap > HEALTHY_POLL_MS) starveMs += gap - HEALTHY_POLL_MS;
     const elapsed = now - startedAt;
@@ -132,24 +169,26 @@ export async function waitForProgress(
       starveAtProgress = starveMs;
     } else if (ours > floorMs && elapsed - lastProgressAt - (starveMs - starveAtProgress) > idleMs) {
       const idleOurs = elapsed - lastProgressAt - (starveMs - starveAtProgress);
-      throw new Error(
+      const message =
         `waitForProgress 超时（第 ${elapsed}ms 仍无进展，其中调度器欠账 ${starveMs}ms，实算 ${ours}ms；` +
-          `无进展实算 ${idleOurs}ms > ${idleMs}ms（墙钟连续 ${elapsed - lastProgressAt}ms），` +
-          `且超过契约下限 ${floorMs}ms）：${label}\n` +
-          `  轮询 ${rounds} 次，最后进展于第 ${lastProgressAt - startedAt}ms\n` +
-          `  最后一次进展签名：${lastSignature}`,
-      );
+        `无进展实算 ${idleOurs}ms > ${idleMs}ms（墙钟连续 ${elapsed - lastProgressAt}ms），` +
+        `且超过契约下限 ${floorMs}ms）：${label}\n` +
+        `  轮询 ${rounds} 次，最后进展于第 ${lastProgressAt - startedAt}ms\n` +
+        `  最后一次进展签名：${lastSignature}`;
+      dumpPollSamples({ label, rounds, elapsedMs: elapsed, starveMs, outcome: 'idle-timeout', synthetic: isSynthetic, gaps });
+      throw new Error(message);
     }
     // 硬上限每轮都判，不看签名有没有变——与前端 T04461 同一处纠正：旧实现把它挂在 `签名未变` 分支的
     // else if 上，于是「一直在动但永远不到终点」的链路只会靠用例自身超时兜底，与 capMs 的注释
     // （「到点无论有无进展都失败」）不符。
     if (ours > capMs) {
-      throw new Error(
+      const message =
         `waitForProgress 超时（实算 ${ours}ms > 硬上限 ${capMs}ms；墙钟 ${elapsed}ms，` +
-          `其中调度器欠账 ${starveMs}ms）：${label}\n` +
-          `  轮询 ${rounds} 次，最后进展于第 ${lastProgressAt - startedAt}ms\n` +
-          `  最后一次进展签名：${lastSignature}`,
-      );
+        `其中调度器欠账 ${starveMs}ms）：${label}\n` +
+        `  轮询 ${rounds} 次，最后进展于第 ${lastProgressAt - startedAt}ms\n` +
+        `  最后一次进展签名：${lastSignature}`;
+      dumpPollSamples({ label, rounds, elapsedMs: elapsed, starveMs, outcome: 'cap-timeout', synthetic: isSynthetic, gaps });
+      throw new Error(message);
     }
     await new Promise((r) => setTimeout(r, 0));
   }
@@ -173,6 +212,8 @@ export async function pollUntil<T>(
   options: ProgressWaitOptions,
 ): Promise<{ value: T; wait: WaitResult }> {
   const nowFn = options.now ?? Date.now;
+  /** 合成时钟下的节拍不是机器真实分布（starvation 用例的 E/F 腿），取证时必须能筛掉 */
+  const isSynthetic = options.now !== undefined;
   const startedAt = nowFn();
   let rounds = 0;
   let last = await read();
@@ -183,9 +224,12 @@ export async function pollUntil<T>(
   let starveMs = 0;
   let starveAtProgress = 0;
   let prevRoundAt = startedAt;
+  /** T04514：逐轮节拍样本，只在取证模式下落盘（见 dumpPollSamples） */
+  const gaps: number[] = [];
   while (!predicate(last)) {
     const now = nowFn();
     const gap = now - prevRoundAt;
+    gaps.push(gap);
     prevRoundAt = now;
     if (gap > HEALTHY_POLL_MS) starveMs += gap - HEALTHY_POLL_MS;
     const elapsed = now - startedAt;
@@ -197,24 +241,32 @@ export async function pollUntil<T>(
       starveAtProgress = starveMs;
     } else if (ours > options.floorMs && elapsed - lastProgressAt - (starveMs - starveAtProgress) > idleMs) {
       const idleOurs = elapsed - lastProgressAt - (starveMs - starveAtProgress);
-      throw new Error(
+      const message =
         `pollUntil 超时（第 ${elapsed}ms 仍无进展，其中调度器欠账 ${starveMs}ms，实算 ${ours}ms；` +
-          `无进展实算 ${idleOurs}ms > ${idleMs}ms（墙钟连续 ${elapsed - lastProgressAt}ms））：${label}\n` +
-          `  轮询 ${rounds} 次，最后一次读到的值：${JSON.stringify(last)}`,
-      );
+        `无进展实算 ${idleOurs}ms > ${idleMs}ms（墙钟连续 ${elapsed - lastProgressAt}ms））：${label}\n` +
+        `  轮询 ${rounds} 次，最后一次读到的值：${JSON.stringify(last)}`;
+      dumpPollSamples({ label, rounds, elapsedMs: elapsed, starveMs, outcome: 'idle-timeout', synthetic: isSynthetic, gaps });
+      throw new Error(message);
     }
     if (ours > capMs) {
-      throw new Error(
+      const message =
         `pollUntil 超时（实算 ${ours}ms > 硬上限 ${capMs}ms；墙钟 ${elapsed}ms，` +
-          `其中调度器欠账 ${starveMs}ms）：${label}\n` +
-          `  最后一次读到的值：${JSON.stringify(last)}`,
-      );
+        `其中调度器欠账 ${starveMs}ms）：${label}\n` +
+        `  最后一次读到的值：${JSON.stringify(last)}`;
+      dumpPollSamples({ label, rounds, elapsedMs: elapsed, starveMs, outcome: 'cap-timeout', synthetic: isSynthetic, gaps });
+      throw new Error(message);
     }
     await new Promise((r) => setTimeout(r, 0));
     rounds++;
     last = await read();
   }
-  return { value: last, wait: { elapsedMs: nowFn() - startedAt, rounds, starveMs } };
+  const at = nowFn();
+  // pollUntil 的闭合轮 = 上一次 setTimeout(0) + 最后一次 read()，同样要进取证样本；
+  // 成功路径没有预算可判，所以只影响 dump，不影响欠账记账。
+  if (POLL_SAMPLE_DUMP) gaps.push(at - prevRoundAt);
+  const wait = { elapsedMs: at - startedAt, rounds, starveMs };
+  dumpPollSamples({ label, rounds, elapsedMs: wait.elapsedMs, starveMs, outcome: 'ok', synthetic: isSynthetic, gaps });
+  return { value: last, wait };
 }
 
 /**
