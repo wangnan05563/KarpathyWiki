@@ -928,7 +928,7 @@ onBeforeUnmount(() => {
 .suggestion-chip {
   padding: 6px 14px;
   background: var(--accent-purple-a10);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: 20px;
   font-size: 12px;
   color: var(--text-bright);
@@ -1047,7 +1047,7 @@ onBeforeUnmount(() => {
   /* §AI 气泡撑满 wrapper：与 Query.vue 一致，width: 100% 让气泡跟随 wrapper 宽度自适应屏幕 */
   width: 100%;
   background: var(--accent-cyan-a10);
-  border: 1px solid var(--accent-cyan-a20);
+  border: 1px solid var(--accent-readable);
   border-top-left-radius: 4px;
 }
 
@@ -1176,7 +1176,7 @@ onBeforeUnmount(() => {
 .followup-chip {
   padding: 3px 10px;
   background: var(--accent-cyan-a10);
-  border: 1px solid var(--accent-cyan-a30);
+  border: 1px solid var(--accent-readable);
   border-radius: 16px;
   font-size: 11px;
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));

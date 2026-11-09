@@ -446,7 +446,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   padding-bottom: 16px;
-  border-bottom: 1px solid var(--accent-purple-a20);
+  border-bottom: 1px solid var(--purple-readable);
   flex-shrink: 0;
 }
 
@@ -509,7 +509,7 @@ onMounted(() => {
   align-items: center;
   gap: 16px;
   padding: 18px 24px;
-  border: 2px dashed var(--accent-purple-a30);
+  border: 2px dashed var(--purple-readable);
   border-radius: var(--radius-card, 14px);
   background: var(--bg-glass);
   cursor: pointer;
@@ -519,7 +519,7 @@ onMounted(() => {
 
 .upload-zone:hover,
 .upload-zone.drag-over {
-  border-color: var(--accent-purple-a60);
+  border-color: var(--purple-readable);
   background: var(--accent-purple-a10);
 }
 
@@ -581,7 +581,7 @@ onMounted(() => {
   flex: 1;
   max-width: 320px;
   padding: 7px 12px;
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: 8px;
   background: var(--bg-glass);
   color: var(--text-bright);
@@ -591,7 +591,7 @@ onMounted(() => {
 }
 
 .search-input:focus {
-  border-color: var(--accent-purple-a60);
+  border-color: var(--purple-readable);
 }
 
 .format-filter {
@@ -600,7 +600,7 @@ onMounted(() => {
   padding: 3px;
   background: var(--bg-glass);
   border-radius: 8px;
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
 }
 
 .filter-btn {
@@ -625,7 +625,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: 8px;
   background: var(--bg-glass);
   color: var(--text-soft);
@@ -636,7 +636,7 @@ onMounted(() => {
 }
 
 .refresh-btn:hover:not(:disabled) {
-  border-color: var(--accent-purple-a60);
+  border-color: var(--purple-readable);
   color: var(--text-bright);
 }
 
@@ -652,7 +652,7 @@ onMounted(() => {
   align-items: center;
   padding: 8px 14px;
   background: var(--accent-pink-a15);
-  border: 1px solid var(--accent-pink-a40);
+  border: 1px solid var(--pink-readable);
   border-radius: 8px;
   color: var(--text-bright);
   font-size: 13px;
@@ -685,13 +685,13 @@ onMounted(() => {
   gap: 14px;
   padding: 12px 16px;
   background: var(--bg-glass);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: 10px;
   transition: all 0.2s ease;
 }
 
 .skill-item:hover {
-  border-color: var(--accent-purple-a40);
+  border-color: var(--purple-readable);
   background: var(--accent-purple-a08);
 }
 
@@ -701,7 +701,7 @@ onMounted(() => {
 }
 
 .skill-item.is-disabled:hover {
-  border-color: var(--accent-purple-a15);
+  border-color: var(--purple-readable);
   background: var(--bg-glass);
 }
 
@@ -821,7 +821,7 @@ onMounted(() => {
   justify-content: center;
   width: 30px;
   height: 30px;
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   background: var(--bg-glass);
   color: var(--text-soft);
   border-radius: 6px;
@@ -830,12 +830,12 @@ onMounted(() => {
 }
 
 .action-btn:hover {
-  border-color: var(--accent-purple-a50);
+  border-color: var(--purple-readable);
   color: var(--text-bright);
 }
 
 .delete-btn:hover {
-  border-color: var(--accent-pink-a60);
+  border-color: var(--pink-readable);
   color: var(--pink-readable, var(--accent-pink, #e85a71));
   background: var(--accent-pink-a10);
 }
@@ -860,7 +860,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   background: var(--bg-glass);
   color: var(--text-soft);
   border-radius: 8px;
@@ -870,7 +870,7 @@ onMounted(() => {
 }
 
 .back-btn:hover {
-  border-color: var(--accent-purple-a60);
+  border-color: var(--purple-readable);
   color: var(--text-bright);
 }
 
@@ -927,7 +927,7 @@ onMounted(() => {
   color: var(--text-bright);
   margin: 0;
   padding-bottom: 4px;
-  border-bottom: 1px solid var(--accent-purple-a15);
+  border-bottom: 1px solid var(--purple-readable);
 }
 
 .files-tree {
@@ -937,7 +937,7 @@ onMounted(() => {
   padding: 10px 14px;
   background: var(--bg-glass);
   border-radius: 8px;
-  border: 1px solid var(--accent-purple-a10);
+  border: 1px solid var(--purple-readable);
 }
 
 .file-item {
@@ -953,7 +953,7 @@ onMounted(() => {
   padding: 14px 16px;
   background: var(--bg-glass);
   border-radius: 8px;
-  border: 1px solid var(--accent-purple-a10);
+  border: 1px solid var(--purple-readable);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.6;

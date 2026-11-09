@@ -507,7 +507,7 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 4px;
   overflow: hidden;
-  border: 1px solid var(--accent-purple-a15, rgba(176, 38, 255, 0.15));
+  border: 1px solid var(--purple-readable);
 }
 
 /* 流光进度条 */
@@ -544,7 +544,7 @@ onMounted(() => {
   gap: 10px;
   padding: 22px 12px;
   background: var(--accent-purple-a06, rgba(176, 38, 255, 0.06));
-  border: 1px solid var(--accent-purple-a15, rgba(176, 38, 255, 0.15));
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   cursor: pointer;
   transition: all 0.3s ease;
@@ -574,7 +574,7 @@ onMounted(() => {
   padding: 16px 20px;
   /* 使用主题场景背景变量，确保深浅主题下都有合适对比度 */
   background: var(--bg-scene);
-  border: 1px solid var(--accent-cyan-a15);
+  border: 1px solid var(--accent-readable);
   border-radius: 14px;
   font-size: 12px;
   line-height: 1.7;
@@ -628,7 +628,7 @@ onMounted(() => {
 
 .run-item:hover {
   background: var(--accent-purple-a12, rgba(176, 38, 255, 0.12));
-  border-color: var(--accent-purple-a20, rgba(176, 38, 255, 0.2));
+  border-color: var(--purple-readable);
 }
 
 .run-status-badge {

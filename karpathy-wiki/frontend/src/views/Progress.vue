@@ -718,7 +718,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   gap: 8px;
   align-self: flex-start;
   background: var(--accent-cyan-a08, rgba(0, 245, 255, 0.08));
-  border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-pill);
   padding: 4px 14px;
   white-space: nowrap;
@@ -775,19 +775,19 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 .tl-status.done {
   background: var(--accent-cyan-a15, rgba(0, 245, 255, 0.15));
   color: var(--accent-readable, var(--neon-cyan));
-  border: 1px solid var(--accent-cyan-a40, rgba(0, 245, 255, 0.4));
+  border: 1px solid var(--accent-readable);
 }
 
 .tl-status.error {
   background: var(--accent-pink-a15, rgba(255, 0, 110, 0.15));
   color: var(--pink-readable, var(--neon-magenta));
-  border: 1px solid var(--accent-pink-a40, rgba(255, 0, 110, 0.4));
+  border: 1px solid var(--pink-readable);
 }
 
 .tl-status.running {
   background: var(--accent-pink-a15, rgba(255, 62, 201, 0.15));
   color: var(--pink-readable, var(--neon-pink));
-  border: 1px solid var(--accent-pink-a40, rgba(255, 62, 201, 0.4));
+  border: 1px solid var(--pink-readable);
 }
 
 /* T03613：已中断——灰色中性，避免与「运行中」的转圈或「失败」的红混淆 */
@@ -820,7 +820,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 .tl-page code {
   padding: 3px 10px;
   background: var(--accent-purple-a15, rgba(176, 38, 255, 0.15));
-  border: 1px solid var(--accent-purple-a30, rgba(176, 38, 255, 0.3));
+  border: 1px solid var(--purple-readable);
   border-radius: 6px;
   font-size: 12px;
   font-family: var(--font-mono);
@@ -841,7 +841,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 .result-card {
   padding: 20px 24px;
   background: var(--accent-cyan-a05, rgba(0, 245, 255, 0.05));
-  border: 1px solid var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-card);
   position: relative;
   overflow: hidden;
@@ -878,7 +878,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 .result-list code {
   padding: 4px 12px;
   background: var(--accent-purple-a15, rgba(176, 38, 255, 0.15));
-  border: 1px solid var(--accent-purple-a30, rgba(176, 38, 255, 0.3));
+  border: 1px solid var(--purple-readable);
   border-radius: 6px;
   font-size: 12px;
   font-family: var(--font-mono);
@@ -946,7 +946,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   margin-top: 20px;
   padding: 14px 22px;
   background: var(--accent-cyan-a08, rgba(0, 245, 255, 0.08));
-  border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-card);
   font-size: 14px;
   color: var(--accent-readable, var(--neon-cyan));
@@ -961,7 +961,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 .runs-section {
   margin-top: 32px;
   padding-top: 24px;
-  border-top: 1px solid var(--accent-purple-a15, rgba(176, 38, 255, 0.15));
+  border-top: 1px solid var(--purple-readable);
   position: relative;
   z-index: 1;
 }
@@ -1007,7 +1007,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   align-items: center;
   padding: 12px 18px;
   background: var(--accent-purple-a05, rgba(176, 38, 255, 0.05));
-  border: 1px solid var(--accent-purple-a15, rgba(176, 38, 255, 0.15));
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   cursor: pointer;
   transition: all 0.3s ease;
@@ -1064,7 +1064,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   align-items: baseline;
   gap: 8px;
   padding: 6px 0;
-  border-bottom: 1px solid var(--accent-purple-a08, rgba(176, 38, 255, 0.08));
+  border-bottom: 1px solid var(--purple-readable);
 }
 
 .log-line.error {
@@ -1129,7 +1129,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   margin-bottom: 16px;
   padding: 12px 16px;
   background: var(--accent-pink-a06, rgba(255, 0, 110, 0.06));
-  border: 1px solid var(--accent-pink-a25, rgba(255, 0, 110, 0.25));
+  border: 1px solid var(--pink-readable);
   border-radius: var(--radius-card);
 }
 
@@ -1179,7 +1179,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 .batch-group {
   padding: 14px 18px;
   background: var(--accent-purple-a04, rgba(176, 38, 255, 0.04));
-  border: 1px solid var(--accent-purple-a15, rgba(176, 38, 255, 0.15));
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   transition: border-color 0.3s ease;
 }
@@ -1189,11 +1189,11 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 }
 
 .batch-group.done {
-  border-color: var(--accent-cyan-a35, rgba(0, 245, 255, 0.35));
+  border-color: var(--accent-readable);
 }
 
 .batch-group.error {
-  border-color: var(--accent-pink-a40, rgba(255, 0, 110, 0.4));
+  border-color: var(--pink-readable);
   background: var(--accent-pink-a05, rgba(255, 0, 110, 0.05));
 }
 
@@ -1263,7 +1263,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   display: flex;
   flex-direction: column;
   gap: 4px;
-  border-left: 2px solid var(--accent-purple-a15, rgba(176, 38, 255, 0.15));
+  border-left: 2px solid var(--purple-readable);
   padding-left: 10px;
 }
 
@@ -1321,7 +1321,7 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 .batch-page-code {
   padding: 2px 8px;
   background: var(--accent-cyan-a08, rgba(0, 245, 255, 0.08));
-  border: 1px solid var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
+  border: 1px solid var(--accent-readable);
   border-radius: 4px;
   font-size: 11px;
   font-family: var(--font-mono);

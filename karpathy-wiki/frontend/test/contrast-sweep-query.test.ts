@@ -99,9 +99,10 @@ const WRAPPED_LINES: string[] = [
 ];
 
 /** 接入后各家族在本文件的出现次数（含回补点里作为 fallback 保留的青族链，可整文件核对） */
-const FAMILY_COUNTS: Record<string, number> = { accent: 21, purple: 7, pink: 4 };
-/** 装饰性 tint 前景基线（只降不升；是否纳入口径属 T04468） */
-const TINT_BASELINE = 20;
+const FAMILY_COUNTS: Record<string, number> = { accent: 33, purple: 11, pink: 6 };
+// T04468：18 处 tint 描边已接入 readable；余 2 处是 `var(--border-glass, var(--accent-*-aNN, ...))`
+// （--border-glass 恒有定义，aNN 不可达，见 contrast-tint-stroke.test.ts 头注），基线停在 2 防新增。
+const TINT_BASELINE = 2;
 
 const famCount = (src: string, fam: string) => (src.match(new RegExp(`--${fam}-readable`, 'g')) || []).length;
 const srcOf = () => readFileSync(join(ROOT, FILE), 'utf8');

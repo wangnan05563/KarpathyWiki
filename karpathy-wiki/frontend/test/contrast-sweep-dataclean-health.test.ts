@@ -132,6 +132,12 @@ const AUDIT: AuditRow[] = [
 /** readable 消费点总数（数 token 名出现次数，不受单行规则 / 内联 style / !important 排版影响） */
 const readableRefCount = (src: string) => (src.match(/-readable/g) || []).length;
 
+/** T04468 描边账：tint 描边接入 readable 后，源码同族出现次数 = 审计清单点数 + 描边数 */
+const TINT_STROKES: Record<string, Record<string, number>> = {
+  DataClean: { accent: 2, pink: 1, purple: 13 },
+  Health: { accent: 7, pink: 8, purple: 5, lime: 2 },
+};
+
 describe('T04449 推广第三组：清洗页/体检页前景逐主题达标', () => {
   it('8 主题 × 63 面全部达 AA（文本 4.5 / 非文本 3.0）', () => {
     const failures = auditThemes(AUDIT, themes);
@@ -142,8 +148,9 @@ describe('T04449 推广第三组：清洗页/体检页前景逐主题达标', ()
     expect(AUDIT.length).toBe(63);
     const dc = readFileSync(join(ROOT, FILES[0]), 'utf8');
     const he = readFileSync(join(ROOT, FILES[1]), 'utf8');
-    expect(readableRefCount(dc), 'DataClean.vue 的 readable 消费点数与清单不一致').toBe(33);
-    expect(readableRefCount(he), 'Health.vue 的 readable 消费点数与清单不一致').toBe(30);
+    // T04468 起计数含描边账（DataClean 16 / Health 22 处 tint 描边接入 readable）
+    expect(readableRefCount(dc), 'DataClean.vue 的 readable 消费点数与登记值不一致').toBe(49);
+    expect(readableRefCount(he), 'Health.vue 的 readable 消费点数与登记值不一致').toBe(52);
   });
 
   it('每个包裹表达式括号平衡（防止接入器吃掉右括号）', () => {
@@ -177,9 +184,11 @@ describe('T04449 推广第三组：清洗页/体检页前景逐主题达标', ()
         const fam = famOf(r.fg);
         byFam.set(fam, (byFam.get(fam) ?? 0) + 1);
       }
+      const page = f.includes('DataClean') ? 'DataClean' : 'Health';
       for (const [fam, n] of [...byFam.entries()].sort()) {
         const actual = (src.match(new RegExp(`--${fam}-readable`, 'g')) || []).length;
-        expect(actual, `${f} · --${fam}-readable：清单 ${n} 行 vs 源码 ${actual} 处`).toBe(n);
+        const stroke = TINT_STROKES[page][fam] ?? 0;
+        expect(actual, `${f} · --${fam}-readable：清单 ${n} 行 + 描边 ${stroke} vs 源码 ${actual} 处`).toBe(n + stroke);
       }
     }
   });

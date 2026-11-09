@@ -5534,7 +5534,7 @@ async function importConfig() {
   gap: 10px;
   margin-bottom: 16px;
   padding: 10px 14px;
-  border: 1px solid var(--accent-danger-a30);
+  border: 1px solid var(--danger-readable);
   border-left-width: 3px;
   border-radius: 10px;
   background: var(--accent-danger-a10);
@@ -5652,7 +5652,7 @@ async function importConfig() {
   padding: 12px 14px;
   border-radius: 8px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   color: var(--text-base);
   font-family: var(--font-mono);
   font-size: 12px;
@@ -5687,7 +5687,7 @@ async function importConfig() {
   align-items: start;
   padding: 22px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
 }
 
@@ -5736,7 +5736,7 @@ async function importConfig() {
 /* 霓虹按钮：透明底 */
 .neon-btn {
   background: var(--bg-glass) !important;
-  border: 1px solid var(--accent-purple-a40) !important;
+  border: 1px solid var(--purple-readable) !important;
   color: var(--text-bright) !important;
   font-family: var(--font-mono) !important;
   letter-spacing: 0.05em;
@@ -5772,7 +5772,7 @@ async function importConfig() {
   line-height: 1.8;
   background: var(--bg-scene) !important;
   color: var(--text-bright) !important;
-  border: 1px solid var(--accent-cyan-a25) !important;
+  border: 1px solid var(--accent-readable) !important;
   border-radius: var(--radius-input) !important;
 }
 
@@ -5785,7 +5785,7 @@ async function importConfig() {
   margin: 0;
   padding: 18px 24px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   font-size: 13px;
   line-height: 1.8;
@@ -5806,7 +5806,7 @@ async function importConfig() {
 .config-block {
   padding: 18px 22px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   transition: all 0.3s ease;
 }
@@ -5819,7 +5819,7 @@ async function importConfig() {
   color: var(--text-bright);
   letter-spacing: 0.05em;
   padding-bottom: 10px;
-  border-bottom: 1px solid var(--accent-cyan-a20);
+  border-bottom: 1px solid var(--accent-readable);
 }
 
 .block-bracket {
@@ -5862,13 +5862,13 @@ async function importConfig() {
 
 .key-status.set {
   background: var(--accent-cyan-a15);
-  border-color: var(--accent-cyan-a50);
+  border-color: var(--accent-readable);
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .key-status.unset {
   background: var(--accent-pink-a15);
-  border-color: var(--accent-pink-a50);
+  border-color: var(--pink-readable);
   color: var(--purple-readable, var(--neon-magenta));
   box-shadow: 0 0 10px var(--accent-pink-a30);
 }
@@ -5885,20 +5885,20 @@ async function importConfig() {
 
 .key-badge-private {
   background: var(--accent-purple-a15);
-  border-color: var(--accent-purple-a40);
+  border-color: var(--purple-readable);
   color: var(--purple-readable, var(--neon-purple));
 }
 
 .key-badge-shared {
   background: var(--accent-cyan-a15);
-  border-color: var(--accent-cyan-a40);
+  border-color: var(--accent-readable);
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .env-name {
   padding: 2px 10px;
   background: var(--accent-purple-a12);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: 6px;
   font-size: 11px;
   font-family: var(--font-mono);
@@ -5910,7 +5910,7 @@ async function importConfig() {
   gap: 14px;
   padding: 16px 20px;
   background: linear-gradient(135deg, var(--accent-pink-a18), var(--accent-pink-a05));
-  border: 1px solid var(--accent-pink-a40);
+  border: 1px solid var(--pink-readable);
   border-radius: var(--radius-card);
   box-shadow: 0 0 24px var(--accent-pink-a15);
 }
@@ -5939,7 +5939,7 @@ async function importConfig() {
 .warning-text code {
   padding: 2px 8px;
   background: var(--accent-cyan-a12);
-  border: 1px solid var(--accent-cyan-a30);
+  border: 1px solid var(--accent-readable);
   border-radius: 6px;
   font-size: 11px;
   font-family: var(--font-mono);
@@ -6022,7 +6022,7 @@ async function importConfig() {
   margin-bottom: 16px;
   padding: 12px 18px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
 }
 
@@ -6030,7 +6030,7 @@ async function importConfig() {
   margin-bottom: 16px;
   padding: 14px 18px;
   background: linear-gradient(135deg, var(--accent-cyan-a12), var(--accent-cyan-a03));
-  border: 1px solid var(--accent-cyan-a35);
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-card);
 }
 
@@ -6051,7 +6051,7 @@ async function importConfig() {
 .applied-tag {
   padding: 2px 12px;
   background: var(--accent-cyan-a10);
-  border: 1px solid var(--accent-cyan-a30);
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-pill);
   font-size: 11px;
   font-family: var(--font-mono);
@@ -6070,7 +6070,7 @@ async function importConfig() {
   margin-top: 20px;
   padding: 16px 20px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
 }
 
@@ -6092,7 +6092,7 @@ async function importConfig() {
 .history-disabled code {
   padding: 2px 8px;
   background: var(--accent-purple-a12);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: 6px;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -6119,7 +6119,7 @@ async function importConfig() {
   gap: 12px;
   padding: 9px 12px;
   background: var(--accent-purple-a06);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.25s ease;
@@ -6127,13 +6127,13 @@ async function importConfig() {
 
 .commit-item:hover {
   background: var(--accent-cyan-a10);
-  border-color: var(--accent-cyan-a35);
+  border-color: var(--accent-readable);
   transform: translateX(4px);
 }
 
 .commit-item.selected {
   background: var(--accent-pink-a12);
-  border-color: var(--accent-pink-a50);
+  border-color: var(--pink-readable);
   box-shadow: 0 0 12px var(--accent-pink-a25);
 }
 
@@ -6142,7 +6142,7 @@ async function importConfig() {
   font-family: var(--font-mono);
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: var(--accent-cyan-a10);
-  border: 1px solid var(--accent-cyan-a25);
+  border: 1px solid var(--accent-readable);
   padding: 2px 8px;
   border-radius: 6px;
   flex-shrink: 0;
@@ -6180,7 +6180,7 @@ async function importConfig() {
 .diff-result {
   padding: 12px 16px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: 10px;
   max-height: 300px;
   overflow-y: auto;
@@ -6252,7 +6252,7 @@ async function importConfig() {
   line-height: 1.6;
   color: var(--text-soft);
   background: var(--accent-purple-a06);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-left: 3px solid var(--accent-readable, var(--neon-cyan, #00f5ff));
   border-radius: var(--radius-card);
 }
@@ -6264,7 +6264,7 @@ async function importConfig() {
   letter-spacing: 0.04em;
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: var(--accent-cyan-a10);
-  border: 1px solid var(--accent-cyan-a30);
+  border: 1px solid var(--accent-readable);
   border-radius: 999px;
   white-space: nowrap;
 }
@@ -6354,7 +6354,7 @@ async function importConfig() {
   margin-bottom: 18px;
   padding: 14px 18px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
 }
 
@@ -6368,7 +6368,7 @@ async function importConfig() {
 .preset-tag {
   padding: 4px 14px;
   background: var(--accent-purple-a06);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-pill);
   font-size: 12px;
   font-family: var(--font-mono);
@@ -6420,7 +6420,7 @@ async function importConfig() {
 
 .form-input :deep(.el-input__wrapper) {
   background: var(--bg-scene) !important;
-  border: 1px solid var(--accent-purple-a30) !important;
+  border: 1px solid var(--purple-readable) !important;
   border-radius: var(--radius-input) !important;
   box-shadow: none !important;
   transition: all 0.3s ease !important;
@@ -6459,13 +6459,13 @@ async function importConfig() {
 
 .test-result.ok {
   background: linear-gradient(135deg, var(--accent-cyan-a12), var(--accent-cyan-a03));
-  border: 1px solid var(--accent-cyan-a35);
+  border: 1px solid var(--accent-readable);
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .test-result.fail {
   background: linear-gradient(135deg, var(--accent-pink-a12), var(--accent-pink-a03));
-  border: 1px solid var(--accent-pink-a35);
+  border: 1px solid var(--pink-readable);
   color: var(--purple-readable, var(--neon-magenta));
 }
 
@@ -6478,7 +6478,7 @@ async function importConfig() {
 .ai-status {
   padding: 14px 18px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
 }
 
@@ -6505,7 +6505,7 @@ async function importConfig() {
 .masked-key {
   padding: 2px 10px;
   background: var(--accent-purple-a12);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: 6px;
   font-size: 11px;
   font-family: var(--font-mono);
@@ -6529,7 +6529,7 @@ async function importConfig() {
 .key-hint code {
   padding: 2px 8px;
   background: var(--accent-cyan-a12);
-  border: 1px solid var(--accent-cyan-a30);
+  border: 1px solid var(--accent-readable);
   border-radius: 6px;
   font-size: 11px;
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
@@ -6560,7 +6560,7 @@ async function importConfig() {
 /* 危险按钮：删除条目使用 */
 .neon-btn-danger {
   background: var(--bg-glass) !important;
-  border: 1px solid var(--accent-magenta-a40) !important;
+  border: 1px solid var(--pink-readable) !important;
   color: var(--text-bright) !important;
   font-family: var(--font-mono) !important;
   letter-spacing: 0.05em;
@@ -6603,7 +6603,7 @@ async function importConfig() {
   margin-top: 8px;
   padding: 10px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: 6px;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -6623,7 +6623,7 @@ async function importConfig() {
   margin-top: 8px;
   padding: 8px 10px;
   background: var(--accent-magenta-a10);
-  border: 1px solid var(--accent-magenta-a30);
+  border: 1px solid var(--pink-readable);
   border-radius: 6px;
   color: var(--pink-readable, var(--neon-magenta));
   font-size: 12px;
@@ -6644,7 +6644,7 @@ async function importConfig() {
 
 .entry-item {
   padding: 12px;
-  border: 1px dashed var(--accent-cyan-a25);
+  border: 1px dashed var(--accent-readable);
   border-radius: 10px;
   background: var(--bg-scene);
 }
@@ -6681,7 +6681,7 @@ async function importConfig() {
   font-size: 12px;
   padding: 16px;
   text-align: center;
-  border: 1px dashed var(--accent-cyan-a20);
+  border: 1px dashed var(--accent-readable);
   border-radius: 8px;
 }
 
@@ -6699,7 +6699,7 @@ async function importConfig() {
   padding: 10px;
   border-radius: 8px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-cyan-a25);
+  border: 1px solid var(--accent-readable);
   font-family: var(--font-mono);
   font-size: 12px;
   max-height: 240px;
@@ -6713,11 +6713,11 @@ async function importConfig() {
 }
 
 .cli-test-result.ok {
-  border-color: var(--accent-cyan-a40);
+  border-color: var(--accent-readable);
 }
 
 .cli-test-result.fail {
-  border-color: var(--accent-magenta-a40);
+  border-color: var(--pink-readable);
 }
 
 .cli-test-result .error-output {
@@ -6752,7 +6752,7 @@ async function importConfig() {
   align-items: flex-start;
   gap: 16px;
   padding-bottom: 14px;
-  border-bottom: 1px dashed var(--accent-purple-a20);
+  border-bottom: 1px dashed var(--purple-readable);
 }
 
 .qq-section .section-tag {
@@ -6780,7 +6780,7 @@ async function importConfig() {
 .qq-block {
   padding: 16px 18px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
 }
 
@@ -6805,7 +6805,7 @@ async function importConfig() {
   gap: 12px;
   padding: 8px 12px;
   background: var(--accent-purple-a05);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: 8px;
 }
 
@@ -6889,7 +6889,7 @@ async function importConfig() {
   display: flex;
   justify-content: flex-end;
   padding-top: 8px;
-  border-top: 1px dashed var(--accent-purple-a20);
+  border-top: 1px dashed var(--purple-readable);
   gap: 10px;
   align-items: center;
 }
@@ -6901,7 +6901,7 @@ async function importConfig() {
   color: var(--purple-readable, var(--neon-magenta));
   padding: 4px 10px;
   background: var(--accent-pink-a10);
-  border: 1px solid var(--accent-pink-a30);
+  border: 1px solid var(--pink-readable);
   border-radius: var(--radius-pill);
   letter-spacing: 0.03em;
 }
@@ -6921,11 +6921,11 @@ async function importConfig() {
 .pattern-status.invalid { color: var(--pink-readable, var(--neon-pink)); }
 
 .pattern-input.pattern-valid :deep(.el-input__inner) {
-  border-color: var(--accent-cyan-a50) !important;
+  border-color: var(--accent-readable) !important;
   box-shadow: 0 0 4px var(--accent-cyan-a20) !important;
 }
 .pattern-input.pattern-invalid :deep(.el-input__inner) {
-  border-color: var(--accent-pink-a50) !important;
+  border-color: var(--pink-readable) !important;
   box-shadow: 0 0 4px var(--accent-pink-a30) !important;
 }
 
@@ -6987,12 +6987,12 @@ async function importConfig() {
 
 .prompt-item:hover {
   background: var(--accent-cyan-a10);
-  border-color: var(--accent-cyan-a30);
+  border-color: var(--accent-readable);
 }
 
 .prompt-item.active {
   background: var(--accent-purple-a20);
-  border-color: var(--accent-purple-a50);
+  border-color: var(--purple-readable);
 }
 
 .prompt-item .prompt-label {
@@ -7101,7 +7101,7 @@ async function importConfig() {
 .event-item {
   padding: 8px 10px;
   background: var(--bg-card);
-  border-left: 3px solid var(--accent-cyan-a50);
+  border-left: 3px solid var(--accent-readable);
   border-radius: var(--radius-input);
   font-size: 12px;
 }
@@ -7166,7 +7166,7 @@ async function importConfig() {
   font-family: var(--font-mono);
   color: var(--text-bright);
   background: var(--bg-card);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-input);
   cursor: pointer;
   transition: all 0.2s;
@@ -7189,7 +7189,7 @@ async function importConfig() {
   margin-top: 16px;
   padding: 12px 16px;
   border-radius: var(--radius-input);
-  border: 1px solid var(--accent-purple-a25);
+  border: 1px solid var(--purple-readable);
   background: var(--bg-card);
 }
 

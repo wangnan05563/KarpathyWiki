@@ -1424,7 +1424,7 @@ onMounted(() => loadPages());
   right: 0;
   height: 44px;
   font-size: 13px;
-  border-bottom: 1px solid var(--accent-purple-a08, rgba(160, 120, 255, 0.08));
+  border-bottom: 1px solid var(--purple-readable);
 }
 
 .dc-tr.is-striped {
@@ -1560,7 +1560,7 @@ onMounted(() => loadPages());
   margin-bottom: 18px;
   padding: 14px 16px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-pink-a20, rgba(255, 100, 180, 0.2));
+  border: 1px solid var(--pink-readable);
   border-radius: var(--radius-card);
 }
 
@@ -1606,7 +1606,7 @@ onMounted(() => loadPages());
   flex-wrap: wrap;
   gap: 8px;
   padding-bottom: 6px;
-  border-bottom: 1px dashed var(--accent-purple-a15);
+  border-bottom: 1px dashed var(--purple-readable);
 }
 
 .misplaced-from,
@@ -1652,7 +1652,7 @@ onMounted(() => loadPages());
 .status-block {
   padding: 16px 18px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   transition: all 0.3s ease;
 }
@@ -1692,7 +1692,7 @@ onMounted(() => loadPages());
   z-index: 1;
   padding: 10px 12px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: 8px;
   margin-bottom: 20px;
   font-family: var(--font-mono);
@@ -1711,7 +1711,7 @@ onMounted(() => loadPages());
   margin-top: 20px;
   padding: 18px 22px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   display: flex;
   flex-direction: column;
@@ -1726,7 +1726,7 @@ onMounted(() => loadPages());
   color: var(--text-bright);
   letter-spacing: 0.05em;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--accent-cyan-a20);
+  border-bottom: 1px solid var(--accent-readable);
 }
 
 .block-bracket {
@@ -1738,7 +1738,7 @@ onMounted(() => loadPages());
   margin-bottom: 12px;
   padding: 12px 14px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   display: flex;
   flex-direction: column;
@@ -1750,7 +1750,7 @@ onMounted(() => loadPages());
   align-items: center;
   justify-content: space-between;
   padding-bottom: 10px;
-  border-bottom: 1px solid var(--accent-cyan-a20);
+  border-bottom: 1px solid var(--accent-readable);
 }
 
 .dup-info {
@@ -1815,7 +1815,7 @@ onMounted(() => loadPages());
   margin-bottom: 12px;
   padding: 12px 14px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
 }
 
@@ -1854,7 +1854,7 @@ onMounted(() => loadPages());
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  border-bottom: 1px dashed var(--accent-purple-a15);
+  border-bottom: 1px dashed var(--purple-readable);
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-soft);
@@ -1912,7 +1912,7 @@ onMounted(() => loadPages());
 
 .diff-lines {
   background: var(--bg-void);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: 6px;
   padding: 8px 0;
   overflow-x: auto;
@@ -2048,7 +2048,7 @@ onMounted(() => loadPages());
   flex-wrap: wrap;
   padding: 10px 12px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   margin-bottom: 12px;
 }
@@ -2058,7 +2058,7 @@ onMounted(() => loadPages());
   flex-direction: column;
   gap: 8px;
   padding: 10px 0;
-  border-top: 1px dashed var(--accent-purple-a15);
+  border-top: 1px dashed var(--purple-readable);
 }
 
 .ai-sub-title {
@@ -2075,7 +2075,7 @@ onMounted(() => loadPages());
   flex-wrap: wrap;
   padding: 6px 10px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   font-family: var(--font-mono);
   font-size: 12px;
@@ -2115,7 +2115,7 @@ onMounted(() => loadPages());
   align-items: center;
   gap: 10px;
   padding: 4px 8px;
-  border-bottom: 1px dashed var(--accent-purple-a15);
+  border-bottom: 1px dashed var(--purple-readable);
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-soft);

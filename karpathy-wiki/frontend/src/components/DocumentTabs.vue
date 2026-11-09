@@ -179,7 +179,7 @@ onBeforeUnmount(() => {
   overflow-x: auto;
   padding: 4px 2px 10px;
   margin-bottom: 10px;
-  border-bottom: 1px solid var(--accent-purple-a20);
+  border-bottom: 1px solid var(--purple-readable);
   scrollbar-width: thin;
 }
 
@@ -192,7 +192,7 @@ onBeforeUnmount(() => {
   max-width: 200px;
   padding: 5px 10px;
   background: var(--accent-purple-a05);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: 8px;
   font-size: 12px;
   color: var(--text-base);
@@ -260,7 +260,7 @@ onBeforeUnmount(() => {
   min-width: 132px;
   padding: 4px;
   background: var(--bg-card);
-  border: 1px solid var(--accent-purple-a25);
+  border: 1px solid var(--purple-readable);
   border-radius: 10px;
   box-shadow: 0 8px 24px var(--accent-purple-a20);
   overflow: hidden;

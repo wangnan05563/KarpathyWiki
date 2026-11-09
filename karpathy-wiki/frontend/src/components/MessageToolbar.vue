@@ -555,7 +555,7 @@ function handleFeedback(type: 'up' | 'down') {
   color: var(--text-soft, #888);
   padding: 0 4px;
   margin-right: 2px;
-  border-right: 1px solid var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
+  border-right: 1px solid var(--accent-readable);
   white-space: nowrap;
   user-select: none;
 }
@@ -633,7 +633,7 @@ function handleFeedback(type: 'up' | 'down') {
   padding: 8px 10px;
   background: var(--bg-scene, rgba(20, 20, 30, 0.92));
   backdrop-filter: var(--blur);
-  border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px solid var(--accent-readable);
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -660,7 +660,7 @@ function handleFeedback(type: 'up' | 'down') {
 .rate-reset {
   padding: 2px 8px;
   background: transparent;
-  border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px solid var(--accent-readable);
   border-radius: 4px;
   color: var(--text-soft, #888);
   font-size: 10px;
@@ -683,7 +683,7 @@ function handleFeedback(type: 'up' | 'down') {
   padding: 10px 12px;
   background: var(--bg-scene, rgba(20, 20, 30, 0.92));
   backdrop-filter: var(--blur);
-  border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px solid var(--accent-readable);
   border-radius: 8px;
   z-index: 10;
   min-width: 180px;
@@ -700,7 +700,7 @@ function handleFeedback(type: 'up' | 'down') {
 .voice-section + .voice-section {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid var(--accent-cyan-a15, rgba(0, 245, 255, 0.15));
+  border-top: 1px solid var(--accent-readable);
 }
 
 .voice-section-label {
@@ -720,7 +720,7 @@ function handleFeedback(type: 'up' | 'down') {
   flex: 1;
   padding: 4px 8px;
   background: transparent;
-  border: 1px solid var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
+  border: 1px solid var(--accent-readable);
   border-radius: 4px;
   color: var(--text-soft, #888);
   font-size: 11px;
@@ -736,7 +736,7 @@ function handleFeedback(type: 'up' | 'down') {
 .voice-toggle-btn.active {
   background: var(--accent-cyan-a25, rgba(0, 245, 255, 0.25));
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
-  border-color: var(--accent-cyan-a50, rgba(0, 245, 255, 0.5));
+  border-color: var(--accent-readable);
 }
 
 .voice-list {
@@ -748,7 +748,7 @@ function handleFeedback(type: 'up' | 'down') {
 .voice-item {
   padding: 3px 8px;
   background: transparent;
-  border: 1px solid var(--accent-cyan-a15, rgba(0, 245, 255, 0.15));
+  border: 1px solid var(--accent-readable);
   border-radius: 4px;
   color: var(--text-soft, #888);
   font-size: 11px;
@@ -765,7 +765,7 @@ function handleFeedback(type: 'up' | 'down') {
 .voice-item.active {
   background: var(--accent-cyan-a25, rgba(0, 245, 255, 0.25));
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
-  border-color: var(--accent-cyan-a50, rgba(0, 245, 255, 0.5));
+  border-color: var(--accent-readable);
 }
 
 /* 音量 / 音调滑块行：标签 + 原生 range 横向布局 */

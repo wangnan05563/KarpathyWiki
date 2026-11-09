@@ -152,9 +152,9 @@ const WRAPPED_LINES: Array<{ line: string; count: number }> = [
 ];
 
 /** 首组已接入青族 28 处，粉/紫全部来自本批（11 紫 / 7 粉） */
-const FAMILY_COUNTS: Record<string, number> = { accent: 28, purple: 11, pink: 7 };
-/** 装饰性 tint 前景基线（只降不升；是否纳入口径属 T04468） */
-const TINT_BASELINE = 55;
+const FAMILY_COUNTS: Record<string, number> = { accent: 47, purple: 37, pink: 16 };
+/** 装饰性 tint 前景基线（只降不升）。T04468 裁决后本页 55 处 tint 描边已全部接入 readable，基线归零 */
+const TINT_BASELINE = 0;
 
 const famCount = (src: string, fam: string) => (src.match(new RegExp(`--${fam}-readable`, 'g')) || []).length;
 const srcOf = () => readFileSync(join(ROOT, FILE), 'utf8');
@@ -164,7 +164,8 @@ describe('T04470 批次 A6：逐主题达标（权威叠底 = 面板实底 --bg-
     const failures = audit('scene', loadThemes());
     expect(failures, formatFailures(failures)).toEqual([]);
     // 校准只压暗前景，不许反过来把面偷抬成更亮来蒙过数值：源码形状逐字锁住
-    expect(srcOf()).toMatch(/\.key-badge-private \{\s*\r?\n\s*background: var\(--accent-purple-a15\);\s*\r?\n\s*border-color: var\(--accent-purple-a40\);\s*\r?\n\s*color: var\(--purple-readable, var\(--neon-purple\)\);/);
+    // border-color 由 T04468 从 a40 tint 并入 readable（1.4.11 描边口径），背景 tint 不动
+    expect(srcOf()).toMatch(/\.key-badge-private \{\s*\r?\n\s*background: var\(--accent-purple-a15\);\s*\r?\n\s*border-color: var\(--purple-readable\);\s*\r?\n\s*color: var\(--purple-readable, var\(--neon-purple\)\);/);
   });
 
   it('卡片页底下界同样成立（叠底猜错也不会翻案，18 面 8 主题全过）', () => {
@@ -218,8 +219,10 @@ describe('T04470 批次 A6：逐主题达标（权威叠底 = 面板实底 --bg-
   });
 
   it('青族数值表长度与源码声明数交叉锁（防止后续批次重写本文件时丢掉第二组覆盖）', () => {
-    // 28 面里有 1 面是 border-left 简写，不落在按行首属性名的计数正则里，故 27
-    expect(CYAN_AUDIT.length - 1, '青族清单与源码 --accent-readable 声明数不再对齐').toBe(cyanDeclCount(srcOf()));
+    // 28 面里有 1 面是 border-left 简写，不落在按行首属性名的计数正则里，故 27；
+    // T04468 另有 6 条 tint 描边接入 --accent-readable（不属第二组清单，由全站描边账单独实算）
+    const TINT_STROKES_TO_READABLE = 6;
+    expect(CYAN_AUDIT.length - 1 + TINT_STROKES_TO_READABLE, '青族清单与源码 --accent-readable 声明数不再对齐').toBe(cyanDeclCount(srcOf()));
   });
 
   it('包裹表达式括号平衡且行尾未丢（防止接入器吃掉字符）', () => {
@@ -308,8 +311,8 @@ describe('T04449 推广第二组：配置中心青族 28 面（本批未动，�
     expect(failures, formatFailures(failures)).toEqual([]);
   });
 
-  it('清单与源码逐属性消费点对齐（27 个标准前景声明 + 1 个 border-left 简写）', () => {
-    expect(cyanDeclCount(srcOf())).toBe(27);
+  it('清单与源码逐属性消费点对齐（27 个标准前景声明 + 1 个 border-left 简写 + T04468 描边接入 6）', () => {
+    expect(cyanDeclCount(srcOf())).toBe(33);
     expect(CYAN_AUDIT.length).toBe(28);
   });
 

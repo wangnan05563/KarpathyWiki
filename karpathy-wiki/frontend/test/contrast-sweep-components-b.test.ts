@@ -230,21 +230,36 @@ const FAMILY_COUNTS: Record<string, { accent: number; pink: number; purple: numb
   'TtsController.vue': { accent: 3, pink: 0, purple: 0 },
 };
 
+// T04468 裁决后本批 35 处 tint 描边已全部接入 readable，基线归零（新增即红）。
 const TINT_BASE: Record<string, number> = {
-  'BatchProgressBar.vue': 6,
-  'ClarifyCard.vue': 1,
+  'BatchProgressBar.vue': 0,
+  'ClarifyCard.vue': 0,
   'ConversationSidebar.vue': 0,
-  'DocumentTabs.vue': 3,
-  'HealthIssueList.vue': 9,
-  'InputToolbar.vue': 1,
-  'MarkdownRenderer.vue': 5,
+  'DocumentTabs.vue': 0,
+  'HealthIssueList.vue': 0,
+  'InputToolbar.vue': 0,
+  'MarkdownRenderer.vue': 0,
   'ModelSelector.vue': 0,
-  'RefsList.vue': 3,
+  'RefsList.vue': 0,
   'SessionStatusIcon.vue': 0,
-  'SingleFileProgressBar.vue': 5,
+  'SingleFileProgressBar.vue': 0,
   'TocTree.vue': 0,
-  'TtsController.vue': 2,
+  'TtsController.vue': 0,
 };
+
+/** T04468 描边账：13 组件共 35 处 tint 描边接入 readable（同族计数 = 64 点 + 描边，不属审计清单） */
+const TINT_STROKES: Record<string, { accent: number; pink: number; purple: number }> = {
+  'BatchProgressBar.vue': { accent: 1, pink: 3, purple: 2 },
+  'ClarifyCard.vue': { accent: 1, pink: 0, purple: 0 },
+  'DocumentTabs.vue': { accent: 0, pink: 0, purple: 3 },
+  'HealthIssueList.vue': { accent: 3, pink: 3, purple: 3 },
+  'InputToolbar.vue': { accent: 1, pink: 0, purple: 0 },
+  'MarkdownRenderer.vue': { accent: 5, pink: 0, purple: 0 },
+  'RefsList.vue': { accent: 2, pink: 0, purple: 1 },
+  'SingleFileProgressBar.vue': { accent: 1, pink: 2, purple: 2 },
+  'TtsController.vue': { accent: 2, pink: 0, purple: 0 },
+};
+const TINT_STROKE_TOTAL = 35;
 
 describe('T04470 批次 B：13 个组件 64 面逐主题实算达标', () => {
   for (const t of THEMES) {
@@ -332,11 +347,14 @@ describe('T04470 批次 B：13 个组件 64 面逐主题实算达标', () => {
       const src = srcOf(f);
       for (const [fam, n] of Object.entries(v)) {
         const got = (src.match(new RegExp(`--${fam}-readable`, 'g')) || []).length;
-        expect(got, `${f} · --${fam}-readable 应有 ${n} 处，实测 ${got}`).toBe(n);
+        const stroke = TINT_STROKES[f]?.[fam as 'accent' | 'pink' | 'purple'] ?? 0;
+        expect(got, `${f} · --${fam}-readable 应有 ${n}+${stroke} 处，实测 ${got}`).toBe(n + stroke);
       }
     }
     const total = Object.values(FAMILY_COUNTS).reduce((a, v) => a + v.accent + v.pink + v.purple, 0);
     expect(total).toBe(64);
+    const strokes = Object.values(TINT_STROKES).reduce((a, v) => a + v.accent + v.pink + v.purple, 0);
+    expect(strokes, 'T04468 描边账与 TINT_BASE 历史基线（35）不再一致').toBe(TINT_STROKE_TOTAL);
   });
 
   it('包裹表达式括号平衡且行尾未丢（防止接入器吃掉字符）', () => {

@@ -829,7 +829,7 @@ onMounted(loadUsers);
 .status-block {
   padding: 16px 18px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   transition: all 0.3s ease;
 }
@@ -865,7 +865,7 @@ onMounted(loadUsers);
   color: var(--pink-readable, var(--neon-magenta));
   background: var(--accent-pink-a10);
   border-radius: 8px;
-  border: 1px solid var(--accent-pink-a30);
+  border: 1px solid var(--pink-readable);
   margin-bottom: 16px;
 }
 
@@ -1061,7 +1061,7 @@ onMounted(loadUsers);
 .neon-btn.secondary {
   color: var(--text-soft);
   background: transparent;
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   box-shadow: none;
 }
 

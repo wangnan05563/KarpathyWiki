@@ -157,10 +157,11 @@ const AUDIT: AuditRow[] = [
   { label: '图谱页·.tour-close:hover [color·accent]', fg: 'var(--accent-readable)', bg: 'var(--bg-card-solid)', kind: 'text' },
 ];
 
+// T04468 起 readable 计数含描边账（三页 83 处 tint 描边接入 readable）；Graph 余 1 处非描边 tint 前景。
 const EXPECTED: Record<string, { n: number; readable: number; fam: Record<string, number>; tint: number }> = {
-  'src/views/Browse.vue': { n: 50, readable: 50, fam: { accent: 32, pink: 10, purple: 8 }, tint: 36 },
-  'src/views/Progress.vue': { n: 31, readable: 31, fam: { accent: 13, pink: 11, purple: 7 }, tint: 17 },
-  'src/views/Graph.vue': { n: 36, readable: 36, fam: { accent: 26, pink: 10 }, tint: 31 },
+  'src/views/Browse.vue': { n: 50, readable: 86, fam: { accent: 46, pink: 15, purple: 25 }, tint: 0 },
+  'src/views/Progress.vue': { n: 31, readable: 48, fam: { accent: 19, pink: 15, purple: 14 }, tint: 0 },
+  'src/views/Graph.vue': { n: 36, readable: 66, fam: { accent: 35, pink: 14, purple: 17 }, tint: 1 },
 };
 
 /**

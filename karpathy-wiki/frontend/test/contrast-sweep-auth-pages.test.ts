@@ -49,9 +49,10 @@ const AUDIT: AuditRow[] = [
   { label: '注册页·.switch-link [color·accent]', fg: 'var(--accent-readable)', bg: GLASS, kind: 'text' },
 ];
 
+// T04468 起 readable 计数含描边账（这两页共 7 处 tint 描边接入 readable）；tint 归零。
 const EXPECTED: Record<string, { n: number; readable: number; fam: Record<string, number>; tint: number }> = {
-  'src/views/Login.vue': { n: 5, readable: 5, fam: { accent: 4, pink: 1 }, tint: 4 },
-  'src/views/Register.vue': { n: 4, readable: 4, fam: { accent: 3, pink: 1 }, tint: 3 },
+  'src/views/Login.vue': { n: 5, readable: 9, fam: { accent: 4, pink: 2, purple: 3 }, tint: 0 },
+  'src/views/Register.vue': { n: 4, readable: 7, fam: { accent: 3, pink: 2, purple: 2 }, tint: 0 },
 };
 
 const readableRefCount = (src: string) => (src.match(/-readable/g) || []).length;

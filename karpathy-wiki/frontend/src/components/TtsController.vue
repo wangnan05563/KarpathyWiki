@@ -56,7 +56,7 @@ function handleStop() {
   padding: 8px 16px;
   background: var(--bg-card-solid, rgba(26, 26, 46, 0.92));
   backdrop-filter: var(--blur, blur(12px));
-  border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px solid var(--accent-readable);
   border-radius: 24px;
   box-shadow: 0 4px 20px var(--accent-cyan-a15, rgba(0, 245, 255, 0.15));
   z-index: 100;
@@ -78,7 +78,7 @@ function handleStop() {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px solid var(--accent-readable);
   background: var(--accent-cyan-a08, rgba(0, 245, 255, 0.08));
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   cursor: pointer;

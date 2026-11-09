@@ -15,11 +15,11 @@
 //
 // T04470 收口件（批次 A/B/C 全部接完，commit f71a37b 起 BASELINE 为空）：口径已从「按文件冻结预算」
 // 升级为「全站所有 .vue 一律 0 裸基色前景」——见文件末尾的收口锁。WHITELIST / WIRING_DONE 两表
-// 从此只作历史台账（哪个文件哪一批接了几处），不再承载任何预算；装饰性 tint 前景是否纳入口径仍归 T04468。
+// 从此只作历史台账（哪个文件哪一批接了几处），不再承载任何预算；装饰性 tint 描边由 T04468 裁决纳入本索引（见文件末尾）。
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ROOT, findBareBaseForegroundUses, listBareBaseForegroundUses } from './helpers/contrast';
+import { ROOT, findBareBaseForegroundUses, listBareBaseForegroundUses, styleText, stripComments, iterRules } from './helpers/contrast';
 
 /** 基色 token（不含 -aNN tint 与 -base 派生）：这些裸写进前景即本口径要抓 */
 const BASE_TOKENS = [
@@ -247,5 +247,53 @@ describe('T04470 收口件：全站所有 .vue 一律 0 裸基色前景', () => 
         'src/views/Tunnel.vue',
       ].sort(),
     );
+  });
+});
+
+// T04468 裁决「算界面状态图形必须达标；收紧、纳入」：装饰性 tint 描边纳入全站索引。
+// 判定与原账一致：border 族声明的**第一个** var() 才是颜色链（`1px solid var(...)` 前段是宽度/线型）；
+// 首个 var 是 --accent-*-aNN 的落点必须归零。`var(--border-glass, var(--accent-*-aNN))` 这类失效 fallback
+// 颜色链实际由 --border-glass 接管，不算 tint。移动端 --m-* 描边归 T04467 独立口径，本索引不含 mobile 目录。
+const BORDER_PROP = /^(?:border(?:-(?:left|right|top|bottom))?(?:-color)?|outline(?:-color)?)$/;
+const TINT_FIRST = /^var\(\s*--accent-[\w-]+-a\d\d\b/;
+const READABLE_FIRST = /^var\(\s*--[\w-]+-readable\b/;
+function firstVar(value: string): string | null {
+  const v = value.replace(/!important/i, '').trim().replace(/\s+/g, ' ');
+  const at = v.search(/var\(/);
+  if (at < 0) return null;
+  let depth = 0;
+  for (let i = at; i < v.length; i++) {
+    if (v[i] === '(') depth++;
+    else if (v[i] === ')' && --depth === 0) return v.slice(at, i + 1);
+  }
+  return v.slice(at);
+}
+function strokeIndex(): { tint: string[]; readable: number } {
+  const tint: string[] = [];
+  let readable = 0;
+  for (const f of SCANNED) {
+    if (f.startsWith('src/components/mobile/')) continue;
+    const css = stripComments(styleText(readFileSync(join(ROOT, f), 'utf8')));
+    for (const r of iterRules(css)) {
+      for (const decl of r.body.split(';')) {
+        const m = /^\s*([\w-]+)\s*:\s*(.+)$/.exec(decl);
+        if (!m || !BORDER_PROP.test(m[1])) continue;
+        const first = firstVar(m[2]);
+        if (!first) continue;
+        if (READABLE_FIRST.test(first)) readable++;
+        else if (TINT_FIRST.test(first)) tint.push(`${f} :: ${r.sel} :: ${m[1]} :: ${first}`);
+      }
+    }
+  }
+  return { tint, readable };
+}
+
+describe('T04468 全站索引锁：装饰性 tint 描边（桌面端）', () => {
+  const { tint, readable } = strokeIndex();
+  it('border 族首个 var 不得再是 --accent-*-aNN（≥3:1 由 contrast-tint-stroke 逐主题实算）', () => {
+    expect(tint, `仍有 tint 描边消费点：\n  ${tint.join('\n  ')}`).toEqual([]);
+  });
+  it('扫描非空转：readable 描边仍覆盖全站（数量骤降先查 styleText/iterRules 是否失效）', () => {
+    expect(readable, 'readable 描边数量骤降').toBeGreaterThan(300);
   });
 });

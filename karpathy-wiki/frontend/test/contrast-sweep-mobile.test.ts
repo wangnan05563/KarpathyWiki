@@ -130,9 +130,9 @@ const BORDER_PROPS = /^(?:border|border-(?:top|right|bottom|left)|border-(?:top|
 const TEXT_PROPS = /^(?:color|-webkit-text-fill-color)$/;
 
 /**
- * T04468 已裁定「装饰性 tint 分隔线」是独立缺陷族（全站 39 处，先收紧口径再统一整改），
- * 本单不替它改视觉，只把当前存量冻结成基线：新增一处 tint 描边会让集合变大 → 红；
- * 修掉一处会让集合变小 → 绿（只降不升）。
+ * 装饰性 tint 描边基线：新增一处会让集合变大 → 红；修掉一处会让集合变小 → 绿（只降不升）。
+ * T04468 的整改范围是桌面 `--accent-*-aNN` 族；移动端这 9 处走 `--m-*`（T04467 自校准的皮肤族），
+ * 不在该族内，故保持冻结、本单不改其视觉。
  */
 const DECORATIVE_TINT_BASELINE = new Set([
   'MobileBrowse.vue::.mb-chip-type::border-color',

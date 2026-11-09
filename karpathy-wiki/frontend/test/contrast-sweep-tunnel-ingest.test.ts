@@ -67,8 +67,8 @@ const AUDIT: AuditRow[] = [
 ];
 
 const EXPECTED: Record<string, { n: number; readable: number; fam: Record<string, number>; tint: number }> = {
-  'src/views/Tunnel.vue': { n: 10, readable: 10, fam: { accent: 7, pink: 3 }, tint: 4 },
-  'src/views/Ingest.vue': { n: 15, readable: 15, fam: { accent: 7, pink: 4, purple: 4 }, tint: 16 },
+  'src/views/Tunnel.vue': { n: 10, readable: 13, fam: { accent: 8, pink: 5 }, tint: 0 },
+  'src/views/Ingest.vue': { n: 15, readable: 31, fam: { accent: 13, pink: 5, purple: 12 }, tint: 0 },
 };
 
 const readableRefCount = (src: string) => (src.match(/-readable/g) || []).length;

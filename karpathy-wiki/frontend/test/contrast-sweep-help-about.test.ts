@@ -76,8 +76,8 @@ const WRAPPED_LINES: Record<string, string[]> = {
  * tint = 装饰性 tint 前景基线（只降不升）。
  */
 const EXPECTED: Record<string, { n: number; fam: Record<string, number>; tint: number }> = {
-  'src/views/Help.vue': { n: 5, fam: { purple: 3, pink: 1 }, tint: 7 },
-  'src/views/About.vue': { n: 7, fam: { accent: 6, purple: 1 }, tint: 4 },
+  'src/views/Help.vue': { n: 5, fam: { purple: 8, pink: 1 }, tint: 0 },
+  'src/views/About.vue': { n: 7, fam: { accent: 6, purple: 5 }, tint: 0 },
 };
 
 const famCount = (src: string, fam: string) => (src.match(new RegExp(`--${fam}-readable`, 'g')) || []).length;

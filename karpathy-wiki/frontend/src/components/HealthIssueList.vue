@@ -229,7 +229,7 @@ watch(
   height: var(--health-row-height, 46px);
   padding: 9px 14px;
   background: var(--accent-purple-a08);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-input);
   font-size: 13px;
   /* 隔离滚动期的样式/布局重算（T02606 实测：展开全量平滑滚动 longtask 总时长大幅下降）。
@@ -241,14 +241,14 @@ watch(
 
 .issue-item:hover {
   background: var(--accent-purple-a15);
-  border-color: var(--accent-purple-a40);
+  border-color: var(--purple-readable);
   transform: translateX(4px);
 }
 
 .issue-item code {
   padding: 3px 10px;
   background: var(--accent-cyan-a10);
-  border: 1px solid var(--accent-cyan-a25);
+  border: 1px solid var(--accent-readable);
   border-radius: 6px;
   font-size: 12px;
   font-family: var(--font-mono);
@@ -262,7 +262,7 @@ watch(
 
 .broken-target {
   color: var(--pink-readable, var(--neon-magenta)) !important;
-  border-color: var(--accent-pink-a40) !important;
+  border-color: var(--pink-readable) !important;
   background: var(--accent-pink-a10) !important;
   font-weight: 600;
 }
@@ -303,7 +303,7 @@ watch(
 
 .neon-btn {
   background: var(--bg-glass) !important;
-  border: 1px solid var(--accent-purple-a40) !important;
+  border: 1px solid var(--purple-readable) !important;
   color: var(--text-bright) !important;
   font-family: var(--font-mono) !important;
   letter-spacing: 0.05em;
@@ -319,12 +319,12 @@ watch(
 /* 作业态高亮：成功=青蓝，失败=品红（口径与作业快照一致） */
 .issue-item.is-done {
   background: var(--accent-cyan-a10);
-  border-color: var(--accent-cyan-a40);
+  border-color: var(--accent-readable);
 }
 
 .issue-item.is-failed {
   background: var(--accent-pink-a12);
-  border-color: var(--accent-pink-a45);
+  border-color: var(--pink-readable);
 }
 
 .row-badge {
@@ -338,7 +338,7 @@ watch(
 
 .row-badge.done {
   color: var(--accent-readable, var(--neon-cyan));
-  border-color: var(--accent-cyan-a50);
+  border-color: var(--accent-readable);
 }
 
 .row-badge.ineffective {
@@ -348,6 +348,6 @@ watch(
 
 .row-badge.failed {
   color: var(--pink-readable, var(--neon-magenta));
-  border-color: var(--accent-pink-a50);
+  border-color: var(--pink-readable);
 }
 </style>

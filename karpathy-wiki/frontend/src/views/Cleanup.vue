@@ -475,7 +475,7 @@ onMounted(() => {
 .status-block {
   padding: 16px 18px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   transition: all 0.3s ease;
 }
@@ -540,7 +540,7 @@ onMounted(() => {
 .cleanup-block {
   padding: 18px 22px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   transition: all 0.3s ease;
   display: flex;
@@ -556,7 +556,7 @@ onMounted(() => {
   color: var(--text-bright);
   letter-spacing: 0.05em;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--accent-cyan-a20);
+  border-bottom: 1px solid var(--accent-readable);
 }
 
 .block-bracket {
@@ -614,7 +614,7 @@ onMounted(() => {
   margin-bottom: 14px;
   padding: 12px 16px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
 }
 
@@ -637,7 +637,7 @@ onMounted(() => {
   text-decoration: none;
   background: none;
   border: none;
-  border-bottom: 1px dashed var(--accent-purple-a40, rgba(168, 85, 247, 0.4));
+  border-bottom: 1px dashed var(--purple-readable);
   padding: 0;
   cursor: pointer;
 }
@@ -657,7 +657,7 @@ onMounted(() => {
   margin-bottom: 14px;
   padding: 12px 16px;
   background: var(--accent-pink-a15);
-  border: 1px solid var(--accent-pink-a50);
+  border: 1px solid var(--pink-readable);
   border-radius: var(--radius-card);
   color: var(--pink-readable, var(--neon-magenta));
   font-size: 13px;
@@ -687,7 +687,7 @@ onMounted(() => {
   margin-bottom: 16px;
   padding: 12px 16px;
   background: var(--bg-scene);
-  border: 1px dashed var(--accent-purple-a20);
+  border: 1px dashed var(--purple-readable);
   border-radius: var(--radius-card);
   display: flex;
   flex-direction: column;
@@ -724,7 +724,7 @@ onMounted(() => {
   gap: 6px;
   margin-top: 6px;
   padding-top: 10px;
-  border-top: 1px dashed var(--accent-purple-a20);
+  border-top: 1px dashed var(--purple-readable);
 }
 
 .dirs-title {
@@ -758,13 +758,13 @@ onMounted(() => {
 
 .dir-canonical {
   background: rgba(57, 255, 20, 0.1);
-  border-color: var(--accent-lime-a40);
+  border-color: var(--lime-readable);
   color: var(--neon-lime);
 }
 
 .dir-legacy {
   background: var(--accent-pink-a15);
-  border-color: var(--accent-pink-a50);
+  border-color: var(--pink-readable);
   color: var(--pink-readable, var(--neon-magenta));
 }
 
@@ -788,14 +788,14 @@ onMounted(() => {
 .mode-safe,
 .block-mode.mode-safe {
   background: rgba(57, 255, 20, 0.1);
-  border-color: var(--accent-lime-a40);
+  border-color: var(--lime-readable);
   color: var(--neon-lime);
 }
 
 .mode-danger,
 .block-mode.mode-danger {
   background: var(--accent-pink-a15);
-  border-color: var(--accent-pink-a50);
+  border-color: var(--pink-readable);
   color: var(--pink-readable, var(--neon-magenta));
   box-shadow: 0 0 10px var(--accent-pink-a30);
 }
@@ -803,7 +803,7 @@ onMounted(() => {
 /* 清理按钮 */
 .cleanup-btn {
   background: var(--bg-glass) !important;
-  border: 1px solid var(--accent-purple-a40) !important;
+  border: 1px solid var(--purple-readable) !important;
   color: var(--text-bright) !important;
   font-family: var(--font-mono) !important;
   letter-spacing: 0.05em;
@@ -843,7 +843,7 @@ onMounted(() => {
   margin-top: 4px;
   padding: 10px 12px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: 8px;
   font-family: var(--font-mono);
   font-size: 12px;

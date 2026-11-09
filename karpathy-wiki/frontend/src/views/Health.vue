@@ -1053,7 +1053,7 @@ onMounted(() => {
 
 /* 批量修复按钮：品红渐变突出，区别于普通青蓝 neon-btn */
 .batch-btn {
-  border-color: var(--accent-pink-a50) !important;
+  border-color: var(--pink-readable) !important;
   color: var(--pink-readable, var(--accent-pink, #ff006e)) !important;
 }
 
@@ -1089,7 +1089,7 @@ onMounted(() => {
 
 .neon-btn {
   background: var(--bg-glass) !important;
-  border: 1px solid var(--accent-purple-a40) !important;
+  border: 1px solid var(--purple-readable) !important;
   color: var(--text-bright) !important;
   font-family: var(--font-mono) !important;
   letter-spacing: 0.05em;
@@ -1127,14 +1127,14 @@ onMounted(() => {
 
 .summary-item.healthy {
   background: linear-gradient(135deg, var(--accent-cyan-a20), var(--accent-cyan-a05));
-  border-color: var(--accent-cyan-a50);
+  border-color: var(--accent-readable);
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   box-shadow: 0 0 20px var(--accent-cyan-a30);
 }
 
 .summary-item.warning {
   background: linear-gradient(135deg, var(--accent-pink-a20), var(--accent-pink-a05));
-  border-color: var(--accent-pink-a50);
+  border-color: var(--pink-readable);
   color: var(--pink-readable, var(--accent-pink, #ff006e));
   box-shadow: 0 0 20px var(--accent-pink-a30);
 }
@@ -1190,7 +1190,7 @@ onMounted(() => {
   margin-bottom: 14px;
   padding: 10px 16px;
   background: var(--accent-cyan-a10);
-  border: 1px solid var(--accent-cyan-a30);
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-input);
 }
 
@@ -1207,17 +1207,17 @@ onMounted(() => {
   margin-bottom: 20px;
   padding: 14px 18px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-pink-a30);
+  border: 1px solid var(--pink-readable);
   border-radius: var(--radius-card);
 }
 
 .job-panel.is-paused,
 .job-panel.is-canceled {
-  border-color: var(--accent-purple-a40);
+  border-color: var(--purple-readable);
 }
 
 .job-panel.is-completed {
-  border-color: var(--accent-cyan-a40);
+  border-color: var(--accent-readable);
 }
 
 .job-head {
@@ -1238,18 +1238,18 @@ onMounted(() => {
 .job-status {
   padding: 2px 10px;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--accent-purple-a40);
+  border: 1px solid var(--purple-readable);
   color: var(--text-bright);
   flex-shrink: 0;
 }
 
 .job-status.st-running {
-  border-color: var(--accent-pink-a50);
+  border-color: var(--pink-readable);
   color: var(--pink-readable, var(--accent-pink, #ff006e));
 }
 
 .job-status.st-completed {
-  border-color: var(--accent-cyan-a50);
+  border-color: var(--accent-readable);
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
@@ -1301,7 +1301,7 @@ onMounted(() => {
   gap: 6px;
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px dashed var(--accent-pink-a30);
+  border-top: 1px dashed var(--pink-readable);
 }
 
 .failed-item {
@@ -1345,7 +1345,7 @@ onMounted(() => {
 .manual-tag {
   align-self: center;
   padding: 2px 8px;
-  border: 1px dashed var(--accent-pink-a30);
+  border: 1px dashed var(--pink-readable);
   border-radius: 10px;
   color: var(--text-soft);
   font-size: 11px;
@@ -1400,7 +1400,7 @@ onMounted(() => {
 .issue-section {
   padding: 18px 22px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   transition: all 0.3s ease;
 }
@@ -1445,13 +1445,13 @@ onMounted(() => {
   font-size: 13px;
   font-weight: 700;
   background: var(--accent-cyan-a15);
-  border: 1px solid var(--accent-cyan-a40);
+  border: 1px solid var(--accent-readable);
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 
 .section-count.has-issue {
   background: var(--accent-pink-a15);
-  border-color: var(--accent-pink-a50);
+  border-color: var(--pink-readable);
   color: var(--pink-readable, var(--accent-pink, #ff006e));
   box-shadow: 0 0 12px var(--accent-pink-a40);
 }
@@ -1532,7 +1532,7 @@ onMounted(() => {
   gap: 4px;
   padding: 12px 8px;
   background: var(--accent-purple-a08);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-input);
 }
 
@@ -1564,7 +1564,7 @@ onMounted(() => {
 .fix-log-section {
   padding: 18px 22px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-lime-a25);
+  border: 1px solid var(--lime-readable);
   border-radius: var(--radius-card);
 }
 
@@ -1580,7 +1580,7 @@ onMounted(() => {
   gap: 10px;
   padding: 7px 14px;
   background: var(--accent-lime-a10);
-  border: 1px solid var(--accent-lime-a25);
+  border: 1px solid var(--lime-readable);
   border-radius: 8px;
   font-family: var(--font-mono);
   font-size: 12px;
@@ -1588,12 +1588,12 @@ onMounted(() => {
 
 .fix-log-item.error {
   background: var(--accent-pink-a12);
-  border-color: var(--accent-pink-a35);
+  border-color: var(--pink-readable);
 }
 
 .fix-log-item.done {
   background: var(--accent-cyan-a10);
-  border-color: var(--accent-cyan-a35);
+  border-color: var(--accent-readable);
 }
 
 .log-step {
@@ -1614,7 +1614,7 @@ onMounted(() => {
 .log-tool {
   padding: 2px 8px;
   background: var(--accent-cyan-a10);
-  border: 1px solid var(--accent-cyan-a25);
+  border: 1px solid var(--accent-readable);
   border-radius: 6px;
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   font-size: 11px;

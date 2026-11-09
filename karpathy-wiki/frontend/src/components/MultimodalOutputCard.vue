@@ -225,7 +225,7 @@ function cardLabel(type: MultimodalOutput['type']): string {
 <style scoped>
 .multimodal-card {
   margin-top: 12px;
-  border: 1px solid var(--accent-purple-a20, rgba(138, 92, 245, 0.2));
+  border: 1px solid var(--purple-readable);
   border-radius: 12px;
   background: var(--accent-purple-a05, rgba(138, 92, 245, 0.05));
   overflow: hidden;
@@ -236,7 +236,7 @@ function cardLabel(type: MultimodalOutput['type']): string {
   gap: 6px;
   padding: 8px 12px;
   background: var(--accent-purple-a10, rgba(138, 92, 245, 0.1));
-  border-bottom: 1px solid var(--accent-purple-a20, rgba(138, 92, 245, 0.2));
+  border-bottom: 1px solid var(--purple-readable);
   font-size: 13px;
   font-weight: 500;
   color: var(--purple-readable, var(--accent-purple, #8a5cf5));
@@ -344,7 +344,7 @@ function cardLabel(type: MultimodalOutput['type']): string {
   padding: 8px;
   border-radius: 6px;
   background: var(--accent-pink-a10, rgba(255, 100, 150, 0.1));
-  border: 1px solid var(--accent-pink-a30, rgba(255, 100, 150, 0.3));
+  border: 1px solid var(--pink-readable);
   font-size: 12px;
   color: var(--text-soft, #888);
 }

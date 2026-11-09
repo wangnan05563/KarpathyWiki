@@ -87,8 +87,8 @@ const WRAPPED_LINES: Record<string, string[]> = {
  * fam = 该文件里对应 readable 家族的总出现次数；tint = 装饰性 tint 前景基线（只降不升）。
  */
 const EXPECTED: Record<string, { n: number; readable: number; fam: Record<string, number>; tint: number }> = {
-  'src/views/Dashboard.vue': { n: 6, readable: 6, fam: { accent: 3, pink: 2, purple: 1 }, tint: 4 },
-  'src/views/Users.vue': { n: 6, readable: 6, fam: { accent: 4, pink: 2 }, tint: 3 },
+  'src/views/Dashboard.vue': { n: 6, readable: 10, fam: { accent: 4, pink: 2, purple: 4 }, tint: 0 },
+  'src/views/Users.vue': { n: 6, readable: 9, fam: { accent: 4, pink: 3, purple: 2 }, tint: 0 },
 };
 
 /** 改前/改后对照用：12 个消费点的裸基色表达式（与 AUDIT 前 12 行一一对应） */

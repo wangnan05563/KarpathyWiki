@@ -162,7 +162,7 @@ function selectRecommended() {
   font-size: 11px;
   font-weight: 400;
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
-  border: 1px solid var(--accent-cyan-a35, rgba(0, 245, 255, 0.35));
+  border: 1px solid var(--accent-readable);
   border-radius: 8px;
   padding: 0 6px;
   line-height: 16px;

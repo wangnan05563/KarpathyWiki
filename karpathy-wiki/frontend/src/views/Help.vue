@@ -516,7 +516,7 @@ onBeforeUnmount(() => {
   height: 36px;
   border-radius: 10px;
   background: var(--accent-purple-a15);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -651,7 +651,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: var(--accent-cyan-a08);
-  border: 1px solid var(--accent-cyan-a10);
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-btn, 8px);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -691,14 +691,14 @@ onBeforeUnmount(() => {
   padding: 8px 12px;
   background: var(--accent-purple-a12);
   color: var(--text-bright);
-  border-bottom: 1px solid var(--accent-purple-a30);
+  border-bottom: 1px solid var(--purple-readable);
   font-weight: 600;
   letter-spacing: 0.04em;
 }
 
 .block-config td {
   padding: 8px 12px;
-  border-bottom: 1px solid var(--accent-purple-a10);
+  border-bottom: 1px solid var(--purple-readable);
   color: var(--text-soft);
 }
 
@@ -720,7 +720,7 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 14px 16px;
   background: var(--accent-purple-a10);
-  border: 1px solid var(--accent-purple-a25);
+  border: 1px solid var(--purple-readable);
   border-radius: 8px;
   overflow-x: auto;
   font-family: var(--font-mono);
@@ -758,7 +758,7 @@ onBeforeUnmount(() => {
   font-family: var(--font-mono);
   color: var(--text-soft);
   background: var(--accent-purple-a12);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
@@ -766,7 +766,7 @@ onBeforeUnmount(() => {
 
 .code-copy-btn:hover {
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
-  border-color: var(--accent-cyan-a50);
+  border-color: var(--accent-readable);
   background: var(--accent-cyan-a10);
 }
 

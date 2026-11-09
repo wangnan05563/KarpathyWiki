@@ -233,7 +233,7 @@ const hasTotalElapsed = computed(() => store.totalElapsedMs > 0);
 .single-progress-container {
   padding: 20px 24px;
   background: var(--accent-purple-a05);
-  border: 1px solid var(--accent-purple-a18);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   margin-bottom: 18px;
   position: relative;
@@ -244,19 +244,19 @@ const hasTotalElapsed = computed(() => store.totalElapsedMs > 0);
 
 /* 状态色边框：用语义色弱化背景，提升视觉反馈 */
 .single-progress-container.done {
-  border-color: var(--accent-cyan-a35);
+  border-color: var(--accent-readable);
   background: var(--accent-cyan-a05);
   box-shadow: 0 2px 12px var(--accent-cyan-a08);
 }
 
 .single-progress-container.error {
-  border-color: var(--accent-pink-a40);
+  border-color: var(--pink-readable);
   background: var(--accent-pink-a05);
   box-shadow: 0 2px 12px var(--accent-pink-a08);
 }
 
 .single-progress-container.cancelled {
-  border-color: var(--accent-pink-a35);
+  border-color: var(--pink-readable);
   background: var(--accent-pink-a05);
   box-shadow: 0 2px 12px var(--accent-pink-a08);
 }
@@ -470,7 +470,7 @@ const hasTotalElapsed = computed(() => store.totalElapsedMs > 0);
 .stage-timings {
   margin-top: 18px;
   padding-top: 14px;
-  border-top: 1px dashed var(--accent-purple-a18);
+  border-top: 1px dashed var(--purple-readable);
 }
 
 .stage-timings-title {

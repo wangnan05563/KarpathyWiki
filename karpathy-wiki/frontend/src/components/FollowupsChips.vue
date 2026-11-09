@@ -59,7 +59,7 @@ const emit = defineEmits<{ click: [question: string] }>();
   /* 消费主题 accent token：原硬编码浅粉在暗色/浅色主题下语义漂移，
      cyan 系与 hover 强调色同族，全主题自动适配 */
   background: var(--accent-cyan-a06, rgba(0, 245, 255, 0.06));
-  border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px solid var(--accent-readable);
   color: var(--text-soft, #888);
   font-size: 13px;
   cursor: pointer;

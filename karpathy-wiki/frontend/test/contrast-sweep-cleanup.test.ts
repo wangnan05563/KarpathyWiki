@@ -89,9 +89,9 @@ const WRAPPED_LINES: Array<{ line: string; count: number }> = [
 
 /** 接入后各家族在本文件的出现次数（首组只接了青族 7 处，粉/紫全部来自本批，可整文件核对） */
 // pink 8 处 = 本批 7 处 + T04472 为危险态 hover 定向钉住配对着色新增的 1 处（见 Cleanup.vue 特异性注释）。
-const FAMILY_COUNTS: Record<string, number> = { accent: 7, purple: 2, pink: 8 };
-/** 装饰性 tint 前景基线（只降不升；是否纳入口径属 T04468） */
-const TINT_BASELINE = 14;
+const FAMILY_COUNTS: Record<string, number> = { accent: 8, purple: 10, pink: 11 };
+/** 装饰性 tint 前景基线（只降不升）。T04468 裁决后本页 14 处 tint 描边已全部接入 readable，基线归零 */
+const TINT_BASELINE = 0;
 
 const famCount = (src: string, fam: string) => (src.match(new RegExp(`--${fam}-readable`, 'g')) || []).length;
 const srcOf = () => readFileSync(join(ROOT, FILE), 'utf8');

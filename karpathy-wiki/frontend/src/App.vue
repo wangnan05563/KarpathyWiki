@@ -636,7 +636,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 8px;
   padding: 10px 6px 4px;
-  border-top: 1px solid var(--accent-purple-a30);
+  border-top: 1px solid var(--purple-readable);
   flex-shrink: 0;
   z-index: 1;
 }
@@ -673,19 +673,19 @@ onBeforeUnmount(() => {
 .nav-user-role.role-admin {
   background: var(--accent-magenta-a20);
   color: var(--neon-magenta);
-  border: 1px solid var(--accent-magenta-a30);
+  border: 1px solid var(--pink-readable);
 }
 
 .nav-user-role.role-user {
   background: var(--accent-cyan-a08);
   color: var(--neon-cyan);
-  border: 1px solid var(--accent-cyan-a30);
+  border: 1px solid var(--accent-readable);
 }
 
 .nav-user-role.role-guest {
   background: var(--accent-purple-a10);
   color: var(--text-soft);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
 }
 
 .nav-bottom-actions {
@@ -700,7 +700,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   background: var(--bg-glass);
   color: var(--text-soft);
   border-radius: var(--radius-btn);
@@ -727,7 +727,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   background: var(--bg-glass);
   color: var(--text-soft);
   border-radius: var(--radius-btn);
@@ -853,7 +853,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
   font-family: var(--font-body);
   border-radius: 6px;
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
@@ -872,7 +872,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 6px;
   padding-top: 8px;
-  border-top: 1px solid var(--accent-purple-a30);
+  border-top: 1px solid var(--purple-readable);
   flex-shrink: 0;
   align-items: center;
 }
@@ -968,7 +968,7 @@ onBeforeUnmount(() => {
     gap: 8px;
     padding: 0 0 0 10px;
     border-top: none;
-    border-left: 1px solid var(--accent-purple-a30);
+    border-left: 1px solid var(--purple-readable);
   }
 
   .nav-user {
@@ -994,7 +994,7 @@ onBeforeUnmount(() => {
     flex: 0 0 auto;
     flex-direction: row;
     border-top: none;
-    border-left: 1px solid var(--accent-purple-a30);
+    border-left: 1px solid var(--purple-readable);
     padding-top: 0;
     padding-left: 8px;
   }

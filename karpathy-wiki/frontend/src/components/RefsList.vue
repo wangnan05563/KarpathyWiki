@@ -255,12 +255,12 @@ function sigStaleTip(status: RefSignals['knowledgeStatus'] | undefined): string 
 .source-badge.vault {
   background: var(--accent-cyan-a18, rgba(0, 245, 255, 0.18));
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
-  border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px solid var(--accent-readable);
 }
 .source-badge.web {
   background: var(--accent-purple-a18, rgba(99, 102, 241, 0.18));
   color: var(--accent-purple-base, #6366f1);
-  border: 1px solid var(--accent-purple-a30, rgba(99, 102, 241, 0.3));
+  border: 1px solid var(--purple-readable);
 }
 /* FR-19 三信号图标组：default 无 pointer（避免误触发跳转），hover 由 el-tooltip 提供说明 */
 .ref-signals {
@@ -315,7 +315,7 @@ function sigStaleTip(status: RefSignals['knowledgeStatus'] | undefined): string 
   margin-top: 4px;
   padding: 4px 8px;
   background: transparent;
-  border: 1px dashed var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px dashed var(--accent-readable);
   border-radius: 6px;
   color: var(--text-soft, #888);
   font-size: 11px;

@@ -119,7 +119,7 @@ onBeforeUnmount(() => {
   font-size: 0.9em;
   padding: 2px 6px;
   background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
-  border: 1px solid var(--accent-cyan-a18, rgba(0, 245, 255, 0.18));
+  border: 1px solid var(--accent-readable);
   border-radius: 4px;
   color: var(--accent-readable, var(--neon-cyan));
   word-break: break-all;
@@ -130,7 +130,7 @@ onBeforeUnmount(() => {
   margin: 0.75em 0;
   padding: 14px 16px;
   background: var(--bg-scene, rgba(0, 0, 0, 0.35));
-  border: 1px solid var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
+  border: 1px solid var(--accent-readable);
   border-radius: 10px;
   overflow-x: auto;
   backdrop-filter: var(--blur);
@@ -166,7 +166,7 @@ onBeforeUnmount(() => {
   border-collapse: collapse;
   width: 100%;
   font-size: 0.94em;
-  border: 1px solid var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
+  border: 1px solid var(--accent-readable);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -174,7 +174,7 @@ onBeforeUnmount(() => {
 .md-body :deep(th),
 .md-body :deep(td) {
   padding: 8px 12px;
-  border: 1px solid var(--accent-cyan-a12, rgba(0, 245, 255, 0.12));
+  border: 1px solid var(--accent-readable);
   text-align: left;
 }
 
@@ -192,7 +192,7 @@ onBeforeUnmount(() => {
 .md-body :deep(a) {
   color: var(--accent-readable, var(--neon-cyan));
   text-decoration: none;
-  border-bottom: 1px dashed var(--accent-cyan-a40, rgba(0, 245, 255, 0.4));
+  border-bottom: 1px dashed var(--accent-readable);
   transition: all 0.2s ease;
 }
 

@@ -166,18 +166,19 @@ const FAMILY_COUNTS: Record<string, { accent: number; pink: number; purple: numb
  * 这类点不在本单口径内（索引锁按基色计数，tint 不算违规），是否纳入口径由 T04468 裁决；
  * 这里冻结现状，是为了让「接入 readable」的过程不许顺手往前景里加新的 tint。
  */
+// T04468 裁决后本批 20 处 tint 描边已全部接入 readable，基线归零（新增即红）。
 const TINT_BASE: Record<string, number> = {
   'AttachmentUploader.vue': 0,
   'CitationModal.vue': 0,
   'CitationText.vue': 0,
-  'ContextUsageBadge.vue': 3,
-  'FloatingChat.vue': 3,
-  'FollowupsChips.vue': 1,
+  'ContextUsageBadge.vue': 0,
+  'FloatingChat.vue': 0,
+  'FollowupsChips.vue': 0,
   'GuideButton.vue': 0,
-  'GuideOverlay.vue': 1,
+  'GuideOverlay.vue': 0,
   'MessageActions.vue': 0,
-  'MessageToolbar.vue': 9,
-  'MultimodalOutputCard.vue': 3,
+  'MessageToolbar.vue': 0,
+  'MultimodalOutputCard.vue': 0,
   'ThemeSwitcher.vue': 0,
   'ThinkingBlock.vue': 0,
 };

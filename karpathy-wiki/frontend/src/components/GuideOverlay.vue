@@ -231,7 +231,7 @@ watch(() => guide.visible, (v) => { if (!v) stopAutoPlay(); });
   width: 280px;
   padding: 14px 16px;
   background: var(--bg-card, #ffffff);
-  border: 1px solid var(--accent-purple-a25, rgba(124, 77, 255, 0.25));
+  border: 1px solid var(--purple-readable);
   border-radius: 12px;
   box-shadow: 0 12px 32px var(--accent-purple-a20, rgba(124, 77, 255, 0.15));
   color: var(--text-base, #2b2f36);

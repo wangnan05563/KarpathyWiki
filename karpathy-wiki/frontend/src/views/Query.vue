@@ -2044,7 +2044,7 @@ onBeforeUnmount(() => {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px solid var(--accent-readable);
   background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   cursor: pointer;
@@ -2137,7 +2137,7 @@ onBeforeUnmount(() => {
 .suggestion-chip {
   padding: 8px 16px;
   background: var(--accent-purple-a08, rgba(176, 38, 255, 0.08));
-  border: 1px solid var(--accent-purple-a30, rgba(176, 38, 255, 0.3));
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-pill);
   font-size: 13px;
   color: var(--text-base);
@@ -2282,7 +2282,7 @@ onBeforeUnmount(() => {
   /* §AI 气泡撑满 wrapper：避免内容在 75% 父级宽度内被迫横向滚动，width: 100% 让气泡跟随 wrapper 宽度自适应屏幕 */
   width: 100%;
   background: var(--accent-cyan-a06, rgba(0, 245, 255, 0.06));
-  border: 1px solid var(--accent-cyan-a25, rgba(0, 245, 255, 0.25));
+  border: 1px solid var(--accent-readable);
   border-top-left-radius: 4px;
   backdrop-filter: var(--blur);
 }
@@ -2382,7 +2382,7 @@ onBeforeUnmount(() => {
 .msg-followups {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px dashed var(--accent-purple-a20, rgba(176, 38, 255, 0.2));
+  border-top: 1px dashed var(--purple-readable);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2424,7 +2424,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   padding: 4px 12px;
   background: var(--accent-cyan-a08, rgba(0, 245, 255, 0.08));
-  border: 1px solid var(--accent-cyan-a25, rgba(0, 245, 255, 0.25));
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-pill);
   font-size: 11px;
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
@@ -2618,7 +2618,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--text-base);
   background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
-  border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px solid var(--accent-readable);
   border-radius: 999px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -2691,7 +2691,7 @@ onBeforeUnmount(() => {
   max-width: 220px;
   padding: 2px 4px 2px 10px;
   background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
-  border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px solid var(--accent-readable);
   border-radius: 999px;
 }
 .ib-qr-text {
@@ -2769,7 +2769,7 @@ onBeforeUnmount(() => {
   padding: 5px 10px;
   border-radius: 16px;
   background: var(--accent-purple-a05, rgba(176, 38, 255, 0.05));
-  border: 1px solid var(--accent-purple-a20, rgba(176, 38, 255, 0.2));
+  border: 1px solid var(--purple-readable);
   color: var(--text-soft, #888);
   font-size: 12px;
   cursor: pointer;
@@ -2798,7 +2798,7 @@ onBeforeUnmount(() => {
   padding: 5px 10px;
   border-radius: 16px;
   background: var(--accent-magenta-a05, rgba(255, 0, 255, 0.05));
-  border: 1px solid var(--accent-magenta-a20, rgba(255, 0, 255, 0.2));
+  border: 1px solid var(--pink-readable);
   color: var(--text-soft, #888);
   font-size: 12px;
   cursor: pointer;
@@ -2825,7 +2825,7 @@ onBeforeUnmount(() => {
   padding: 5px 10px;
   border-radius: 16px;
   background: var(--accent-cyan-a05, rgba(0, 229, 255, 0.05));
-  border: 1px solid var(--accent-cyan-a20, rgba(0, 229, 255, 0.2));
+  border: 1px solid var(--accent-readable);
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -2933,7 +2933,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   flex-wrap: wrap;
   padding: 10px 4px 2px;
-  border-top: 1px dashed var(--accent-purple-a20, rgba(176, 38, 255, 0.2));
+  border-top: 1px dashed var(--purple-readable);
   /* 起源动画基线：与 Transition 钩子配合 */
   transform-origin: top center;
 }
@@ -2978,11 +2978,11 @@ onBeforeUnmount(() => {
 @keyframes neon-pulse {
   0%, 100% {
     box-shadow: 0 0 0 0 transparent;
-    border-color: var(--accent-cyan-a25, rgba(0, 245, 255, 0.25));
+    border-color: var(--accent-readable);
   }
   50% {
     box-shadow: 0 0 20px 2px var(--accent-cyan-a35, rgba(0, 245, 255, 0.35));
-    border-color: var(--accent-cyan-a60, rgba(0, 245, 255, 0.6));
+    border-color: var(--accent-readable);
   }
 }
 
@@ -3036,7 +3036,7 @@ onBeforeUnmount(() => {
   font-family: var(--font-mono, monospace);
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
   background: var(--accent-cyan-a12, rgba(0, 245, 255, 0.12));
-  border: 1px solid var(--accent-cyan-a30, rgba(0, 245, 255, 0.3));
+  border: 1px solid var(--accent-readable);
   border-radius: 4px;
   pointer-events: none;
   user-select: none;
@@ -3084,7 +3084,7 @@ onBeforeUnmount(() => {
   font-family: var(--font-mono, monospace);
   color: var(--text-soft, #888);
   background: var(--bg-scene, rgba(0, 0, 0, 0.35));
-  border: 1px solid var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
+  border: 1px solid var(--accent-readable);
   border-radius: 4px;
   cursor: pointer;
   opacity: 0;
@@ -3100,7 +3100,7 @@ onBeforeUnmount(() => {
 
 .markdown-body :deep(.code-copy-btn:hover) {
   color: var(--accent-readable, var(--neon-cyan, #00f5ff));
-  border-color: var(--accent-cyan-a50, rgba(0, 245, 255, 0.5));
+  border-color: var(--accent-readable);
 }
 
 /* 有语言徽章时，复制按钮下移避免与徽章重叠 */
@@ -3139,7 +3139,7 @@ onBeforeUnmount(() => {
   margin: 0.75em 0;
   border-radius: 10px;
   overflow: hidden;
-  border: 1px solid var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
+  border: 1px solid var(--accent-readable);
   background: var(--bg-scene, rgba(0, 0, 0, 0.2));
 }
 
@@ -3193,7 +3193,7 @@ onBeforeUnmount(() => {
   padding: 8px 12px;
   border-radius: 6px;
   background: var(--accent-pink-a10, rgba(255, 100, 150, 0.1));
-  border: 1px solid var(--accent-pink-a30, rgba(255, 100, 150, 0.3));
+  border: 1px solid var(--pink-readable);
   color: var(--pink-readable, var(--accent-pink, #ff6496));
   font-size: 13px;
 }

@@ -2810,7 +2810,7 @@ onMounted(async () => {
   margin: 6px 0 0 6px;
   padding: 0;
   background: var(--bg-card);
-  border: 1px solid var(--accent-purple-a25);
+  border: 1px solid var(--purple-readable);
   border-radius: 8px;
   color: var(--text-soft);
   cursor: pointer;
@@ -2820,7 +2820,7 @@ onMounted(async () => {
 
 .head-expand-float:hover {
   color: var(--accent-readable, var(--neon-cyan));
-  border-color: var(--accent-cyan-a40);
+  border-color: var(--accent-readable);
 }
 
 /* 键盘可达：focus 有明确焦点环 */
@@ -2898,7 +2898,7 @@ onMounted(async () => {
   overflow-y: auto;
   padding: 14px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   position: relative;
   transition: width 250ms ease;
@@ -2970,7 +2970,7 @@ onMounted(async () => {
   height: 44px;
   padding: 0;
   background: var(--bg-card);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: 0 8px 8px 0;
   color: var(--text-soft);
   cursor: pointer;
@@ -3033,7 +3033,7 @@ onMounted(async () => {
 .filter-more-btn.is-active {
   color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-purple-a12);
-  border-color: var(--accent-cyan-a40);
+  border-color: var(--accent-readable);
 }
 
 /* T02915：生效筛选条数角标 */
@@ -3088,7 +3088,7 @@ onMounted(async () => {
   height: 22px;
   padding: 0 4px 0 8px;
   background: var(--accent-purple-a12);
-  border: 1px solid var(--accent-purple-a25);
+  border: 1px solid var(--purple-readable);
   border-radius: 11px;
   font-size: 11px;
 }
@@ -3208,14 +3208,14 @@ onMounted(async () => {
 .kanban-card {
   padding: 8px 10px;
   background: var(--bg-card);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .kanban-card:hover {
-  border-color: var(--accent-pink-a40);
+  border-color: var(--pink-readable);
   transform: translateY(-1px);
 }
 
@@ -3312,7 +3312,7 @@ onMounted(async () => {
 .calendar-card {
   padding: 8px 12px;
   background: var(--bg-card);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -3320,7 +3320,7 @@ onMounted(async () => {
 }
 
 .calendar-card:hover {
-  border-color: var(--accent-cyan-a40);
+  border-color: var(--accent-readable);
   transform: translateX(2px);
 }
 
@@ -3382,7 +3382,7 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding: 4px 0 10px;
-  border-bottom: 1px dashed var(--accent-purple-a20);
+  border-bottom: 1px dashed var(--purple-readable);
   margin-bottom: 8px;
 }
 
@@ -3415,7 +3415,7 @@ onMounted(async () => {
 .search-hit-item {
   padding: 10px 12px;
   background: var(--accent-purple-a05);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -3494,7 +3494,7 @@ onMounted(async () => {
 .file-toc-panel {
   margin: 4px 0 6px 18px;
   padding-left: 8px;
-  border-left: 1px solid var(--accent-cyan-a25);
+  border-left: 1px solid var(--accent-readable);
   max-height: 260px;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -3512,7 +3512,7 @@ onMounted(async () => {
 }
 
 .toc-file-item {
-  border-bottom: 1px dashed var(--accent-purple-a12);
+  border-bottom: 1px dashed var(--purple-readable);
   padding-bottom: 2px;
 }
 
@@ -3567,7 +3567,7 @@ onMounted(async () => {
 
 .locate-btn:hover {
   color: var(--accent-readable, var(--neon-cyan));
-  border-color: var(--accent-cyan-a40);
+  border-color: var(--accent-readable);
   background: var(--accent-cyan-a12);
 }
 
@@ -3575,7 +3575,7 @@ onMounted(async () => {
 .locate-btn.active {
   opacity: 1;
   color: var(--accent-readable, var(--neon-cyan));
-  border-color: var(--accent-cyan-a60);
+  border-color: var(--accent-readable);
   background: var(--accent-cyan-a20);
   box-shadow: 0 0 8px var(--accent-cyan-a40);
 }
@@ -3586,7 +3586,7 @@ onMounted(async () => {
   overflow-y: auto;
   padding: 18px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-cyan-a12);
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-card);
 }
 
@@ -3608,7 +3608,7 @@ onMounted(async () => {
   gap: 8px;
   padding: 12px 16px;
   background: var(--accent-magenta-a08);
-  border: 1px solid var(--accent-magenta-a25);
+  border: 1px solid var(--pink-readable);
   border-radius: 12px;
   margin-bottom: 14px;
 }
@@ -3633,7 +3633,7 @@ onMounted(async () => {
   margin-top: 10px;
   padding: 6px 16px;
   background: var(--accent-magenta-a06);
-  border: 1px solid var(--accent-magenta-a20);
+  border: 1px solid var(--pink-readable);
   border-radius: 8px;
   overflow-x: auto;
   white-space: nowrap;
@@ -3713,7 +3713,7 @@ onMounted(async () => {
 .markdown-body :deep(code) {
   padding: 2px 8px;
   background: var(--accent-purple-a15);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: 6px;
   font-size: 12px;
   font-family: var(--font-mono);
@@ -3723,7 +3723,7 @@ onMounted(async () => {
 .markdown-body :deep(pre) {
   padding: 14px 18px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-cyan-a20);
+  border: 1px solid var(--accent-readable);
   border-radius: 12px;
   overflow-x: auto;
   margin: 14px 0;
@@ -3744,7 +3744,7 @@ onMounted(async () => {
   font-weight: 600;
   font-size: 13px;
   font-family: var(--font-mono);
-  border: 1px solid var(--accent-pink-a25);
+  border: 1px solid var(--pink-readable);
 }
 
 /* GFM 表格样式：与对照的 .Markdown 语法一致，边框/表头用主题变量适配深浅色切换 */
@@ -3757,7 +3757,7 @@ onMounted(async () => {
 
 .markdown-body :deep(th),
 .markdown-body :deep(td) {
-  border: 1px solid var(--accent-purple-a25);
+  border: 1px solid var(--purple-readable);
   padding: 8px 12px;
   text-align: left;
 }
@@ -3789,7 +3789,7 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding: 6px 4px 12px;
-  border-bottom: 1px dashed var(--accent-purple-a20);
+  border-bottom: 1px dashed var(--purple-readable);
   margin-bottom: 10px;
 }
 
@@ -3805,7 +3805,7 @@ onMounted(async () => {
   padding: 10px 12px;
   margin-bottom: 6px;
   background: var(--accent-purple-a05);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -3848,7 +3848,7 @@ onMounted(async () => {
   margin-bottom: 14px;
   padding: 12px 16px;
   background: var(--accent-cyan-a08);
-  border: 1px solid var(--accent-cyan-a20);
+  border: 1px solid var(--accent-readable);
   border-radius: 12px;
 }
 
@@ -3894,7 +3894,7 @@ onMounted(async () => {
 .batch-list {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px dashed var(--accent-cyan-a20);
+  border-top: 1px dashed var(--accent-readable);
   max-height: 180px;
   overflow-y: auto;
 }
@@ -3985,7 +3985,7 @@ onMounted(async () => {
   font-family: var(--font-mono);
   padding: 2px 8px;
   background: var(--accent-cyan-a10);
-  border: 1px solid var(--accent-cyan-a25);
+  border: 1px solid var(--accent-readable);
   border-radius: 10px;
   letter-spacing: 0.5px;
 }
@@ -3997,7 +3997,7 @@ onMounted(async () => {
   align-items: center;
   margin-bottom: 14px;
   padding-bottom: 10px;
-  border-bottom: 1px dashed var(--accent-cyan-a20);
+  border-bottom: 1px dashed var(--accent-readable);
 }
 
 /* AI 标签建议列表容器 */
@@ -4010,12 +4010,12 @@ onMounted(async () => {
 
 .tag-suggest-list {
   background: var(--accent-magenta-a08);
-  border: 1px solid var(--accent-magenta-a25);
+  border: 1px solid var(--pink-readable);
 }
 
 .tag-existing-list {
   background: var(--accent-cyan-a08);
-  border: 1px solid var(--accent-cyan-a20);
+  border: 1px solid var(--accent-readable);
 }
 
 .tag-suggest-title {
@@ -4074,7 +4074,7 @@ onMounted(async () => {
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--accent-purple-a20);
+  border-bottom: 1px solid var(--purple-readable);
   margin-bottom: 14px;
   flex-shrink: 0;
 }
@@ -4169,7 +4169,7 @@ onMounted(async () => {
 .fullscreen-overlay .markdown-body code {
   padding: 2px 8px;
   background: var(--accent-purple-a15);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: 6px;
   font-size: 12px;
   font-family: var(--font-mono);
@@ -4179,7 +4179,7 @@ onMounted(async () => {
 .fullscreen-overlay .markdown-body pre {
   padding: 14px 18px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-cyan-a20);
+  border: 1px solid var(--accent-readable);
   border-radius: 12px;
   overflow-x: auto;
   margin: 14px 0;
@@ -4201,7 +4201,7 @@ onMounted(async () => {
 
 .fullscreen-overlay .markdown-body th,
 .fullscreen-overlay .markdown-body td {
-  border: 1px solid var(--accent-purple-a25);
+  border: 1px solid var(--purple-readable);
   padding: 8px 12px;
   text-align: left;
 }
@@ -4222,7 +4222,7 @@ onMounted(async () => {
    背景/文字/描边全部取主题变量，避免浅色弹层与深色主题文字对比度冲突 */
 .browse-filter-popper.el-popover {
   background: var(--bg-card);
-  border: 1px solid var(--accent-purple-a25);
+  border: 1px solid var(--purple-readable);
   box-shadow: 0 8px 24px var(--accent-purple-a20);
 }
 

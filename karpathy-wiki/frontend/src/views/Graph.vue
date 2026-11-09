@@ -1276,7 +1276,7 @@ watch(loading, () => {
   gap: 4px;
   padding: 6px 14px;
   background: var(--bg-glass);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-pill);
   font-family: var(--font-mono);
   font-size: 12px;
@@ -1311,7 +1311,7 @@ watch(loading, () => {
 /* 霓虹按钮：透明底 + 紫色边框 + 悬停发光 */
 .neon-btn {
   background: var(--bg-glass) !important;
-  border: 1px solid var(--accent-purple-a40) !important;
+  border: 1px solid var(--purple-readable) !important;
   color: var(--text-bright) !important;
   font-family: var(--font-mono) !important;
   letter-spacing: 0.05em;
@@ -1332,7 +1332,7 @@ watch(loading, () => {
   padding: 10px 16px;
   margin-bottom: 12px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-input);
   flex-wrap: wrap;
 }
@@ -1359,7 +1359,7 @@ watch(loading, () => {
   z-index: 1;
   flex: 1;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-cyan-a15);
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-card);
   overflow: hidden;
 }
@@ -1421,7 +1421,7 @@ watch(loading, () => {
   padding: 10px 16px;
   margin-bottom: 12px;
   background: linear-gradient(90deg, var(--accent-pink-a18), var(--accent-purple-a12));
-  border: 1px solid var(--accent-pink-a35);
+  border: 1px solid var(--pink-readable);
   border-radius: var(--radius-input);
   font-size: 12px;
   font-family: var(--font-mono);
@@ -1456,7 +1456,7 @@ watch(loading, () => {
 
 .list-group {
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   padding: 14px 18px;
   transition: all 0.3s ease;
@@ -1468,7 +1468,7 @@ watch(loading, () => {
   gap: 10px;
   padding-bottom: 10px;
   margin-bottom: 10px;
-  border-bottom: 1px dashed var(--accent-cyan-a20);
+  border-bottom: 1px dashed var(--accent-readable);
 }
 
 .group-dot {
@@ -1493,7 +1493,7 @@ watch(loading, () => {
   font-family: var(--font-mono);
   color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-cyan-a10);
-  border: 1px solid var(--accent-cyan-a30);
+  border: 1px solid var(--accent-readable);
   padding: 2px 10px;
   border-radius: var(--radius-pill);
 }
@@ -1537,7 +1537,7 @@ watch(loading, () => {
   min-width: 180px;
   background: var(--bg-glass);
   backdrop-filter: blur(12px);
-  border: 1px solid var(--accent-purple-a40);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
   box-shadow: var(--glow-cyan);
   padding: 6px 0;
@@ -1581,7 +1581,7 @@ watch(loading, () => {
   flex-direction: column;
   background: var(--bg-glass);
   backdrop-filter: blur(16px);
-  border: 1px solid var(--accent-cyan-a30);
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-card);
   box-shadow: var(--glow-cyan);
   overflow: hidden;
@@ -1592,7 +1592,7 @@ watch(loading, () => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--accent-purple-a20);
+  border-bottom: 1px solid var(--purple-readable);
   flex-shrink: 0;
 }
 
@@ -1616,7 +1616,7 @@ watch(loading, () => {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   background: transparent;
   color: var(--text-soft);
   font-size: 14px;
@@ -1637,7 +1637,7 @@ watch(loading, () => {
   padding: 10px 16px;
   font-size: 12px;
   color: var(--text-soft);
-  border-bottom: 1px dashed var(--accent-cyan-a15);
+  border-bottom: 1px dashed var(--accent-readable);
   flex-shrink: 0;
   word-break: break-all;
 }
@@ -1680,7 +1680,7 @@ watch(loading, () => {
 
 .recommend-card {
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-input);
   padding: 12px 14px;
   transition: all 0.25s ease;
@@ -1713,7 +1713,7 @@ watch(loading, () => {
   font-size: 11px;
   color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-cyan-a10);
-  border: 1px solid var(--accent-cyan-a30);
+  border: 1px solid var(--accent-readable);
   padding: 2px 8px;
   border-radius: var(--radius-pill);
   flex-shrink: 0;
@@ -1742,7 +1742,7 @@ watch(loading, () => {
   font-size: 11px;
   color: var(--text-base);
   background: var(--accent-purple-a12);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   padding: 2px 8px;
   border-radius: var(--radius-pill);
 }
@@ -1828,7 +1828,7 @@ watch(loading, () => {
   flex-direction: column;
   background: var(--bg-glass);
   backdrop-filter: blur(16px);
-  border: 1px solid var(--accent-magenta-a30);
+  border: 1px solid var(--pink-readable);
   border-radius: var(--radius-card);
   box-shadow: var(--glow-cyan);
   overflow: hidden;
@@ -1839,7 +1839,7 @@ watch(loading, () => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--accent-purple-a20);
+  border-bottom: 1px solid var(--purple-readable);
   flex-shrink: 0;
 }
 
@@ -1863,7 +1863,7 @@ watch(loading, () => {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   background: transparent;
   color: var(--text-soft);
   font-size: 14px;
@@ -1926,7 +1926,7 @@ watch(loading, () => {
   color: var(--accent-magenta-a70);
   padding: 6px 10px;
   background: var(--accent-magenta-a12);
-  border: 1px dashed var(--accent-magenta-a35);
+  border: 1px dashed var(--pink-readable);
   border-radius: var(--radius-input);
 }
 
@@ -1940,7 +1940,7 @@ watch(loading, () => {
   white-space: pre-wrap;
   word-break: break-word;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-input);
   padding: 10px 12px;
 }
@@ -1967,7 +1967,7 @@ watch(loading, () => {
   font-size: 11px;
   color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-cyan-a10);
-  border: 1px solid var(--accent-cyan-a30);
+  border: 1px solid var(--accent-readable);
   padding: 2px 8px;
   border-radius: var(--radius-pill);
 }
@@ -1987,7 +1987,7 @@ watch(loading, () => {
   font-size: 11px;
   color: var(--text-base);
   background: var(--accent-pink-a12);
-  border: 1px solid var(--accent-pink-a30);
+  border: 1px solid var(--pink-readable);
   border-radius: var(--radius-pill);
   padding: 3px 10px;
   cursor: pointer;
@@ -2010,7 +2010,7 @@ watch(loading, () => {
   flex-direction: column;
   gap: 8px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-input);
   padding: 10px 12px;
 }
@@ -2026,7 +2026,7 @@ watch(loading, () => {
   font-size: 11px;
   color: var(--text-soft);
   background: var(--accent-purple-a10);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-pill);
   padding: 2px 8px;
   cursor: pointer;
@@ -2052,7 +2052,7 @@ watch(loading, () => {
   gap: 8px;
   flex-wrap: wrap;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-input);
   padding: 8px 12px;
 }
@@ -2070,7 +2070,7 @@ watch(loading, () => {
   font-size: 10px;
   color: var(--accent-readable, var(--neon-cyan));
   background: var(--accent-cyan-a10);
-  border: 1px solid var(--accent-cyan-a30);
+  border: 1px solid var(--accent-readable);
   padding: 2px 8px;
   border-radius: var(--radius-pill);
 }
@@ -2081,7 +2081,7 @@ watch(loading, () => {
   flex-shrink: 0;
   padding: 3px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-pill);
   font-family: var(--font-mono);
   font-size: 12px;
@@ -2132,7 +2132,7 @@ watch(loading, () => {
   margin: 8px 2px 0;
   padding: 10px 16px;
   background: linear-gradient(90deg, var(--accent-cyan-a12), var(--accent-purple-a10));
-  border: 1px solid var(--accent-cyan-a30);
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-input);
   font-size: 12px;
   color: var(--text-base);
@@ -2155,7 +2155,7 @@ watch(loading, () => {
 
 .tour-close {
   flex-shrink: 0;
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   background: transparent;
   color: var(--text-bright);
   font-family: var(--font-mono);

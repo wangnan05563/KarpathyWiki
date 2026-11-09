@@ -1687,7 +1687,7 @@ function handleUrlInputChange() {
   padding: 32px 0;
   text-align: center;
   cursor: pointer;
-  border: 2px dashed var(--accent-purple-a30, rgba(176, 38, 255, 0.3));
+  border: 2px dashed var(--purple-readable);
   border-radius: var(--radius-card);
   transition: border-color 0.3s ease, background-color 0.3s ease;
 }
@@ -1701,7 +1701,7 @@ function handleUrlInputChange() {
   margin-top: 16px;
   padding: 12px 16px;
   background: var(--accent-cyan-a04, rgba(0, 245, 255, 0.04));
-  border: 1px solid var(--accent-cyan-a15, rgba(0, 245, 255, 0.15));
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-card);
 }
 
@@ -1763,7 +1763,7 @@ function handleUrlInputChange() {
 .qq-step {
   padding: 18px 20px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
 }
 
@@ -1781,7 +1781,7 @@ function handleUrlInputChange() {
   width: 22px;
   height: 22px;
   background: var(--accent-purple-a20);
-  border: 1px solid var(--accent-purple-a40);
+  border: 1px solid var(--purple-readable);
   border-radius: 50%;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -1810,7 +1810,7 @@ function handleUrlInputChange() {
   gap: 8px;
   padding: 12px 16px;
   background: var(--accent-cyan-a08);
-  border: 1px solid var(--accent-cyan-a20);
+  border: 1px solid var(--accent-readable);
   border-radius: 10px;
   margin-bottom: 14px;
 }
@@ -1853,7 +1853,7 @@ function handleUrlInputChange() {
 .qq-drafts-card {
   padding: 16px;
   background: var(--accent-magenta-a08);
-  border: 1px solid var(--accent-magenta-a25);
+  border: 1px solid var(--pink-readable);
   border-radius: 10px;
 }
 
@@ -1914,7 +1914,7 @@ function handleUrlInputChange() {
   gap: 10px;
   padding: 10px 16px;
   background: var(--accent-purple-a08);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: 8px;
   font-size: 12px;
   color: var(--text-base);
@@ -1964,7 +1964,7 @@ function handleUrlInputChange() {
   gap: 10px;
   padding: 12px 16px;
   background: var(--accent-cyan-a08, rgba(0, 245, 255, 0.08));
-  border: 1px solid var(--accent-cyan-a25, rgba(0, 245, 255, 0.25));
+  border: 1px solid var(--accent-readable);
   border-radius: var(--radius-card);
   font-size: 13px;
   color: var(--text-bright);
@@ -1998,7 +1998,7 @@ function handleUrlInputChange() {
 .url-step {
   padding: 18px 20px;
   background: var(--bg-scene);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-card);
 }
 
@@ -2016,7 +2016,7 @@ function handleUrlInputChange() {
   width: 22px;
   height: 22px;
   background: var(--accent-purple-a20);
-  border: 1px solid var(--accent-purple-a40);
+  border: 1px solid var(--purple-readable);
   border-radius: 50%;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -2046,7 +2046,7 @@ function handleUrlInputChange() {
   margin-top: 12px;
   padding: 10px 14px;
   background: var(--accent-cyan-a05);
-  border: 1px dashed var(--accent-cyan-a20);
+  border: 1px dashed var(--accent-readable);
   border-radius: 8px;
 }
 
@@ -2070,7 +2070,7 @@ function handleUrlInputChange() {
   gap: 8px;
   padding: 12px 16px;
   background: var(--accent-cyan-a08);
-  border: 1px solid var(--accent-cyan-a20);
+  border: 1px solid var(--accent-readable);
   border-radius: 10px;
   margin-bottom: 14px;
 }
@@ -2079,7 +2079,7 @@ function handleUrlInputChange() {
 .url-attachments-card {
   padding: 12px 16px;
   background: var(--accent-purple-a05);
-  border: 1px solid var(--accent-purple-a15);
+  border: 1px solid var(--purple-readable);
   border-radius: 10px;
   margin-bottom: 14px;
 }
@@ -2090,7 +2090,7 @@ function handleUrlInputChange() {
   gap: 8px;
   padding: 12px 16px;
   background: var(--accent-danger-a10);
-  border: 1px solid var(--accent-danger-a30);
+  border: 1px solid var(--danger-readable);
   border-radius: 10px;
   margin-bottom: 14px;
   color: var(--pink-readable);
@@ -2188,7 +2188,7 @@ function handleUrlInputChange() {
   margin-bottom: 10px;
   padding: 8px 10px;
   background: rgba(255, 255, 255, 0.02);
-  border-left: 3px solid var(--accent-cyan-a30);
+  border-left: 3px solid var(--accent-readable);
   border-radius: 4px;
 }
 
@@ -2217,7 +2217,7 @@ function handleUrlInputChange() {
   gap: 8px;
   padding: 10px 16px;
   background: var(--accent-purple-a08);
-  border: 1px solid var(--accent-purple-a20);
+  border: 1px solid var(--purple-readable);
   border-radius: 8px;
   font-size: 12px;
   color: var(--text-base);

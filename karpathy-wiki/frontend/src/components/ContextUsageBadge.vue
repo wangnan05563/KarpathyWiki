@@ -99,7 +99,7 @@ async function compactContext() {
   padding: 2px 6px 2px 3px;
   border-radius: 10px;
   background: var(--bg-card, rgba(247, 248, 250, 0.85));
-  border: 1px solid var(--accent-purple-a15, rgba(128, 128, 128, 0.15));
+  border: 1px solid var(--purple-readable);
   box-shadow: 0 2px 8px var(--accent-purple-a10, rgba(0, 0, 0, 0.1));
   transition: all 0.2s ease;
 }
@@ -183,13 +183,13 @@ button.ctx-badge-inner {
    为什么非 scoped：popper 经 teleport 挂到 body，scoped 样式无法命中 .el-popper。 */
 .ctx-tooltip-popper.el-popper {
   background: var(--bg-card, #ffffff) !important;
-  border: 1px solid var(--accent-purple-a20, rgba(128, 128, 128, 0.2));
+  border: 1px solid var(--purple-readable);
   box-shadow: 0 8px 24px var(--accent-purple-a15, rgba(0, 0, 0, 0.15));
   color: var(--text-bright, #f3e9ff);
 }
 
 .ctx-tooltip-popper .el-popper__arrow::before {
   background: var(--bg-card, #ffffff) !important;
-  border-color: var(--accent-purple-a20, rgba(128, 128, 128, 0.2)) !important;
+  border-color: var(--purple-readable) !important;
 }
 </style>

@@ -1078,7 +1078,7 @@ onBeforeUnmount(() => {
 .glass-card {
   background: var(--bg-card, rgba(20, 20, 35, 0.6));
   backdrop-filter: blur(12px);
-  border: 1px solid var(--accent-cyan-a15, rgba(0, 245, 255, 0.15));
+  border: 1px solid var(--accent-readable);
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 8px 32px var(--accent-purple-a20, rgba(0, 0, 0, 0.3));
@@ -1338,7 +1338,7 @@ onBeforeUnmount(() => {
 
 /* ===== 启动失败内联告警条（T02469 / PRD §11 T1）===== */
 .start-error-card {
-  border-color: var(--accent-pink-a35, rgba(255, 0, 110, 0.35));
+  border-color: var(--pink-readable);
 }
 
 .start-error-detail {
@@ -1423,7 +1423,7 @@ onBeforeUnmount(() => {
 
 /* 三态不只靠颜色：标签文字（已满足/未满足/待确认）+ 左侧描边双重表达 */
 .prereq-item.is-fail {
-  border-color: var(--accent-pink-a25, rgba(255, 0, 110, 0.25));
+  border-color: var(--pink-readable);
 }
 
 .prereq-item.is-unknown {

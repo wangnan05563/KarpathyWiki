@@ -233,7 +233,7 @@ function handleKeydown(e: KeyboardEvent) {
   background: var(--bg-glass);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   box-shadow: 0 8px 32px var(--accent-purple-a20, rgba(0, 0, 0, 0.2));
 }
 
@@ -285,7 +285,7 @@ function handleKeydown(e: KeyboardEvent) {
   font-family: var(--font-body);
   color: var(--text-bright);
   background: var(--bg-card-solid, rgba(255, 255, 255, 0.05));
-  border: 1px solid var(--accent-purple-a30);
+  border: 1px solid var(--purple-readable);
   border-radius: var(--radius-btn, 8px);
   outline: none;
   transition: all 0.3s ease;
@@ -307,7 +307,7 @@ function handleKeydown(e: KeyboardEvent) {
   color: var(--pink-readable, var(--neon-magenta));
   background: var(--accent-pink-a10);
   border-radius: var(--radius-btn, 8px);
-  border: 1px solid var(--accent-pink-a30);
+  border: 1px solid var(--pink-readable);
 }
 
 .login-btn {
@@ -343,7 +343,7 @@ function handleKeydown(e: KeyboardEvent) {
   color: var(--text-dim);
   background: rgba(255, 255, 255, 0.03);
   border-radius: var(--radius-btn, 8px);
-  border: 1px dashed var(--accent-purple-a30);
+  border: 1px dashed var(--purple-readable);
   display: flex;
   flex-wrap: wrap;
   gap: 6px;

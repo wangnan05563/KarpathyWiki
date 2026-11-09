@@ -218,7 +218,7 @@ function toolTip(tool: Tool): string {
   gap: 8px;
   padding: 8px;
   background: var(--bg-card-solid, rgba(20, 20, 35, 0.95));
-  border: 1px solid var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
+  border: 1px solid var(--accent-readable);
   border-radius: 12px;
   box-shadow: 0 8px 24px var(--accent-purple-a20, rgba(0, 0, 0, 0.4));
   z-index: 10;
