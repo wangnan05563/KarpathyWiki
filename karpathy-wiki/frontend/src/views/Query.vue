@@ -2723,12 +2723,16 @@ onBeforeUnmount(() => {
   margin-top: 4px;
 }
 
-/* 按钮行：左侧工具组 + 右侧发送按钮，同一行两端对齐 */
+/* 按钮行：左侧工具组 + 右侧发送按钮，同一行两端对齐
+   T04542 裁决 B：徽章点按目标 44×44 后本行最高控件是 44px；min-height 钉住行高，
+   否则徽章 v-if（拿到 governor 统计才渲染）出现/消失会让输入区上下跳 12px。
+   发送按钮保持 v3.1 的 30px（刻意不抢占视觉），由 align-items:center 居中。 */
 .button-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-height: 44px;
 }
 
 .left-buttons {

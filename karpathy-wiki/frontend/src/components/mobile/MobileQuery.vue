@@ -1598,7 +1598,7 @@ onBeforeUnmount(() => {
 .mq-mic,
 .mq-model {
   flex-shrink: 0;
-  height: 38px;
+  height: 44px;
   border-radius: 10px;
   border: 1px solid var(--m-border-2, #e2e4e8);
   background: var(--m-surface, #ffffff);
@@ -1609,7 +1609,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   font-size: 18px;
 }
-.mq-mic { width: 38px; }
+.mq-mic { width: 44px; }
 .mq-mic.listening {
   border-color: var(--m-primary, #1554d1);
   color: var(--m-primary, #1554d1);
@@ -1617,17 +1617,15 @@ onBeforeUnmount(() => {
 .mq-mic:disabled { opacity: 0.4; cursor: not-allowed; }
 .mq-model { padding: 0 10px; font-size: 12.5px; max-width: 92px; overflow: hidden; }
 .mq-model-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* T04453：发送行加入上下文徽章后的两处排布收口——
-   1) textarea 的 flex min-width:auto 会按「不换行文本固有宽度」顶住，375px 屏上
-      多一颗控件就整行溢出，故显式允许收缩；
-   2) 容器抬到与本行控件同高（38px）只解决排布对齐；实测承接点按的内部 button 仍是
-      51.5×26px（组件本体 align-items:center，拉伸要改组件），已达 WCAG 2.5.8 的 24×24
-      下限，375px 触屏点按实测可弹开浮层；目标尺寸要不要再抬另见派生单。 */
-.mq-inputbar :deep(.context-usage-badge) { height: 38px; align-self: flex-end; }
+/* T04453：textarea 的 flex min-width:auto 会按「不换行文本固有宽度」顶住，375px 屏上
+   多一颗控件就整行溢出，故显式允许收缩。
+   T04542 裁决 B：徽章点按目标抬到 44×44（WCAG 2.5.5），本行控件同步 44px 同高；
+   容器高度与徽章一致，徽章 v-if 出现/消失时发送行不再跳高。 */
+.mq-inputbar :deep(.context-usage-badge) { height: 44px; align-self: flex-end; }
 .mq-input {
   flex: 1;
   min-width: 0;
-  min-height: 38px;
+  min-height: 44px;
   max-height: 110px;
   resize: none;
   border-radius: 12px;
@@ -1645,7 +1643,7 @@ onBeforeUnmount(() => {
 
 .mq-send {
   flex-shrink: 0;
-  height: 38px;
+  height: 44px;
   padding: 0 16px;
   border-radius: 12px;
   border: none;

@@ -37,7 +37,10 @@ const POINTS: Point[] = [
   { f: 'CitationModal.vue', ln: 131, sel: '.citation-chunk-head', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'CitationText.vue', ln: 58, sel: 'sup.cite-ref', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
   { f: 'CitationText.vue', ln: 59, sel: 'sup.cite-ref', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
-  { f: 'ContextUsageBadge.vue', ln: 108, sel: '.ctx-badge-inner:hover', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
+  // T04542：徽章 min-width/min-height 抬到 44px 使 hover 落点由 L108 平移到 L114（blockOfLine
+  // 取的是声明行所在块，故指针必须落在 border-color 行而非选择器行）；面/前景/族均未变
+  // （本次只加尺寸声明），仅刷新行号指针，实算结论沿用。
+  { f: 'ContextUsageBadge.vue', ln: 114, sel: '.ctx-badge-inner:hover', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
   { f: 'FloatingChat.vue', ln: 941, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a12)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'ui' },
   { f: 'FloatingChat.vue', ln: 942, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a12)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'text' },
   { f: 'FollowupsChips.vue', ln: 70, sel: '.followup-chip:hover:not(:disabled)', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },

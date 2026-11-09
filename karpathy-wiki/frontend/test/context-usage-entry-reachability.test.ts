@@ -138,11 +138,67 @@ describe('T04453 移动端：发送行挂载占用指示与压缩入口', () => 
   it('触屏排布收口：容器与发送控件同高、输入框允许收缩（否则 375px 屏整行溢出）', () => {
     const rule = /:deep\(\.context-usage-badge\) \{([^}]*)\}/.exec(mobileSrc);
     expect(rule, '找不到 :deep(.context-usage-badge) 规则').toBeTruthy();
-    expect(rule![1]).toMatch(/height:\s*38px/);
+    expect(rule![1]).toMatch(/height:\s*44px/);
     expect(rule![1]).toMatch(/align-self:\s*flex-end/);
     const inputRule = /\.mq-input \{([\s\S]*?)\n\}/.exec(mobileSrc);
     expect(inputRule, '找不到 .mq-input 规则').toBeTruthy();
     expect(inputRule![1]).toMatch(/min-width:\s*0/);
+  });
+});
+
+// T04542 裁决 B：徽章点按目标抬到 44×44（WCAG 2.5.5 AAA），发送行高度同步。
+// happy-dom 不做布局，量不出真实盒子；这里锁「导致尺寸不足的机制」——下限必须落在
+// button 自身（不是宿主拉伸）、本行控件必须同高、行高必须钉住（徽章是 v-if，会跳高）。
+// 真实几何由 375px 触屏实测取证，见本单回传的验证节。
+describe('T04542 裁决 B：44×44 点按目标 + 发送行同高', () => {
+  const querySrc = readFileSync(join(ROOT, 'src/views/Query.vue'), 'utf8');
+
+  // 声明级匹配：`height:` 是 `min-height:` 的子串，裸 /height:\s*30px/ 会被 min-height 满足，
+  // 于是把真正的 height 放大也照样绿（本单变异探针 P6 实测捕获过这个假绿）。
+  // 故要求属性名前面是块首或分号，锁定的是独立声明而非某个后缀。
+  const decl = (prop: string, value: string) => new RegExp(`(?:^|;)\\s*${prop}:\\s*${value}`);
+
+  it('徽章本体自带 44×44 下限且内容居中（不依赖宿主 align-items 拉伸）', () => {
+    const rule = /\.ctx-badge-inner \{([^}]*)\}/.exec(badgeSrc);
+    expect(rule, '找不到 .ctx-badge-inner 规则').toBeTruthy();
+    expect(rule![1], '宽度下限必须在 button 自身，换宿主才不会掉回 51.5×26').toMatch(decl('min-width', '44px'));
+    expect(rule![1], '高度下限必须在 button 自身；父级 height 只抬容器不拉伸子项').toMatch(decl('min-height', '44px'));
+    expect(rule![1], '抬高后圆环与百分比要在盒内居中，否则贴顶').toMatch(/align-items:\s*center/);
+    expect(rule![1]).toMatch(/justify-content:\s*center/);
+  });
+
+  it('移动端发送行控件全部同步 44px（含麦克风宽度，不留 38×44 的半达标）', () => {
+    const micModel = /\.mq-mic,\s*\.mq-model \{([^}]*)\}/.exec(mobileSrc);
+    expect(micModel, '找不到 .mq-mic,.mq-model 规则').toBeTruthy();
+    expect(micModel![1]).toMatch(decl('height', '44px'));
+    expect(mobileSrc, '麦克风是方形图标钮，只抬高度会留下 38×44').toMatch(/\.mq-mic \{ width: 44px; \}/);
+    const send = /\.mq-send \{([^}]*)\}/.exec(mobileSrc);
+    expect(send, '找不到 .mq-send 规则').toBeTruthy();
+    expect(send![1]).toMatch(decl('height', '44px'));
+    const input = /\.mq-input \{([^}]*)\}/.exec(mobileSrc);
+    expect(input, '找不到 .mq-input 规则').toBeTruthy();
+    expect(input![1]).toMatch(decl('min-height', '44px'));
+  });
+
+  it('发送行不再残留 38px 高度假设（改回旧值即红）', () => {
+    const start = mobileSrc.indexOf('/* 输入栏 */');
+    const end = mobileSrc.indexOf('/* ===== 底部弹窗');
+    expect(start, '找不到输入栏样式段起点').toBeGreaterThanOrEqual(0);
+    expect(end, '找不到输入栏样式段终点').toBeGreaterThan(start);
+    expect(mobileSrc.slice(start, end), '发送行高度口径已统一到 44px').not.toMatch(/38px/);
+  });
+
+  it('桌面按钮行钉住 44px 行高（徽章 v-if 出现/消失时输入区不跳高）', () => {
+    const bar = /\.button-bar \{([^}]*)\}/.exec(querySrc);
+    expect(bar, '找不到 .button-bar 规则').toBeTruthy();
+    expect(bar![1]).toMatch(decl('min-height', '44px'));
+    expect(bar![1]).toMatch(/align-items:\s*center/);
+  });
+
+  it('桌面主 CTA 保持 v3.1 的 30px（裁决只抬徽章与行高，不顺手改发送按钮视觉）', () => {
+    const send = /\.send-btn,\s*\.stop-btn \{([^}]*)\}/.exec(querySrc);
+    expect(send, '找不到 .send-btn,.stop-btn 规则').toBeTruthy();
+    expect(send![1]).toMatch(decl('height', '30px'));
   });
 });
 

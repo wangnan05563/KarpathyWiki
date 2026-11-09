@@ -92,10 +92,16 @@ async function compactContext() {
   cursor: pointer;
 }
 
+/* T04542 裁决 B：承接点按的盒子本身必须 ≥44×44（WCAG 2.5.5）。
+   只靠父级 align-items:stretch 拉不动它——父容器高度由宿主决定，徽章换宿主就失效；
+   min-height 落在 button 自身才是与宿主无关的下限。 */
 .ctx-badge-inner {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 2px 6px 2px 3px;
   border-radius: 10px;
   background: var(--bg-card, rgba(247, 248, 250, 0.85));
