@@ -49,7 +49,9 @@
      向黑混合 10% 后 4.78:1；紫侧 base #1554d1 本身达标，直接锁定为前景值。 */
   --pink-readable: #b52e2e;
   --purple-readable: #1554d1;
-  --lime-readable: #258553;
+  /* T04903：绿族原值 #258553 未覆盖体检页真实页底 `--bg-scene`(#f5f6f8)，
+     `.no-issue` 在该面实测 4.26 < 4.5；同色相压暗到 #237c4e 后场景底 4.75。 */
+  --lime-readable: #237c4e;
   --warning-readable: #9e5d00;
 
   /* 语义状态色（T01728）：浅色主题覆盖 :root 暗色默认值 */

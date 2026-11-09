@@ -196,12 +196,14 @@ describe('T04449 推广第三组：清洗页/体检页前景逐主题达标', ()
 
 describe('T04449 推广第三组：lime-readable token 层（新建口径的单调压暗锁）', () => {
   const LIGHT = ['ecommerce', 'enterprise', 'light-business', 'macaron', 'portfolio'];
+  // T04903：体检页 `.no-issue` 的真实落点是页面级 --bg-scene（不是卡片面），
+  // 原值在该面 3.91~4.42，四支主题同色相压暗一档；ecommerce 在场景底 4.52 本就达标，不动。
   const EXPECTED: Record<string, string> = {
     ecommerce: '#39833c',
-    enterprise: '#0c855d',
-    'light-business': '#258553',
-    macaron: '#6a7854',
-    portfolio: '#827149',
+    enterprise: '#0b7c57',
+    'light-business': '#237c4e',
+    macaron: '#657350',
+    portfolio: '#736441',
   };
 
   it('8 主题都能把 --lime-readable 解析成实色', () => {

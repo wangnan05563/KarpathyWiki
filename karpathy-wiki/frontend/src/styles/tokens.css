@@ -57,6 +57,16 @@
   --neon-pink: #f0883e;
   --neon-lime: #3fb950;
 
+  /* T04903：readable 档位按「真实渲染落点面」重定。
+     · 配置页 `.key-badge-private`（紫 a15 叠 --bg-scene #0f141a → #18263c）与帮助页活动锚点
+       （紫 a20 叠 --bg-card-solid → 实测 #20304d）在 :root 兜底紫 #c258ff 下实测 4.43 / 3.85，
+       提亮到 #d47aff 后 5.80 / 5.03（场景底 7.07）。
+     · 登录页未登录态 `.login-hint code`（青 a08 叠登录卡玻璃面 → #262d3a）在 :root 兜底青
+       #4d8dff 下 4.31，提亮到 #79a9ff 后 5.86（卡片面 7.87）。
+     两档只覆盖暗色自身，:root 的其他暗色主题（creative/product）取值不变。 */
+  --purple-readable: #d47aff;
+  --accent-readable: #79a9ff;
+
   /* 背景层次：近黑底 + 深灰抬升面 */
   --bg-void: #0d1117;
   --bg-deep: #090d13;
