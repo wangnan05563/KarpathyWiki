@@ -223,7 +223,8 @@ const FAMILY_COUNTS: Record<string, { accent: number; pink: number; purple: numb
   'InputToolbar.vue': { accent: 3, pink: 0, purple: 0 },
   'MarkdownRenderer.vue': { accent: 5, pink: 0, purple: 4 },
   'ModelSelector.vue': { accent: 5, pink: 0, purple: 0 },
-  'RefsList.vue': { accent: 7, pink: 0, purple: 0 },
+  // T04462：portfolio 紫/粉改为真实色相后，5 处 --accent-*-base 前景接入 readable（base 不再保证 AA）
+  'RefsList.vue': { accent: 7, pink: 1, purple: 4 },
   'SessionStatusIcon.vue': { accent: 1, pink: 1, purple: 1 },
   'SingleFileProgressBar.vue': { accent: 3, pink: 2, purple: 0 },
   'TocTree.vue': { accent: 3, pink: 0, purple: 0 },
@@ -352,7 +353,9 @@ describe('T04470 批次 B：13 个组件 64 面逐主题实算达标', () => {
       }
     }
     const total = Object.values(FAMILY_COUNTS).reduce((a, v) => a + v.accent + v.pink + v.purple, 0);
-    expect(total).toBe(64);
+    // T04462 在 RefsList 追加 5 处（紫 4 / 粉 1），本批 64 点的历史账保持不变
+    const t04462Extra = FAMILY_COUNTS['RefsList.vue'].pink + FAMILY_COUNTS['RefsList.vue'].purple;
+    expect(total - t04462Extra).toBe(64);
     const strokes = Object.values(TINT_STROKES).reduce((a, v) => a + v.accent + v.pink + v.purple, 0);
     expect(strokes, 'T04468 描边账与 TINT_BASE 历史基线（35）不再一致').toBe(TINT_STROKE_TOTAL);
   });
@@ -415,6 +418,53 @@ describe('T04470 批次 B：SessionStatusIcon 移动端皮肤优先级不被 rea
     expect(src).toMatch(/color: var\(--m-primary, var\(--accent-readable, var\(--neon-cyan, #00f5ff\)\)\);/);
     expect(src).toMatch(/color: var\(--m-danger, var\(--pink-readable, var\(--neon-magenta, #ff006e\)\)\);/);
     expect(src).toMatch(/color: var\(--m-primary, var\(--purple-readable, var\(--neon-purple, #b026ff\)\)\);/);
+  });
+});
+
+// T04462：portfolio 紫/粉基色从墨色/棕金改为真实色相后，RefsList 直接把 --accent-*-base 当前景的
+// 5 处不再天然达标（紫 #6b5b95 压自家 a18 tint 只有 4.43），故与 T04470 同一口径接入 readable。
+// 这里补一组逐主题实算，防止「换了基色但消费点没跟上」再次静默退化。
+describe('T04462 portfolio 真紫/真粉：RefsList 基色前景接入 readable', () => {
+  const PTS = [
+    { label: '.source-stat.web', ln: 196, fg: 'var(--purple-readable)', face: 'var(--accent-purple-a15)', kind: 'text' as const },
+    { label: '.ref-item.web border', ln: 221, fg: 'var(--purple-readable)', face: CARD, kind: 'ui' as const },
+    { label: '.source-badge.web', ln: 262, fg: 'var(--purple-readable)', face: 'var(--accent-purple-a18)', kind: 'text' as const },
+    { label: '.sig-auth.auth-high', ln: 288, fg: 'var(--pink-readable)', face: CARD, kind: 'text' as const },
+    { label: '.sig-auth.auth-medium', ln: 291, fg: 'var(--purple-readable)', face: CARD, kind: 'text' as const },
+  ];
+
+  for (const t of THEMES) {
+    it(`${t.name}：5 处全部达 AA（文本 4.5 / 非文本 3.0）`, () => {
+      const bad = PTS.map((p) => ({ ...p, r: worstRatio(p.fg, p.face, t.decls, pageOf(t.decls)) })).filter(
+        (x) => x.r < THRESHOLD[x.kind],
+      );
+      expect(bad, bad.map((b) => `${b.label}=${b.r.toFixed(2)}<${THRESHOLD[b.kind]}`).join('\n')).toEqual([]);
+    });
+  }
+
+  it('5 处裸基色前景已全部被 readable 包裹（base 只留在 fallback 位）', () => {
+    const src = srcOf('RefsList.vue');
+    const bare = src
+      .split(/\r?\n/)
+      .filter((l) => /^\s*(?:color|border-left-color|border)\s*:\s*var\(--accent-(?:purple|pink)-base/.test(l));
+    expect(bare, `仍有裸基色前景：${bare.join(' | ')}`).toEqual([]);
+    expect(src.match(/--purple-readable/g)?.length).toBe(5);
+    expect(src.match(/--pink-readable/g)?.length).toBe(1);
+  });
+
+  it('定调值落地且 tint 与基色同源（每档 aNN 的 RGB 必须等于 base）', () => {
+    const css = readFileSync(join(ROOT, 'src/styles/themes/portfolio.css'), 'utf8');
+    const base: Record<string, string> = { purple: '#6b5b95', pink: '#a63d5c' };
+    const readable: Record<string, string> = { purple: '#574a7a', pink: '#8a2f49' };
+    const rgba: Record<string, string> = { purple: 'rgba(107, 91, 149,', pink: 'rgba(166, 61, 92,' };
+    for (const fam of ['purple', 'pink']) {
+      expect(css, `${fam} 基色必须是定调值`).toMatch(new RegExp(`--accent-${fam}-base:\\s*${base[fam]};`));
+      expect(css, `${fam} readable 必须是压深值`).toMatch(new RegExp(`--${fam}-readable:\\s*${readable[fam]};`));
+      const tints = [...css.matchAll(new RegExp(`--accent-${fam}-a\\d{2}:\\s*([^;]+);`, 'g'))];
+      expect(tints.length, `${fam} tint 档位不得少于 17`).toBeGreaterThanOrEqual(17);
+      const bad = tints.filter((m) => !m[1].trim().startsWith(rgba[fam]));
+      expect(bad, bad.map((m) => m[0]).join(' | ')).toEqual([]);
+    }
   });
 });
 

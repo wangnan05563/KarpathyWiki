@@ -191,15 +191,24 @@ describe('T04470 批次 A6：逐主题达标（权威叠底 = 面板实底 --bg-
     expect(bare, `BEFORE 实测 ${bare}（18 点 × 8 主题）`).toBe(BEFORE_FAILURES);
   });
 
-  it('跨族是按面实算的结果、不是风格选择：11 个紫族点若按粉族接必有点跌破 4.5', () => {
+  it('跨族是按面实算的结果、不是风格选择：7 个紫族点若按粉族接仍有点跌破 4.5', () => {
     const themes = loadThemes();
     const purplePoints = POINTS.filter((p) => p.fg === PURPLE);
     expect(purplePoints.length).toBe(11);
     const pinkWouldFail = purplePoints.filter(
       (p) => Math.min(...themes.map((t) => worstRatio(PINK, p.face, t.decls, sceneRgb(t.decls)))) < THRESHOLD.text,
     );
-    // 除 L5794（粉族 3.69 更差）外每个紫族点按粉族都有主题跌破 4.5——即全部 11 个
-    expect(pinkWouldFail.length, pinkWouldFail.map((p) => `L${p.ln} ${p.sel}`).join(' ')).toBe(purplePoints.length);
+    // T04462：portfolio 粉族由棕金改为玫瑰红 #8a2f49（更深），原先在淡粉 a12/a10 面上跌破的
+    // 4 处（L6066/L6305/L6737/L6913）现已达标；剩余 7 处（紫面 4 + 粉 a15/渐变 a18 3）仍成立。
+    expect(pinkWouldFail.map((p) => `L${p.ln} ${p.sel}`)).toEqual([
+      'L5777 .key-status.unset',
+      'L5794 .key-badge-private',
+      'L5810 .env-name',
+      'L5825 .warning-icon',
+      'L5830 .warning-text strong',
+      'L5935 .history-disabled code',
+      'L6348 .masked-key',
+    ]);
   });
 
   it('清单规模与本批实现严格对齐（18 个真实点），接入原文逐条点名', () => {
@@ -329,12 +338,14 @@ describe('T04449 推广第二组：配置中心青族 28 面（本批未动，�
 // 留精确值而不是只留 ≥4.5：macaron 无深色面，任何再压暗/提亮都会同时移动本主题全部紫族落点，
 // 精确值能把「顺手改动 readable」变成一次有意的、需要同时更新其它锁的变更。
 describe('T04470 批次 A6：L5794 校准后数值锁', () => {
-  it('L5794 逐主题实测：macaron 已从 4.49 抬到 4.67，其余 7 主题不因本次校准而变', () => {
+  it('L5794 逐主题实测：macaron 已从 4.49 抬到 4.67；T04462 后 portfolio 紫面改真紫，落点由 10.57 变 5.34', () => {
     const themes = loadThemes();
     const p = POINTS.find((x) => x.ln === 5794)!;
     const vals = themes.map((t) => ({ th: t.name, v: ratio(p, t, 'scene') }));
+    // portfolio 的面是 --accent-purple-a15：T04462 把墨色 tint 改成 #6b5b95 tint 后
+    // 面不再压成近黑（原 10.57 是墨色淡面上的偏高值），5.34 仍高于 AA；其余主题取值未动。
     expect(vals.map((c) => `${c.th}=${c.v.toFixed(2)}`).join(' ')).toBe(
-      'default(:root)=5.42 creative=5.42 ecommerce=4.91 enterprise=4.63 light-business=4.81 macaron=4.67 portfolio=10.57 product=5.37',
+      'default(:root)=5.42 creative=5.42 ecommerce=4.91 enterprise=4.63 light-business=4.81 macaron=4.67 portfolio=5.34 product=5.37',
     );
     expect(Math.min(...vals.map((c) => c.v)), '最小值必须自身达标，不留阈值余量债').toBeGreaterThanOrEqual(THRESHOLD.text);
   });

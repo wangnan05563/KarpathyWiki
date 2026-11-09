@@ -113,8 +113,9 @@ describe('T04470 批次 A5：逐主题达标', () => {
     const asUi = auditThemes([{ label: 'ui', fg: 'var(--pink-readable)', bg: PINK_GRADIENT, kind: 'ui' }], themes);
     const asText = auditThemes([{ label: 'text', fg: 'var(--pink-readable)', bg: PINK_GRADIENT, kind: 'text' }], themes);
     expect(asUi, formatFailures(asUi)).toEqual([]);
-    // 8/8 主题在文字口径下都不达标 → 这一行的达标结论完全依赖「它是 1px 描边」这个分类，不能漂成文字
-    expect(asText.length).toBe(themes.length);
+    // 7/8 主题在文字口径下不达标（T04462 把 portfolio 粉族改成更深的玫瑰红 #8a2f49 后，
+    // 该主题的淡粉渐变面也过了 4.5）→ 这一行的达标结论仍主要依赖「它是 1px 描边」这个分类，不能漂成文字
+    expect(asText.length, asText.map((f) => f.theme).join(' ')).toBe(themes.length - 1);
   });
 
   it('清单规模与本批实现严格对齐（9 个真实点），接入原文逐条点名', () => {

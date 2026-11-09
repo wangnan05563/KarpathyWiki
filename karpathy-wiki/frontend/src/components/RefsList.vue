@@ -193,7 +193,7 @@ function sigStaleTip(status: RefSignals['knowledgeStatus'] | undefined): string 
 }
 .source-stat.web {
   background: var(--accent-purple-a15, rgba(99, 102, 241, 0.15));
-  color: var(--accent-purple-base, #6366f1);
+  color: var(--purple-readable, var(--accent-purple-base, #6366f1));
 }
 .refs-body {
   margin-top: 8px;
@@ -218,7 +218,7 @@ function sigStaleTip(status: RefSignals['knowledgeStatus'] | undefined): string 
   border-left-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
 }
 .ref-item.web {
-  border-left-color: var(--accent-purple-base, #6366f1);
+  border-left-color: var(--purple-readable, var(--accent-purple-base, #6366f1));
 }
 .ref-cite {
   font-size: 11px;
@@ -259,7 +259,7 @@ function sigStaleTip(status: RefSignals['knowledgeStatus'] | undefined): string 
 }
 .source-badge.web {
   background: var(--accent-purple-a18, rgba(99, 102, 241, 0.18));
-  color: var(--accent-purple-base, #6366f1);
+  color: var(--purple-readable, var(--accent-purple-base, #6366f1));
   border: 1px solid var(--purple-readable);
 }
 /* FR-19 三信号图标组：default 无 pointer（避免误触发跳转），hover 由 el-tooltip 提供说明 */
@@ -285,10 +285,10 @@ function sigStaleTip(status: RefSignals['knowledgeStatus'] | undefined): string 
 }
 /* 权威度色阶：high 高亮 / medium 中 / low 弱 / unknown 置灰 */
 .sig-auth.auth-high {
-  color: var(--accent-pink-base, #ec4899);
+  color: var(--pink-readable, var(--accent-pink-base, #ec4899));
 }
 .sig-auth.auth-medium {
-  color: var(--accent-purple-base, #6366f1);
+  color: var(--purple-readable, var(--accent-purple-base, #6366f1));
 }
 .sig-auth.auth-low {
   color: var(--text-soft, #888);

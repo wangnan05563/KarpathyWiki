@@ -11,16 +11,19 @@
 // ② 本批 **8 处全部同族可达标**，没有出现 A2 那种被逼换族的情况——因为本批的文字点本来就落在
 //    与自身色相同族的 tint 上（紫字压紫面、magenta 字压 magenta 面）。
 // ③ **前组遗留的错族回补**：`.suggestion-chip:hover` 的 color 早在 T04175（a187201）就接成了
-//    `--accent-readable`（青族），但它压在**自身** `--accent-purple-a18` 紫面上——实测青 readable
-//    × 紫 a18 在 portfolio 只有 4.33 < 4.5（该 chip 文字 13px，走文字口径）。这一处不在 163 处裸基色
-//    账里（已被 readable 包裹，索引锁看不见），是工单硬条件 2 预判的「落到紫面就会撞上」的真实现场，
-//    故按 A2 确立的「按面选族」在本批一并回补为紫族，并把原青族链保留在 fallback 位。
+//    `--accent-readable`（青族），但它压在**自身** `--accent-purple-a18` 紫面上——当时 portfolio
+//    的紫族仍是墨色 tint，实测青 readable × 紫 a18 只有 4.33 < 4.5（该 chip 文字 13px，走文字口径）。
+//    这一处不在 163 处裸基色账里（已被 readable 包裹，索引锁看不见），是工单硬条件 2 预判的
+//    「落到紫面就会撞上」的真实现场，故按 A2 确立的「按面选族」在本批一并回补为紫族，
+//    并把原青族链保留在 fallback 位。T04462 把 portfolio 紫族改成真紫 #6b5b95 后，该面升到 4.91，
+//    换族不再是达标刚需，但保留紫族可与 hover 描边同族，故不回退。
 //    ⚠ 视觉定调随之变化：chip hover 的文字由青转紫（与 hover 描边同族），需人工目视抽验。
 //
 // 档位边界（本批实算划出，防止下批「见紫面就无脑换族」）：
-//   青 readable × 紫 **a12** 全 8 主题 ≥ 4.69（A3 据此保留青族，结论仍成立）；
-//   青 readable × 紫 **a18** portfolio 4.33 < 4.5（本批据此回补为紫族）。
-//   即「是否必须同族」取决于 tint 档位深浅，不是取决于「面叫什么名」——故本文件把两条对照都写成断言常驻。
+//   青 readable × 紫 **a12** 全 8 主题 ≥ 4.5（A3 据此保留青族，结论仍成立）；
+//   青 readable × 紫 **a18**：T04462 前 portfolio 4.33 < 4.5 是本批换族触发点；改真紫后全档 ≥ 4.5；
+//   青 readable × 紫 **a25** 仍存在跌破，档位原则继续成立。
+//   即「是否必须同族」取决于 tint 档位深浅，不是取决于「面叫什么名」——故本文件把三条对照都写成断言常驻。
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -51,6 +54,7 @@ const BASE_TOKENS = [
 const PURPLE_A05 = 'var(--accent-purple-a05)';
 const PURPLE_A12 = 'var(--accent-purple-a12)';
 const PURPLE_A18 = 'var(--accent-purple-a18)';
+const PURPLE_A25 = 'var(--accent-purple-a25)';
 const MAGENTA_A05 = 'var(--accent-magenta-a05)';
 const CYAN_A08 = 'var(--accent-cyan-a08)';
 const CARD_SOLID = 'var(--bg-card-solid)';
@@ -119,18 +123,23 @@ describe('T04470 批次 A4：逐主题达标', () => {
     expect(failures.length, formatFailures(failures)).toBe(BEFORE_FAILURES);
   });
 
-  it('档位边界成立：青 readable × 紫 a12 达标、× 紫 a18 不达标（按档判，不是见紫面就换族）', () => {
+  it('档位边界成立：青 readable × 紫 a12/a18 全档达标、× 紫 a25 仍跌破（按档判，不是见紫面就换族）', () => {
     const themes = loadThemes();
     const at = (bg: string) =>
       themes.map((t) => ({ th: t.name, v: worstRatio('var(--accent-readable)', bg, t.decls, pageOf(t.decls)) }));
     const a12 = at(PURPLE_A12);
     const a18 = at(PURPLE_A18);
+    const a25 = at(PURPLE_A25);
     // a12 全档 ≥ 4.5 → A3 保留青族的结论仍然成立
     expect(Math.min(...a12.map((c) => c.v))).toBeGreaterThanOrEqual(THRESHOLD.text);
-    // a18 有主题 < 4.5 → 本批 chip hover 文字必须换族（portfolio 实测 4.33）
-    const bad = a18.filter((c) => c.v < THRESHOLD.text);
-    expect(bad.length, a18.map((c) => `${c.th}=${c.v.toFixed(2)}`).join(' ')).toBeGreaterThanOrEqual(1);
-    expect(bad.some((c) => c.th === 'portfolio'), 'portfolio 是本条的触发主题').toBe(true);
+    // T04462：紫族 base 由墨色 #1a1a1a 改为 #6b5b95 后 tint 不再把面压黑，
+    // a18 也全档达标（最紧 macaron 4.50 / portfolio 4.91）→ 本批不再由 portfolio 触发换族；
+    // chip hover 仍保留紫族，是为了与同族 hover 描边保持一致（见文件头 ③）。
+    expect(Math.min(...a18.map((c) => c.v)), a18.map((c) => `${c.th}=${c.v.toFixed(2)}`).join(' ')).toBeGreaterThanOrEqual(THRESHOLD.text);
+    expect(a18.find((c) => c.th === 'portfolio')!.v, 'portfolio a18 已不再是触发主题').toBeGreaterThanOrEqual(THRESHOLD.text);
+    // 档位原则仍成立：再深一档 a25 仍有主题跌破，说明「是否必须同族」取决于面深，不是面名
+    const bad = a25.filter((c) => c.v < THRESHOLD.text);
+    expect(bad.length, a25.map((c) => `${c.th}=${c.v.toFixed(2)}`).join(' ')).toBeGreaterThanOrEqual(1);
   });
 
   it('清单规模与本批实现严格对齐（9 个真实点），接入原文逐条点名', () => {

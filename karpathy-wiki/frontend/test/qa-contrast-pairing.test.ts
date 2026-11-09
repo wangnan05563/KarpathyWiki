@@ -423,7 +423,9 @@ describe('T04448 粉/紫前景口径守护（不得再裸用 --accent-pink / --a
       enterprise: { pink: '#2d63bb', purple: '#2158d1' },
       'light-business': { pink: '#b52e2e', purple: '#1554d1' },
       macaron: { pink: '#8c6273', purple: '#76608a' },
-      portfolio: { pink: '#735f46', purple: '#1a1a1a' },
+      // T04462：portfolio 紫/粉从「墨色/棕金」改为真紫 #6b5b95 / 玫瑰红 #a63d5c，
+      // readable 相应压深；基色不再是墨色，故这里不再锁 #1a1a1a。
+      portfolio: { pink: '#8a2f49', purple: '#574a7a' },
       product: { pink: '#ff2994', purple: '#c35aff' },
     };
     const LIGHT = ['ecommerce', 'enterprise', 'light-business', 'macaron', 'portfolio'];

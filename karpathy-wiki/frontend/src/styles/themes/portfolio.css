@@ -24,7 +24,8 @@
      --grad-fire 保持不变，用户气泡等其他消费点仍用原黑金渐变 */
   --menu-active-bg: linear-gradient(135deg, #c9a961 0%, #b8934a 100%);
 
-  /* 作品集主色：典雅黑 + 金 */
+  /* 作品集主色：典雅黑 + 金。T04462：紫/粉语义色改由 --accent-*-base 族承载，
+     这里的 --neon-purple 保持品牌墨色（只用于装饰光带/进度点），不再充当控件前景语义 */
   --neon-purple: #1a1a1a;
   --neon-magenta: #c9a961;
   --neon-cyan: #8b7355;
@@ -50,14 +51,20 @@
      → 同色相压暗，卡片面 5.57:1、最紧的 a25 淡底面 4.65:1；警示提示文字
      #ffb347 对淡琥珀底 1.60:1 → #9e5d00。注意本主题 .msg-bubble.user 是黑→金渐变，
      白字靠渐变左半撑住，见下方既有 user bubble 修正。
-     T04449 口径推广追加：帮助页锚点 hover 的黑淡底 --accent-purple-a12（本主题的「紫」是墨色）
-     实测 4.36:1 仍差一档 → 同色相再向黑混合 6% 到 #6f5b44，该面升至 4.81:1，
+     T04449 口径推广追加：帮助页锚点 hover 的紫淡底 --accent-purple-a12（当时紫族仍是墨色；
+     T04462 起该面已改为真紫 tint，见下方 readable 定调）实测 4.36:1 仍差一档 →
+     同色相再向黑混合 6% 到 #6f5b44，该面升至 4.81:1，
      卡片面同步升到 5.79:1；本主题所有 readable 面单调变暗，不存在「这里过、那里红」的回退。 */
   --accent-readable: #6f5b44;
-  /* T04448 粉/紫前景压暗值：本主题粉=棕金 #8b7355（在淡粉底上 3.89:1），向黑混合 13% 后 4.81:1；
-     紫侧 base 就是本主题的墨色 #1a1a1a，本身就达标，直接锁定。 */
-  --pink-readable: #735f46;
-  --purple-readable: #1a1a1a;
+  /* T04448 粉/紫前景压暗值。
+     T04462 定调（裁决 选1）：本主题启用真紫/真粉，紫族从正文墨色 #1a1a1a 拆出、粉族从棕金
+     #8b7355 改为玫瑰红，让「可点击 / 可下载 / 可删除」在米金黑底上仍有色相语义：
+       · 紫 基色 #6b5b95（低饱和紫，卡片面 5.67:1），readable 压深为 #574a7a；
+       · 粉 基色 #a63d5c（玫瑰红，卡片面 5.86:1），readable 压深为 #8a2f49。
+     readable 最紧面是自家 a25 tint 叠卡片/场景：紫 4.66、粉 4.67；卡片面 7.57 / 7.81。
+     --neon-purple 仍是品牌墨色（装饰光带/进度点），不承载控件语义，改动面只限 accent 族。 */
+  --pink-readable: #8a2f49;
+  --purple-readable: #574a7a;
   --lime-readable: #827149;
   --warning-readable: #9e5d00;
 
@@ -169,54 +176,55 @@
   --bg-scene: #ede8e0;
   --border-accent: rgba(201, 169, 97, 0.4);
 
-  /* Accent semi-transparent colors (auto-derived from theme base) */
-  --accent-purple-base: #1a1a1a;
+  /* Accent semi-transparent colors (auto-derived from theme base)
+     T04462：紫=#6b5b95 / 粉=#a63d5c 为真实语义色相；tint 与 readable 同源，墨色不再参与紫族派生。 */
+  --accent-purple-base: #6b5b95;
   --accent-cyan-base: #c9a961;
-  --accent-pink-base: #8b7355;
+  --accent-pink-base: #a63d5c;
   --accent-magenta-base: #d4b572;
-  --accent-purple-a05: rgba(26, 26, 26, 0.05);
+  --accent-purple-a05: rgba(107, 91, 149, 0.05);
   --accent-cyan-a05: rgba(201, 169, 97, 0.05);
-  --accent-pink-a05: rgba(139, 115, 85, 0.05);
+  --accent-pink-a05: rgba(166, 61, 92, 0.05);
   --accent-magenta-a05: rgba(212, 181, 114, 0.05);
-  --accent-purple-a06: rgba(26, 26, 26, 0.06);
+  --accent-purple-a06: rgba(107, 91, 149, 0.06);
   --accent-cyan-a06: rgba(201, 169, 97, 0.06);
-  --accent-pink-a06: rgba(139, 115, 85, 0.06);
+  --accent-pink-a06: rgba(166, 61, 92, 0.06);
   --accent-magenta-a06: rgba(212, 181, 114, 0.06);
-  --accent-purple-a08: rgba(26, 26, 26, 0.08);
+  --accent-purple-a08: rgba(107, 91, 149, 0.08);
   --accent-cyan-a08: rgba(201, 169, 97, 0.08);
-  --accent-pink-a08: rgba(139, 115, 85, 0.08);
+  --accent-pink-a08: rgba(166, 61, 92, 0.08);
   --accent-magenta-a08: rgba(212, 181, 114, 0.08);
-  --accent-purple-a10: rgba(26, 26, 26, 0.1);
+  --accent-purple-a10: rgba(107, 91, 149, 0.1);
   --accent-cyan-a10: rgba(201, 169, 97, 0.1);
-  --accent-pink-a10: rgba(139, 115, 85, 0.1);
+  --accent-pink-a10: rgba(166, 61, 92, 0.1);
   --accent-magenta-a10: rgba(212, 181, 114, 0.1);
-  --accent-purple-a12: rgba(26, 26, 26, 0.12);
+  --accent-purple-a12: rgba(107, 91, 149, 0.12);
   --accent-cyan-a12: rgba(201, 169, 97, 0.12);
-  --accent-pink-a12: rgba(139, 115, 85, 0.12);
+  --accent-pink-a12: rgba(166, 61, 92, 0.12);
   --accent-magenta-a12: rgba(212, 181, 114, 0.12);
-  --accent-purple-a15: rgba(26, 26, 26, 0.15);
+  --accent-purple-a15: rgba(107, 91, 149, 0.15);
   --accent-cyan-a15: rgba(201, 169, 97, 0.15);
-  --accent-pink-a15: rgba(139, 115, 85, 0.15);
+  --accent-pink-a15: rgba(166, 61, 92, 0.15);
   --accent-magenta-a15: rgba(212, 181, 114, 0.15);
-  --accent-purple-a18: rgba(26, 26, 26, 0.18);
+  --accent-purple-a18: rgba(107, 91, 149, 0.18);
   --accent-cyan-a18: rgba(201, 169, 97, 0.18);
-  --accent-pink-a18: rgba(139, 115, 85, 0.18);
+  --accent-pink-a18: rgba(166, 61, 92, 0.18);
   --accent-magenta-a18: rgba(212, 181, 114, 0.18);
-  --accent-purple-a25: rgba(26, 26, 26, 0.25);
+  --accent-purple-a25: rgba(107, 91, 149, 0.25);
   --accent-cyan-a25: rgba(201, 169, 97, 0.25);
-  --accent-pink-a25: rgba(139, 115, 85, 0.25);
+  --accent-pink-a25: rgba(166, 61, 92, 0.25);
   --accent-magenta-a25: rgba(212, 181, 114, 0.25);
-  --accent-purple-a50: rgba(26, 26, 26, 0.5);
+  --accent-purple-a50: rgba(107, 91, 149, 0.5);
   --accent-cyan-a50: rgba(201, 169, 97, 0.5);
-  --accent-pink-a50: rgba(139, 115, 85, 0.5);
+  --accent-pink-a50: rgba(166, 61, 92, 0.5);
   --accent-magenta-a50: rgba(212, 181, 114, 0.5);
-  --accent-purple-a60: rgba(26, 26, 26, 0.6);
+  --accent-purple-a60: rgba(107, 91, 149, 0.6);
   --accent-cyan-a60: rgba(201, 169, 97, 0.6);
-  --accent-pink-a60: rgba(139, 115, 85, 0.6);
+  --accent-pink-a60: rgba(166, 61, 92, 0.6);
   --accent-magenta-a60: rgba(212, 181, 114, 0.6);
-  --accent-purple-a70: rgba(26, 26, 26, 0.7);
+  --accent-purple-a70: rgba(107, 91, 149, 0.7);
   --accent-cyan-a70: rgba(201, 169, 97, 0.7);
-  --accent-pink-a70: rgba(139, 115, 85, 0.7);
+  --accent-pink-a70: rgba(166, 61, 92, 0.7);
   --accent-magenta-a70: rgba(212, 181, 114, 0.7);
   /* 语义 tint 档位：绿=本主题 --lime-readable 色相，红=本主题 --danger 色相（T04460 由假 token 转真） */
   --accent-lime-a10: rgba(130, 113, 73, 0.1);
@@ -226,37 +234,37 @@
   --accent-danger-a30: rgba(179, 38, 30, 0.3);
 
   /* Additional alpha variants for portfolio theme */
-  --accent-purple-a20: rgba(26, 26, 26, 0.2);
+  --accent-purple-a20: rgba(107, 91, 149, 0.2);
   --accent-cyan-a20: rgba(201, 169, 97, 0.2);
-  --accent-pink-a20: rgba(139, 115, 85, 0.2);
+  --accent-pink-a20: rgba(166, 61, 92, 0.2);
   --accent-magenta-a20: rgba(212, 181, 114, 0.2);
-  --accent-purple-a30: rgba(26, 26, 26, 0.3);
+  --accent-purple-a30: rgba(107, 91, 149, 0.3);
   --accent-cyan-a30: rgba(201, 169, 97, 0.3);
-  --accent-pink-a30: rgba(139, 115, 85, 0.3);
+  --accent-pink-a30: rgba(166, 61, 92, 0.3);
   --accent-magenta-a30: rgba(212, 181, 114, 0.3);
-  --accent-purple-a40: rgba(26, 26, 26, 0.4);
+  --accent-purple-a40: rgba(107, 91, 149, 0.4);
   --accent-cyan-a40: rgba(201, 169, 97, 0.4);
-  --accent-pink-a40: rgba(139, 115, 85, 0.4);
+  --accent-pink-a40: rgba(166, 61, 92, 0.4);
   --accent-magenta-a40: rgba(212, 181, 114, 0.4);
 
   /* Additional alpha variants for portfolio theme */
-  --accent-purple-a04: rgba(26, 26, 26, 0.04);
+  --accent-purple-a04: rgba(107, 91, 149, 0.04);
   --accent-cyan-a04: rgba(201, 169, 97, 0.04);
-  --accent-pink-a04: rgba(139, 115, 85, 0.04);
+  --accent-pink-a04: rgba(166, 61, 92, 0.04);
   --accent-magenta-a04: rgba(212, 181, 114, 0.04);
-  --accent-purple-a45: rgba(26, 26, 26, 0.45);
+  --accent-purple-a45: rgba(107, 91, 149, 0.45);
   --accent-cyan-a45: rgba(201, 169, 97, 0.45);
-  --accent-pink-a45: rgba(139, 115, 85, 0.45);
+  --accent-pink-a45: rgba(166, 61, 92, 0.45);
   --accent-magenta-a45: rgba(212, 181, 114, 0.45);
 
   /* Additional alpha variants for portfolio theme */
-  --accent-purple-a03: rgba(26, 26, 26, 0.03);
+  --accent-purple-a03: rgba(107, 91, 149, 0.03);
   --accent-cyan-a03: rgba(201, 169, 97, 0.03);
-  --accent-pink-a03: rgba(139, 115, 85, 0.03);
+  --accent-pink-a03: rgba(166, 61, 92, 0.03);
   --accent-magenta-a03: rgba(212, 181, 114, 0.03);
-  --accent-purple-a35: rgba(26, 26, 26, 0.35);
+  --accent-purple-a35: rgba(107, 91, 149, 0.35);
   --accent-cyan-a35: rgba(201, 169, 97, 0.35);
-  --accent-pink-a35: rgba(139, 115, 85, 0.35);
+  --accent-pink-a35: rgba(166, 61, 92, 0.35);
   --accent-magenta-a35: rgba(212, 181, 114, 0.35);
 }
 
