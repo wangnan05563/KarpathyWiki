@@ -2,6 +2,8 @@
 // 验证编辑重发是否真的触发新一轮 sendQuestion（而非仅本地截断或无反应）。
 // 目的：定位「编辑并重新发送功能不起作用」到底是逻辑 bug 还是环境问题。
 import 'fake-indexeddb/auto'; // 提供可用内存 IndexedDB，避免 openChatDB 在测试环境 reject
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
@@ -94,7 +96,7 @@ const stubs = {
 //     全套并发跑时同批 worker 抢占事件循环，同一份代码单跑 3/3 通过、全量跑偶发「waitFor 超时」
 //     ——假失败（T02472 门禁实测记录）。
 //  2. 更本质的口径错误：2000ms 小于产品自己的兜底契约。Query.vue 的 S3 兜底定时器
-//     EDIT_RESEND_FALLBACK_MS = 3000ms（Query.vue:297）——当传输层吞掉中断（后端/代理不尊重
+//     EDIT_RESEND_FALLBACK_MS = 3000ms（Query.vue:304）——当传输层吞掉中断（后端/代理不尊重
 //     AbortSignal）、sendQuestion 的 finally 不执行时，重发**最迟在第 3 秒**才发生。
 //     预算 2000ms 等于断言「产品必须在第 2 秒做到它承诺第 3 秒才做的事」：这条路径下断言永远不可达，
 //     不是不稳定而是必然失败。本文件末尾的用例把这条路径显式跑出来并断言其耗时 ≥ 3000ms 作为取证。
@@ -112,14 +114,22 @@ const stubs = {
 // 一句 "Test timed out in 5000ms"，正是本单要消除的假失败观感）。
 // ————————————————————————————————————————————————————————————
 
-// 与 Query.vue:297 同源：生产侧改动 EDIT_RESEND_FALLBACK_MS 时，这里的预算推导要同步。
+// 与 Query.vue:304 同源：生产侧改动 EDIT_RESEND_FALLBACK_MS 时，这里的预算推导要同步。
 const EDIT_RESEND_FALLBACK_MS = 3_000;
 // 契约下限：早于「生产承诺的最迟时刻 + 余量」时，一律不判失败。
 // 为什么必须有它：S3 兜底路径上，abort 被传输层吞掉后**没有任何可观测进展**——
 // 实测签名会静止整 3 秒（calls/loading/msgs 全不变），纯「无进展 X ms」规则会把
 // 这个合法等待期误判成卡死（本单开发过程中实测复现：2503ms 处误报）。
 // 所以判据是「超过契约下限 且 连续 idleMs 无进展」，两个条件缺一不可。
-const CONTRACT_FLOOR_MS = EDIT_RESEND_FALLBACK_MS + 500;
+//
+// T04515：余量不再手写 +500，改按兜底定时器实测迟到分布推导（数与来源成对锁见文件末尾）。
+// 样本来源：本文件 S3 用例取证行「点击后 Xms」− 标称 3000ms = 定时器迟到；
+//   取证出口 T04471_POLL_DUMP + 全量并行（vitest 默认 worker 池），每轮取一个样本。
+// 实测（2026-11-09，HEAD c18b57a，3 轮全量并行）：迟到样本 91/87/90 ms（排序 87/90/91）；
+//   nearest-rank 分位 P50=90ms  P95=91ms  P99=91ms（N=3，小样本下 P95/P99 取最大样本）。
+// 推导式：余量 = ceil(2 × 91 / 50) × 50 = 200ms（2× 尾部余量 + 50ms 量化）。
+// 交叉核对：隔离冷启动单跑一次迟到 145ms，仍 < 200ms 余量；T04471 历史 4 轮 46~100ms 同向。
+const CONTRACT_FLOOR_MS = EDIT_RESEND_FALLBACK_MS + 200;
 // 超过契约下限后，进展签名连续多少毫秒毫无变化才判「真的卡住」
 const IDLE_BUDGET_MS = 2_500;
 // 绝对上限：生产兜底最迟 3000ms 触发重发，再叠加一轮完整问答链与余量
@@ -420,4 +430,40 @@ describe('Query.vue 编辑重发端到端', () => {
 
     wrapper.unmount();
   }, CASE_TIMEOUT_MS);
+});
+
+// T04515：契约余量必须是实测派生——数与注释里登记的分位成对锁死。
+// 形式抄 wait-for-progress-starvation.test.ts 的「T04471 · 阈值必须是实测派生」：
+// 改了常量没改注释分布（或反之）就红，杜绝「凭手感把 500 改成更大的数」。
+describe('T04515 · 契约余量必须是实测派生：数与来源成对，改一个不改另一个就是放水', () => {
+  const selfSrc = () => readFileSync(path.join(__dirname, 'query-edit-resend-flow.test.ts'), 'utf8');
+
+  it('CONTRACT_FLOOR_MS 的余量等于注释登记 P99 推出的 ceil(2×P99/50)×50', () => {
+    const src = selfSrc();
+    const value = /const CONTRACT_FLOOR_MS = EDIT_RESEND_FALLBACK_MS \+ (\d+);/.exec(src);
+    const p50 = /P50=(\d+(?:\.\d+)?)ms/.exec(src);
+    const p95 = /P95=(\d+(?:\.\d+)?)ms/.exec(src);
+    const p99 = /P99=(\d+(?:\.\d+)?)ms/.exec(src);
+    expect(value, '读不到 CONTRACT_FLOOR_MS 的当前余量').toBeTruthy();
+    for (const [match, name] of [
+      [p50, 'P50'],
+      [p95, 'P95'],
+      [p99, 'P99'],
+    ] as const) {
+      expect(match, `注释里没有登记实测分位 ${name}——余量就成了估的`).toBeTruthy();
+    }
+    const margin = Number(value?.[1]);
+    const derived = Math.ceil((2 * Number(p99?.[1])) / 50) * 50;
+    expect(margin, `余量 ${margin} 与注释登记的 P99=${p99?.[1]} 推出的 ${derived} 不一致`).toBe(derived);
+    // 下界：余量至少覆盖 2× 实测尾部，否则等于把尾部免进预算
+    expect(margin).toBeGreaterThanOrEqual(2 * Number(p99?.[1]));
+  });
+
+  it('注释必须登记采样轮数（≥3）与原始迟到样本，小 N 取证可复核', () => {
+    const src = selfSrc();
+    const rounds = /(\d+) 轮全量并行/.exec(src);
+    expect(rounds, '注释没写采样轮数——分布无从复核').toBeTruthy();
+    expect(Number(rounds?.[1]), '采样轮数须 ≥3（工单口径）').toBeGreaterThanOrEqual(3);
+    expect(src, '注释没登记原始迟到样本').toContain('迟到样本');
+  });
 });
