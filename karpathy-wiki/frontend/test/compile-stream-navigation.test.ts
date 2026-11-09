@@ -19,6 +19,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { useCompileStore } from '../src/stores/compile';
 import { apiFetch } from '../src/utils/apiBase';
 import Progress from '../src/views/Progress.vue';
+import { waitForProgress, NO_TIMER_CHAIN } from './helpers/waitForProgress';
 
 vi.mock('../src/utils/apiBase', () => ({
   API_BASE: '',
@@ -62,13 +63,18 @@ function liveSSE() {
 
 /**
  * 收流并等到消费侧真正结束。
- * 为什么还要等一个宏任务：streamActive 是在 consumeSSE 的 finally 里复位的，
- * 而读流是跨多轮 Promise 的链，单轮 flushPromises（微任务）走不到那里。
+ * streamActive 在 consumeSSE 的 finally 里复位，而读流跨多轮 Promise 链，单轮 flushPromises
+ * （微任务）走不到那里。对「仍是当前流」的活跃流，用 waitForProgress 轮询可观测终态
+ * （streamActive 复位）而非裸写固定时长——原 setTimeout(20) 触发 T02753 防退化守护（T04878）。
+ * 被新一轮顶掉的旧流消费侧早已结束，无终态可等，只 drain 一轮微任务即可。
  */
-async function closeStream(stream: { close: () => void }): Promise<void> {
+async function closeStream(stream: { close: () => void }, settled?: () => boolean): Promise<void> {
   stream.close();
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  await flushPromises();
+  if (settled) {
+    await waitForProgress('closeStream 收流后消费侧 finally 复位 streamActive', settled, NO_TIMER_CHAIN);
+  } else {
+    await flushPromises();
+  }
 }
 
 /** 只挂 Progress 需要的桩，与 compile-batch-snapshot.test.ts 保持一致 */
@@ -195,7 +201,7 @@ describe('编译流切页不中断 (T04508)', () => {
     stream.push('batch_done', { status: 'done', message: '批量编译完成，共处理 1 个文件' });
     await flushPromises();
     // 服务端发完终止事件就收流；不收流则请求仍在途，streamActive 不该是 false
-    await closeStream(stream);
+    await closeStream(stream, () => !store.streamActive);
 
     expect(store.streamActive).toBe(false);
     expect(store.isDone).toBe(true);
@@ -255,7 +261,7 @@ describe('编译流切页不中断 (T04508)', () => {
     expect(compileSignals()[0].aborted).toBe(true);
     expect(compileSignals()[1].aborted).toBe(false);
     await closeStream(stream);
-    await closeStream(second);
+    await closeStream(second, () => !store.streamActive);
     wrapper.unmount();
   });
 
