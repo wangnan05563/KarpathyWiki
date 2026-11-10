@@ -320,6 +320,8 @@ export interface FileContent {
   content: string;
   frontmatter: Record<string, unknown>;
   body: string;
+  // T04554：坏 frontmatter 页返回 200 + 单行原因，正文仍可读；详情页据此显示警示。
+  frontmatter_error?: string;
 }
 
 // FR-11 扁平化页面项（GET /api/files/pages）：用于看板视图按 type 分列、日历视图按 created 分组
@@ -373,6 +375,8 @@ export interface HealthReport {
   stale: string[];
   // FR-18：知识时效过期页面（knowledge_status=stale 的 dated 页面，区别于 stale 的 lastModified 语义）
   knowledgeStale: string[];
+  // T04554：坏 frontmatter 页的可见清单（与后端 HealthReport 镜像）
+  frontmatterErrors: Array<{ path: string; reason: string }>;
 }
 
 // 仪表盘统计（GET /api/stats）
@@ -893,6 +897,8 @@ export interface SkillMeta {
   entryFile: string;
   // T02917 启用状态（与后端 SkillMeta 镜像）：缺失视为启用
   enabled: boolean;
+  // T04554：SKILL.md frontmatter 解析失败时的单行原因（description 已回落正文首段）
+  metadataError?: string;
 }
 
 // 技能详情（GET /api/skills/:id 返回）
@@ -1370,6 +1376,8 @@ export interface MisplacedPage {
   type: string;
   suggestedPath: string;
   conflict: string | null;
+  // T04554：frontmatter 解析失败时的单行原因（title/type 已回落，建议落点因此不确定）
+  metadataError?: string;
 }
 
 // 一键归位结果：promoted 在 dryRun 下是「将要执行」的预览，skipped 是规则上不该自动动的

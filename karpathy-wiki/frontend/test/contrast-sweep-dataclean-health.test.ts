@@ -92,6 +92,8 @@ const AUDIT: AuditRow[] = [
   { label: '清洗页·AI 新增项标记', fg: 'var(--accent-readable)', bg: CARD, kind: 'text' },
   { label: '清洗页·AI 流转箭头', fg: 'var(--accent-readable)', bg: CARD, kind: 'text' },
   { label: '清洗页·AI 分组代表页（淡青 tint 面）', fg: 'var(--accent-readable)', bg: 'var(--accent-cyan-a10, rgba(0, 255, 200, 0.1))', kind: 'text' },
+  // T04554：错位页因坏 frontmatter 导致落点不确定的提示
+  { label: '清洗页·错位页元信息解析失败提示（红族）', fg: 'var(--pink-readable)', bg: CARD, kind: 'text' },
   // —— 体检页（30，含 T04460 转真的 2 处琥珀前景 + T04563 的需人工处理提示）——
   { label: '体检页·主按钮 hover 描边', fg: 'var(--accent-readable)', bg: CARD, kind: 'ui' },
   { label: '体检页·主按钮 hover 文字', fg: 'var(--accent-readable)', bg: CARD, kind: 'text' },
@@ -127,6 +129,10 @@ const AUDIT: AuditRow[] = [
   { label: '体检页·估算依据「低置信」琥珀文字', fg: 'var(--warning-readable)', bg: CARD, kind: 'text' },
   // T04563：永久失败项（认证/413/预算）的「需人工处理」提示
   { label: '体检页·需人工处理提示（红族）', fg: 'var(--pink-readable)', bg: CARD, kind: 'text' },
+  // T04554：坏 frontmatter 汇总条与可点击清单
+  { label: '体检页·坏头汇总条描边（红族）', fg: 'var(--pink-readable)', bg: 'var(--accent-magenta-a08)', kind: 'ui' },
+  { label: '体检页·坏头汇总计数（红族）', fg: 'var(--pink-readable)', bg: 'var(--accent-magenta-a08)', kind: 'text' },
+  { label: '体检页·坏头页路径（青族）', fg: 'var(--accent-readable)', bg: 'var(--bg-deep)', kind: 'text' },
 ];
 
 /** readable 消费点总数（数 token 名出现次数，不受单行规则 / 内联 style / !important 排版影响） */
@@ -139,18 +145,18 @@ const TINT_STROKES: Record<string, Record<string, number>> = {
 };
 
 describe('T04449 推广第三组：清洗页/体检页前景逐主题达标', () => {
-  it('8 主题 × 63 面全部达 AA（文本 4.5 / 非文本 3.0）', () => {
+  it('8 主题 × 67 面全部达 AA（文本 4.5 / 非文本 3.0）', () => {
     const failures = auditThemes(AUDIT, themes);
     expect(failures, formatFailures(failures)).toEqual([]);
   });
 
   it('清单规模与两页实现严格对齐（防止清单与代码脱钩空转）', () => {
-    expect(AUDIT.length).toBe(63);
+    expect(AUDIT.length).toBe(67);
     const dc = readFileSync(join(ROOT, FILES[0]), 'utf8');
     const he = readFileSync(join(ROOT, FILES[1]), 'utf8');
     // T04468 起计数含描边账（DataClean 16 / Health 22 处 tint 描边接入 readable）
-    expect(readableRefCount(dc), 'DataClean.vue 的 readable 消费点数与登记值不一致').toBe(49);
-    expect(readableRefCount(he), 'Health.vue 的 readable 消费点数与登记值不一致').toBe(52);
+    expect(readableRefCount(dc), 'DataClean.vue 的 readable 消费点数与登记值不一致').toBe(50);
+    expect(readableRefCount(he), 'Health.vue 的 readable 消费点数与登记值不一致').toBe(55);
   });
 
   it('每个包裹表达式括号平衡（防止接入器吃掉右括号）', () => {

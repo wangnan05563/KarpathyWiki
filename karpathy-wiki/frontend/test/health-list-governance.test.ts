@@ -23,6 +23,7 @@ function report(over: Partial<HealthReport> = {}): HealthReport {
     brokenLinks: [{ from: 'notes/a.md', to: '缺失页' }],
     stale: ['old/x.md'],
     knowledgeStale: ['dated/y.md'],
+    frontmatterErrors: [],
     ...over,
   };
 }

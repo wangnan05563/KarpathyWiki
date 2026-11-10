@@ -2662,6 +2662,18 @@ onMounted(async () => {
           <div v-else class="content-show">
             <!-- T00269：文档标题与操作按钮已移至 Tab 行（下载/编辑按钮在 Tab 页签右侧），此处不再重复显示 -->
 
+            <!-- T04554：坏 frontmatter 页后端仍回 200 + 正文；这里显式告知「元信息不可用但正文可读」，
+                 用户可据原因手工修正坏头，而不是把「没有元信息」误当成页面本身没有字段 -->
+            <div
+              v-if="activeTab.content.frontmatter_error"
+              class="fm-error-alert"
+              role="alert"
+              data-testid="frontmatter-error-alert"
+            >
+              <strong>元信息解析失败，正文仍可读</strong>
+              <span class="fm-error-reason">{{ activeTab.content.frontmatter_error }}</span>
+            </div>
+
             <!-- 编辑模式 -->
             <el-input
               v-if="editing"
@@ -3617,6 +3629,31 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--text-base);
   font-family: var(--font-mono);
+}
+
+/* T04554：坏 frontmatter 警示——正文照常渲染，只把「元信息不可用」与原因显式摆出来 */
+.fm-error-alert {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border: 1px solid var(--pink-readable, var(--neon-pink));
+  border-radius: 12px;
+  background: var(--accent-magenta-a08);
+  color: var(--text-base);
+  font-size: 13px;
+}
+
+.fm-error-alert strong {
+  color: var(--pink-readable, var(--neon-pink));
+}
+
+.fm-error-reason {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  word-break: break-all;
 }
 
 .fm-chip strong {

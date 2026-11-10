@@ -561,6 +561,10 @@ export class VaultService {
       name: string;
       dir: string;
       frontmatter: Record<string, unknown>;
+      // T04554：解析失败时带上单行原因（与 /api/files 的 frontmatter_error 同源），
+      // 让体检能给出「本库 N 页元信息解析失败」的计数与清单；
+      // 读取失败（权限/占用）不是坏头，不填这个字段。
+      frontmatterError?: string;
     }>
   > {
     const pairs: Array<{ dir: string; file: string }> = [];
@@ -578,20 +582,26 @@ export class VaultService {
     return mapWithConcurrency(pairs, DEFAULT_SCAN_CONCURRENCY, async ({ dir, file }) => {
       const rel = `${dir}/${file}`;
       let frontmatter: Record<string, unknown> = {};
+      let frontmatterError: string | undefined;
+      let content: string | null = null;
       try {
-        const content = await this.readFile(rel);
+        content = await this.readFile(rel);
+      } catch {
+        // 读取失败时返回空 frontmatter，不阻断整体列表
+      }
+      if (content !== null) {
         // T04504：走收敛层。返回的 data 是与 gray-matter 内容缓存脱钩的副本——
         // 原来直连解析时字节相同的两页会共用同一个 data 对象，调用方给一页加字段就串到另一页。
         const parsed = tryParsePage(content);
         if (parsed.ok) frontmatter = parsed.data;
-      } catch {
-        // 读取失败时返回空 frontmatter，不阻断整体列表
+        else frontmatterError = parsed.reason;
       }
       return {
         path: rel,
         name: file.slice(0, -3),
         dir,
         frontmatter,
+        ...(frontmatterError ? { frontmatterError } : {}),
       };
     });
   }

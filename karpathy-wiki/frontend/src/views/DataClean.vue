@@ -845,6 +845,10 @@ onMounted(() => loadPages());
             <code class="misplaced-from">{{ m.path }}</code>
             <span class="misplaced-arrow" aria-hidden="true">→</span>
             <code class="misplaced-to">{{ m.suggestedPath }}</code>
+            <!-- T04554：坏头的错位页 title/type 已回落，建议落点因此不确定，必须标出来 -->
+            <span v-if="m.metadataError" class="misplaced-meta-error">
+              元信息解析失败（建议落点不确定）：{{ m.metadataError }}
+            </span>
             <template v-if="m.conflict">
               <el-tag type="danger" size="small">需人工确认</el-tag>
               <span class="misplaced-conflict">{{ m.conflict }}</span>
@@ -1631,6 +1635,13 @@ onMounted(() => loadPages());
 .misplaced-conflict {
   font-size: 12px;
   color: var(--text-soft);
+}
+
+/* T04554：坏头导致建议落点不确定 */
+.misplaced-meta-error {
+  font-size: 12px;
+  color: var(--pink-readable, var(--neon-pink));
+  word-break: break-all;
 }
 
 .misplaced-note {

@@ -10,6 +10,7 @@
 //     暂停/继续/取消 + 启动前量化估算（问题数 / LLM 调用次数 / 预计耗时，标注估算依据）。
 // 列表建模与选择计算全部走纯函数，行渲染收敛到 HealthIssueList，本文件只做编排。
 import { API_BASE, apiFetch } from '../utils/apiBase';
+import { gotoView } from '../utils/nav';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { ElMessage } from 'element-plus';
@@ -118,6 +119,21 @@ const fixableTotal = computed(() => split.value.autoFixable);
 const healthStatus = computed<'healthy' | 'warning'>(() =>
   totalIssues.value === 0 ? 'healthy' : 'warning',
 );
+
+// T04554：坏 frontmatter 页的可见计数与清单。这类页不参与孤立/断链/过期判定
+// （元信息已退化为空），因此单列一条，不混进「N 个问题」。
+const frontmatterErrors = computed(() => report.value?.frontmatterErrors ?? []);
+const showFrontmatterErrors = ref(false);
+
+// 复用 Graph/RefsList 的一次性跳转通道：Browse.onMounted 消费 jumpPath 并自动打开详情。
+function openFrontmatterError(path: string): void {
+  try {
+    sessionStorage.setItem('karpathy:jumpPath', path);
+  } catch {
+    // 隐私模式写入失败：仍尝试切视图，至少不静默无响应
+  }
+  gotoView('browse');
+}
 
 // 行在批量作业里的状态：失败/未消解覆盖成功（同一 key 重试后以最新结局为准）
 const jobStates = computed<Record<string, 'done' | 'failed' | 'ineffective'>>(() => {
@@ -623,6 +639,42 @@ onMounted(() => {
           可自动修复 {{ split.autoFixable }} · 需人工判断 {{ split.manualReview }}
         </span>
       </div>
+
+      <!-- T04554：坏 frontmatter 的可见计数（含 0），清单可点开直达详情页修正坏头。
+           不并入上面的「问题」总数：这些页的元信息已退化，孤立/断链/过期判定对它们不成立。 -->
+      <div
+        v-if="report"
+        class="fm-error-bar"
+        :class="{ 'has-error': frontmatterErrors.length > 0 }"
+        data-testid="frontmatter-error-bar"
+      >
+        <span class="fm-error-count">本库 {{ frontmatterErrors.length }} 页元信息解析失败</span>
+        <span v-if="frontmatterErrors.length > 0" class="fm-error-tip">
+          列表元信息为空、待审核标签队列会跳过这些页；正文仍可读，点路径可打开并手工修正
+        </span>
+        <el-button
+          v-if="frontmatterErrors.length > 0"
+          size="small"
+          text
+          class="tool-btn"
+          data-testid="frontmatter-error-toggle"
+          @click="showFrontmatterErrors = !showFrontmatterErrors"
+        >
+          {{ showFrontmatterErrors ? '收起清单' : '查看清单' }}
+        </el-button>
+      </div>
+      <ul
+        v-if="showFrontmatterErrors && frontmatterErrors.length > 0"
+        class="fm-error-list"
+        data-testid="frontmatter-error-list"
+      >
+        <li v-for="item in frontmatterErrors" :key="item.path" class="fm-error-item">
+          <button type="button" class="fm-error-path" @click="openFrontmatterError(item.path)">
+            {{ item.path }}
+          </button>
+          <span class="fm-error-reason">{{ item.reason }}</span>
+        </li>
+      </ul>
 
       <!-- 批量修复作业面板：由后端作业快照驱动，刷新/切页后仍可恢复 -->
       <div v-if="job" class="job-panel" :class="`is-${job.status}`">
@@ -1144,6 +1196,85 @@ onMounted(() => {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-soft);
+}
+
+/* T04554：坏 frontmatter 可见计数。0 时低调（确认无坏页），>0 时才用告警色。 */
+.fm-error-bar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: -8px 0 18px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.fm-error-bar.has-error {
+  padding: 8px 12px;
+  border: 1px solid var(--pink-readable, var(--neon-pink));
+  border-radius: 10px;
+  background: var(--accent-magenta-a08);
+  color: var(--text-base);
+}
+
+.fm-error-bar.has-error .fm-error-count {
+  color: var(--pink-readable, var(--neon-pink));
+  font-weight: 700;
+}
+
+.fm-error-tip {
+  color: var(--text-soft);
+}
+
+.fm-error-list {
+  position: relative;
+  z-index: 1;
+  margin: -8px 0 20px;
+  padding: 8px 12px;
+  list-style: none;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-deep);
+}
+
+.fm-error-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.fm-error-item:last-child {
+  border-bottom: none;
+}
+
+.fm-error-path {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-readable, var(--neon-cyan));
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  word-break: break-all;
+}
+
+.fm-error-path:hover,
+.fm-error-path:focus-visible {
+  text-decoration: underline;
+}
+
+.fm-error-reason {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-soft);
+  word-break: break-all;
 }
 
 /* ===== 列表工具条 / 选中汇总条 ===== */

@@ -110,10 +110,14 @@ function normalizeEnabled(raw: unknown): boolean {
 
 // 从 SKILL.md 内容解析技能名称和描述
 // 优先级：frontmatter.name/description > 首个标题 > 文件名
-function parseSkillMetadata(content: string, fallbackName: string): { name: string; description: string; entryFile: string; enabled: boolean } {
+function parseSkillMetadata(
+  content: string,
+  fallbackName: string,
+): { name: string; description: string; entryFile: string; enabled: boolean; metadataError?: string } {
   let name = fallbackName;
   let description = '';
   let enabled = true;
+  let metadataError: string | undefined;
 
   // T04504：走收敛层。直连 matter() 时坏 YAML 第一轮抛、第二轮起返回空 data，
   // 于是同一份 SKILL.md 的描述在「重启后第一次列表」和「之后每次列表」之间换内容。
@@ -133,9 +137,13 @@ function parseSkillMetadata(content: string, fallbackName: string): { name: stri
   } else {
     // gray-matter 解析失败时用纯文本提取首段
     description = extractFirstParagraph(content.trim());
+    // T04554：回落描述与技能作者声明的 description 不是一回事，列表须标注原因
+    metadataError = parsed.reason;
   }
 
-  return { name, description, entryFile: 'SKILL.md', enabled };
+  return metadataError
+    ? { name, description, entryFile: 'SKILL.md', enabled, metadataError }
+    : { name, description, entryFile: 'SKILL.md', enabled };
 }
 
 // 计算目录占用字节数（递归遍历所有文件）
@@ -256,7 +264,7 @@ async function importZipSkill(
   // 解析 SKILL.md 提取元数据
   const skillMdPath = path.resolve(targetDir, skillMdEntry.entryName);
   const skillMdContent = await fs.readFile(skillMdPath, 'utf8');
-  const { name, description, entryFile, enabled } = parseSkillMetadata(skillMdContent, fallbackName);
+  const { name, description, entryFile, enabled, metadataError } = parseSkillMetadata(skillMdContent, fallbackName);
 
   const size = await calculateDirSize(targetDir);
   const meta: SkillMeta = {
@@ -268,6 +276,7 @@ async function importZipSkill(
     size,
     entryFile,
     enabled,
+    ...(metadataError ? { metadataError } : {}),
   };
 
   return { meta, warnings };
@@ -288,7 +297,7 @@ async function importMarkdownSkill(
   await fs.mkdir(targetDir, { recursive: true });
 
   const content = fileBuffer.toString('utf8');
-  const { name, description, entryFile, enabled } = parseSkillMetadata(content, fallbackName);
+  const { name, description, entryFile, enabled, metadataError } = parseSkillMetadata(content, fallbackName);
 
   // 写入 SKILL.md
   const skillMdPath = path.resolve(targetDir, entryFile);
@@ -304,6 +313,7 @@ async function importMarkdownSkill(
     size,
     entryFile,
     enabled,
+    ...(metadataError ? { metadataError } : {}),
   };
 
   return { meta, warnings };
@@ -380,13 +390,23 @@ export async function listSkills(): Promise<SkillMeta[]> {
       if (!entryFile) return null;
 
       const content = await fs.readFile(path.resolve(skillDir, entryFile), 'utf8');
-      const { name, description, enabled } = parseSkillMetadata(content, skillId);
+      const { name, description, enabled, metadataError } = parseSkillMetadata(content, skillId);
       const stat = await fs.stat(skillDir);
       const size = await calculateDirSize(skillDir);
       const allFiles = await listFilesRecursive(skillDir);
       const format: 'zip' | 'md' = allFiles.length <= 1 ? 'md' : 'zip';
 
-      return { id: skillId, name, description, format, importedAt: stat.mtime.toISOString(), size, entryFile, enabled };
+      return {
+        id: skillId,
+        name,
+        description,
+        format,
+        importedAt: stat.mtime.toISOString(),
+        size,
+        entryFile,
+        enabled,
+        ...(metadataError ? { metadataError } : {}),
+      };
     } catch {
       // 单个技能读取失败时跳过，不阻断列表
       return null;
@@ -430,7 +450,7 @@ export async function getSkillDetail(skillId: string): Promise<SkillDetail | nul
   }
 
   const content = await fs.readFile(path.resolve(skillDir, entryFile), 'utf8');
-  const { name, description, enabled } = parseSkillMetadata(content, skillId);
+  const { name, description, enabled, metadataError } = parseSkillMetadata(content, skillId);
   const stat = await fs.stat(skillDir);
   const size = await calculateDirSize(skillDir);
   const files = await listFilesRecursive(skillDir);
@@ -447,6 +467,7 @@ export async function getSkillDetail(skillId: string): Promise<SkillDetail | nul
     size,
     entryFile,
     enabled,
+    ...(metadataError ? { metadataError } : {}),
     content,
     files,
   };

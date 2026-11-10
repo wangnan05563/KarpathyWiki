@@ -302,6 +302,10 @@ export interface HealthReport {
   stale: string[];
   // FR-18 知识时效过期页面（knowledge_status = stale 的 dated 页面），与 stale（lastModified）概念区分
   knowledgeStale: string[];
+  // T04554：坏 frontmatter 页的可见清单。此前四类读点一致地静默跳过（列表退化为 {}、
+  // 待标签队列少一页、错位页 type 读空、技能描述回落正文），用户看不到任何痕迹；
+  // 这里与 knowledgeStale 复用同一次 listAllPages 扫描，不额外读盘。
+  frontmatterErrors: Array<{ path: string; reason: string }>;
 }
 
 // §4.6 一键修复输入。issueType 区分修复策略，target 是具体问题目标。
@@ -886,6 +890,9 @@ export interface MisplacedPage {
   type: string;
   suggestedPath: string;
   conflict: string | null;
+  // T04554：frontmatter 解析失败时的单行原因。此时 title 已回落为文件名、type 为空，
+  // suggestedPath 按「留在原顶层目录」推断——清单要标出「这个建议是因为坏头而不确定」。
+  metadataError?: string;
 }
 
 // 归位结果：promoteMisplacedPages 返回（dryRun=true 时 promoted 是「将要执行」的预览）
@@ -1279,6 +1286,9 @@ export interface SkillMeta {
   // T02917 启用状态：落在 SKILL.md frontmatter 的 enabled 字段。
   // 缺失即视为 true——存量技能升级后不得被静默禁用。
   enabled: boolean;
+  // T04554：SKILL.md 的 frontmatter 解析失败时的单行原因。
+  // 此时 description 是正文首段回落的产物，与技能作者声明的 description 不是一回事，列表须标注。
+  metadataError?: string;
 }
 
 // 技能详情（GET /api/skills/:id 返回）

@@ -335,7 +335,12 @@ export class HarnessAdapter implements EngineAdapter {
     const knowledgeStale = pages
       .filter((p) => computeKnowledgeStatus(p.frontmatter, knowledgeStaleDays) === 'stale')
       .map((p) => p.path);
-    return { orphans, brokenLinks, stale, knowledgeStale };
+    // T04554：坏 frontmatter 页的可见清单。与 knowledgeStale 复用同一次全库扫描——
+    // 此前这些页在列表/待标签队列/错位检测里被一致地静默跳过，用户没有任何可查的痕迹。
+    const frontmatterErrors = pages
+      .filter((p) => p.frontmatterError)
+      .map((p) => ({ path: p.path, reason: p.frontmatterError as string }));
+    return { orphans, brokenLinks, stale, knowledgeStale, frontmatterErrors };
   }
 
   // 清除健康检查缓存（用于手动触发重新体检）

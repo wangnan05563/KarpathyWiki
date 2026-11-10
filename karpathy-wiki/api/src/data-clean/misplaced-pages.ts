@@ -65,16 +65,21 @@ async function collectPagesUnder(vault: VaultService, dirRel: string, out: strin
 }
 
 /** 读 frontmatter 的 title/type；读不出来（权限/编码/元信息解析失败）时退回文件名，仍把这一页列出来 */
-async function readPageMeta(vault: VaultService, rel: string): Promise<{ title: string; type: string }> {
+async function readPageMeta(
+  vault: VaultService,
+  rel: string,
+): Promise<{ title: string; type: string; metadataError?: string }> {
   const fallbackTitle = path.posix.basename(rel, '.md');
   try {
     // T04504：走收敛层。这里 catch 与「解析失败」原本都落到同一个兜底值，分叉不可直接观测；
     // 接入是为了全站口径统一（守护锁）+ 与 gray-matter 内容缓存脱钩（拿到的 data 是副本）。
     const parsed = tryParsePage(await vault.readFile(rel));
+    // T04554：解析失败时 type 为空 → 建议目录按默认推断，须把「不确定」的原因带回清单
+    const metadataError = parsed.ok ? undefined : parsed.reason;
     const data: Record<string, unknown> = parsed.ok ? parsed.data : {};
     const title = typeof data.title === 'string' && data.title.trim() !== '' ? data.title : fallbackTitle;
     const type = typeof data.type === 'string' ? data.type.trim() : '';
-    return { title, type };
+    return metadataError ? { title, type, metadataError } : { title, type };
   } catch {
     return { title: fallbackTitle, type: '' };
   }
@@ -125,9 +130,16 @@ export async function detectMisplacedPages(vault: VaultService): Promise<Misplac
   const items: MisplacedPage[] = [];
   relPaths.sort((a, b) => a.localeCompare(b));
   for (const rel of relPaths) {
-    const { title, type } = await readPageMeta(vault, rel);
+    const { title, type, metadataError } = await readPageMeta(vault, rel);
     const suggestedPath = `${resolveTargetDir(type, rel.split('/')[0])}/${path.posix.basename(rel)}`;
-    items.push({ path: rel, title, type, suggestedPath, conflict: null });
+    items.push({
+      path: rel,
+      title,
+      type,
+      suggestedPath,
+      conflict: null,
+      ...(metadataError ? { metadataError } : {}),
+    });
   }
   // 冲突要在整批都算完 target 之后再判：两页各自都不冲突、并到一起才撞车的情况很常见
   for (const item of items) {

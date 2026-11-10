@@ -89,6 +89,39 @@ describe('列表状态标识', () => {
   });
 });
 
+describe('坏 frontmatter 标注（T04554）', () => {
+  it('列表标「元信息异常」，详情说明描述为正文首段回落', async () => {
+    const broken = {
+      ...onSkill,
+      id: 'broken-skill',
+      name: '坏头技能',
+      metadataError: 'bad indentation of a mapping entry',
+    };
+    api.fetchSkills.mockImplementation(async (url: string) => {
+      if (url.endsWith('/skills/broken-skill')) {
+        return okJson({ ...broken, files: [], content: '正文首段' });
+      }
+      return okJson({ skills: [broken, onSkill] });
+    });
+    const wrapper = await mountPage();
+
+    const item = wrapper.findAll('.skill-item').find((n) => n.text().includes('坏头技能'))!;
+    const warn = item.find('.status-badge.status-warn');
+    expect(warn.exists(), '坏头技能列表项必须可辨识').toBe(true);
+    expect(warn.text()).toBe('元信息异常');
+    expect(warn.attributes('title')).toContain('bad indentation of a mapping entry');
+
+    const normal = wrapper.findAll('.skill-item').find((n) => n.text().includes('启用中的技能'))!;
+    expect(normal.find('.status-badge.status-warn').exists(), '正常技能不得误标').toBe(false);
+
+    await item.find('.skill-main').trigger('click');
+    await flushPromises();
+    const detailWarn = wrapper.find('.detail-desc.detail-warn');
+    expect(detailWarn.exists(), '详情页必须说明描述来源是回落').toBe(true);
+    expect(detailWarn.text()).toContain('元信息解析失败，以下描述为正文首段回落');
+  });
+});
+
 describe('开关行为', () => {
   it('启用被禁用的技能：PATCH 打对端点与 body，成功后计数回升', async () => {
     api.patchEnabled.mockResolvedValue(okJson({ ...offSkill, enabled: true }));

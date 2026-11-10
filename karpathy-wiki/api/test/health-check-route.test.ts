@@ -25,6 +25,7 @@ const REPORT: HealthReport = {
   brokenLinks: [{ from: 'b.md', to: 'missing.md' }],
   stale: ['c.md'],
   knowledgeStale: ['d.md'],
+  frontmatterErrors: [],
 };
 
 // ===== 可编程 adapter 桩 =====

@@ -149,6 +149,22 @@ describe('DataClean 子目录页面块（T02797 真挂载）', () => {
     expect(promoteBodies, '非管理员不得发出归位请求').toHaveLength(0);
   });
 
+  it('坏头导致落点不确定时逐条标注原因（T04554）', async () => {
+    misplacedList = [
+      { ...STRAY, metadataError: 'bad indentation of a mapping entry' },
+      STRAY_CLASH,
+    ];
+    const wrapper = await mountAs('admin');
+
+    const rows = wrapper.findAll('.misplaced-row');
+    expect(rows).toHaveLength(2);
+    const warn = rows[0].find('.misplaced-meta-error');
+    expect(warn.exists(), '带 metadataError 的错位页必须标注').toBe(true);
+    expect(warn.text()).toContain('元信息解析失败（建议落点不确定）');
+    expect(warn.text()).toContain('bad indentation of a mapping entry');
+    expect(rows[1].find('.misplaced-meta-error').exists(), '正常页不得误标').toBe(false);
+  });
+
   it('检测接口失败时不判整页失败：主表格照常渲染，只提示一次', async () => {
     misplacedList = [];
     (apiFetch as any).mockImplementation((url: string) =>

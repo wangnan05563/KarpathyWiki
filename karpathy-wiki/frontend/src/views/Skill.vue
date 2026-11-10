@@ -335,6 +335,10 @@ onMounted(() => {
                 <span class="status-badge" :class="skill.enabled ? 'status-on' : 'status-off'">
                   {{ skill.enabled ? '启用' : '已禁用' }}
                 </span>
+                <!-- T04554：SKILL.md frontmatter 坏时描述会回落正文首段，不是作者声明 -->
+                <span v-if="skill.metadataError" class="status-badge status-warn" :title="`元信息解析失败：${skill.metadataError}`">
+                  元信息异常
+                </span>
               </div>
               <div class="skill-desc">{{ skill.description || '（无描述）' }}</div>
               <div class="skill-meta">
@@ -399,6 +403,9 @@ onMounted(() => {
             <span class="dot">·</span>
             <span>入口: {{ store.currentDetail.entryFile }}</span>
           </div>
+          <p v-if="store.currentDetail.metadataError" class="detail-desc detail-warn">
+            元信息解析失败，以下描述为正文首段回落：{{ store.currentDetail.metadataError }}
+          </p>
           <p v-if="store.currentDetail.description" class="detail-desc">{{ store.currentDetail.description }}</p>
 
           <!-- 文件列表 -->
@@ -724,6 +731,13 @@ onMounted(() => {
   color: var(--text-soft);
 }
 
+/* T04554：SKILL.md frontmatter 解析失败 */
+.status-badge.status-warn {
+  background: var(--accent-pink-a15);
+  color: var(--pink-readable, var(--neon-pink));
+  cursor: help;
+}
+
 .skill-icon {
   flex-shrink: 0;
 }
@@ -912,6 +926,14 @@ onMounted(() => {
   background: var(--accent-purple-a08);
   border-radius: 8px;
   margin: 0;
+}
+
+/* T04554：frontmatter 坏头的说明与回落描述区分开 */
+.detail-desc.detail-warn {
+  color: var(--pink-readable, var(--neon-pink));
+  background: var(--accent-pink-a08);
+  border: 1px solid var(--pink-readable, var(--neon-pink));
+  word-break: break-all;
 }
 
 .files-section,

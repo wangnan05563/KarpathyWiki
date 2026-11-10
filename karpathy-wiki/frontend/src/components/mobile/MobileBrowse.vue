@@ -383,6 +383,10 @@ onBeforeUnmount(() => {
             <span v-for="t in currentTags" :key="t" class="mb-chip">#{{ t }}</span>
           </div>
         </div>
+        <!-- T04554：坏 frontmatter 页仍可读正文，显式标注原因 -->
+        <div v-if="current.frontmatter_error" class="mb-fm-error" role="alert" data-testid="mb-frontmatter-error-alert">
+          元信息解析失败，正文仍可读：{{ current.frontmatter_error }}
+        </div>
         <div class="mb-detail-body">
           <MarkdownRenderer :content="detailContent" />
         </div>
@@ -641,6 +645,19 @@ onBeforeUnmount(() => {
   border-radius: 14px;
   padding: 16px;
   box-shadow: 0 1px 3px rgba(17, 17, 17, 0.04);
+}
+
+/* T04554：坏 frontmatter 警示（正文仍可读） */
+.mb-fm-error {
+  margin: 0 14px 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--m-danger, #d93636);
+  background: var(--m-danger-soft, rgba(217, 54, 54, 0.08));
+  border: 1px solid var(--m-danger-border, rgba(217, 54, 54, 0.3));
+  word-break: break-all;
 }
 
 .mb-error {

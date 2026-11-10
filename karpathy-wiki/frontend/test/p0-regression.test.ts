@@ -333,6 +333,7 @@ describe('P0-9 [H1+H2/REQ-028+REQ-030] 体检列表可筛可批量、批量修�
       brokenLinks: [{ from: 'entities/c.md', to: 'entities/missing.md' }],
       stale: ['entities/d.md'],
       knowledgeStale: ['concepts/e.md'],
+      frontmatterErrors: [],
     });
 
   it('四类问题摊平成同一行模型：可自动修复 / 需人工判断分账报警', () => {

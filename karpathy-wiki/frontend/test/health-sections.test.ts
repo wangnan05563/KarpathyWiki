@@ -17,6 +17,7 @@ function report(): HealthReport {
     brokenLinks: [{ from: 'b.md', to: '缺失页' }],
     stale: ['c.md'],
     knowledgeStale: ['d.md'],
+    frontmatterErrors: [],
   };
 }
 
