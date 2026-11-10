@@ -29,6 +29,7 @@ const EP_DEFAULT = {
   '--el-text-color-regular': '#606266',
   '--el-text-color-secondary': '#909399',
   '--el-text-color-placeholder': '#a8abb2',
+  '--el-color-primary': '#409eff',
   '--el-color-primary-light-9': '#ecf5ff',
 } as const;
 
@@ -173,6 +174,80 @@ describe('T04904 · 表格真实落点面', () => {
       const pre = { name, decls };
       expect(rgbToHex(rowOf(pre)), `${name} 负控制应回落到 EP 白行`).toBe('#ffffff');
       expect(worstRatio(ROLE_USER_FG, ROLE_USER_BG, decls, rowOf(pre)), `${name} 改前实测 ${want}`).toBeCloseTo(want, 2);
+    }
+  });
+});
+
+// T04906：5 个浅色主题此前没有任何 --el-* 覆盖，表头与排序三角直接落到 EP 库默认值
+// （表头 #909399 白行 3.08、未激活三角 #a8abb2 2.30、激活三角 #409eff 2.78）。
+// 本组把「白行上的表头/三角」从无人审的状态纳入实算：行面仍须是 EP 白（不改深行），
+// 三项分别取本主题正文色 / soft / readable。tokens.css 的 EP 桥只在 [data-theme="dark"] 块里，
+// 浅色主题不继承，故回落基准就是 EP_DEFAULT——负控制按此复现改前读数。
+describe('T04906 · 浅色主题表头文字与排序三角（EP 白行）', () => {
+  /** index.css 共享规则里激活三角的完整表达式（未声明 --sort-caret-active 时回落 EP 主色） */
+  const SORT_CARET_ACTIVE = 'var(--sort-caret-active, var(--el-color-primary))';
+  const ratio = (t: ThemeTokens, expr: string) =>
+    worstRatio(expr, rgbToHex(rowOf(t)), t.decls, pageOf(t.decls));
+
+  it('5 主题：表头文字 ≥4.5，未激活/激活排序三角 ≥3.0，行面仍为 EP 白', () => {
+    const failures: string[] = [];
+    for (const name of LIGHT_THEMES) {
+      const t = theme(name);
+      expect(rgbToHex(rowOf(t)), `${name} 行面应仍是 EP 默认白（不得借深行凑对比度）`).toBe('#ffffff');
+      for (const [label, expr, kind] of [
+        ['表头文字', 'var(--el-text-color-secondary)', 'text'],
+        ['未激活三角', 'var(--el-text-color-placeholder)', 'ui'],
+        ['激活三角', SORT_CARET_ACTIVE, 'ui'],
+      ] as const) {
+        const r = ratio(t, expr);
+        if (r < THRESHOLD[kind]) failures.push(`${name} · ${label} = ${r.toFixed(2)}（需 ≥ ${THRESHOLD[kind]}）`);
+      }
+    }
+    expect(failures, failures.join('\n  ')).toEqual([]);
+  });
+
+  it('取值锁：表头=正文色 / 未激活三角=soft / 激活三角=readable', () => {
+    const want = {
+      macaron: ['#5c4a66', '#8a7a96', '#2b7a6e'],
+      enterprise: ['#1e293b', '#475569', '#046e80'],
+      ecommerce: ['#2d2d3f', '#6b6b7d', '#006b93'],
+      portfolio: ['#2d2d2d', '#5a5a5a', '#6f5b44'],
+      'light-business': ['#2b2b2b', '#5a5f66', '#1554d1'],
+    } as const;
+    for (const [name, [header, placeholder, active]] of Object.entries(want)) {
+      const t = theme(name);
+      expect(rgbToHex(solid(ep(t, '--el-text-color-secondary'), t)), `${name} 表头`).toBe(header);
+      expect(rgbToHex(solid(ep(t, '--el-text-color-placeholder'), t)), `${name} 未激活三角`).toBe(placeholder);
+      expect(rgbToHex(solid(t.decls.get('--sort-caret-active')!, t)), `${name} 激活三角`).toBe(active);
+    }
+  });
+
+  it('源码接入锁：5 主题声明三项 token，index.css 共享规则覆盖 EP 两个激活态', () => {
+    for (const name of LIGHT_THEMES) {
+      const src = readFileSync(join(ROOT, 'src/styles/themes', `${name}.css`), 'utf8');
+      expect(src, `${name} 缺表头映射`).toContain('--el-text-color-secondary: var(--text-base);');
+      expect(src, `${name} 缺未激活三角映射`).toContain('--el-text-color-placeholder: var(--text-soft);');
+      expect(src, `${name} 缺激活三角映射`).toContain('--sort-caret-active: var(--accent-readable);');
+    }
+    const idx = readFileSync(join(ROOT, 'src/styles/themes/index.css'), 'utf8');
+    expect(idx, 'index.css 缺 ascending 激活态覆盖').toContain(
+      '.el-table .ascending .sort-caret.ascending { border-bottom-color: var(--sort-caret-active, var(--el-color-primary)); }',
+    );
+    expect(idx, 'index.css 缺 descending 激活态覆盖').toContain(
+      '.el-table .descending .sort-caret.descending { border-top-color: var(--sort-caret-active, var(--el-color-primary)); }',
+    );
+  });
+
+  it('负控制：撤掉三项映射后回落 EP 库默认 3.08 / 2.30 / 2.78（改前状态会让阈值锁红）', () => {
+    for (const name of LIGHT_THEMES) {
+      const decls = new Map(theme(name).decls);
+      for (const k of ['--el-text-color-secondary', '--el-text-color-placeholder', '--sort-caret-active']) decls.delete(k);
+      decls.set('--el-color-primary', EP_DEFAULT['--el-color-primary']);
+      const pre = { name, decls };
+      expect(rgbToHex(rowOf(pre)), `${name} 负控制行面应回落 EP 白`).toBe('#ffffff');
+      expect(ratio(pre, ep(pre, '--el-text-color-secondary')), `${name} 表头改前 3.08`).toBeCloseTo(3.08, 2);
+      expect(ratio(pre, ep(pre, '--el-text-color-placeholder')), `${name} 未激活三角改前 2.30`).toBeCloseTo(2.3, 2);
+      expect(ratio(pre, SORT_CARET_ACTIVE), `${name} 激活三角改前 2.78`).toBeCloseTo(2.78, 2);
     }
   });
 });

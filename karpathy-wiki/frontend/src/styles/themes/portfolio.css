@@ -47,6 +47,13 @@
   --text-soft: #5a5a5a;
   --text-dim: #9a9a9a;
 
+  /* T04906：EP 表格表头/排序三角走本主题文字色与 readable——浅色主题此前无 --el-* 覆盖，
+     落到 EP 库默认：表头 #909399 白行 3.08、未激活三角 #a8abb2 2.30、激活三角 #409eff 2.78，
+     三项全部低于 AA / 3:1。表头取正文色、未激活三角取 soft、激活三角取 readable；行面仍为 EP 白。 */
+  --el-text-color-secondary: var(--text-base);
+  --el-text-color-placeholder: var(--text-soft);
+  --sort-caret-active: var(--accent-readable);
+
   /* T04175 前景配对：金棕强调色 #8b7355 对米白卡片 3.72:1（图标 hover 与描边都差一口气）
      → 同色相压暗，卡片面 5.57:1、最紧的 a25 淡底面 4.65:1；警示提示文字
      #ffb347 对淡琥珀底 1.60:1 → #9e5d00。注意本主题 .msg-bubble.user 是黑→金渐变，

@@ -39,6 +39,14 @@
   --text-soft: #8a7a96;
   --text-dim: #b5a8c0;
 
+  /* T04906：EP 表格表头/排序三角走本主题文字色与 readable——浅色主题此前无 --el-* 覆盖，
+     落到 EP 库默认：表头 #909399 白行 3.08、未激活三角 #a8abb2 2.30、激活三角 #409eff 2.78，
+     三项全部低于 AA / 3:1。表头取正文色、未激活三角取 soft（本主题 #8a7a96 白行 3.96，
+     五主题最紧但 ≥3.0）、激活三角取 readable；行面仍为 EP 白。 */
+  --el-text-color-secondary: var(--text-base);
+  --el-text-color-placeholder: var(--text-soft);
+  --sort-caret-active: var(--accent-readable);
+
   /* T04175 前景配对：薄荷强调色 #a8e0d8 在白卡片/气泡面 1.01–1.35:1（本主题最严重，
      hover 高亮几乎不可见）→ 同色相压暗到 #2b7a6e，卡片面 5.10:1、最紧的 a25 淡底面 4.64:1；
      警示提示文字 #ffb347 对淡琥珀底 1.71:1 → #a36000；逐面实算见

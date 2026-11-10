@@ -41,6 +41,13 @@
   --text-soft: #5a5f66;
   --text-dim: #9aa0a6;
 
+  /* T04906：EP 表格表头/排序三角走本主题文字色与 readable——浅色主题此前无 --el-* 覆盖，
+     落到 EP 库默认：表头 #909399 白行 3.08、未激活三角 #a8abb2 2.30、激活三角 #409eff 2.78，
+     三项全部低于 AA / 3:1。表头取正文色、未激活三角取 soft、激活三角取 readable；行面仍为 EP 白。 */
+  --el-text-color-secondary: var(--text-base);
+  --el-text-color-placeholder: var(--text-soft);
+  --sort-caret-active: var(--accent-readable);
+
   /* T04175 前景配对：强调色 #1554d1 对白卡片 6.52:1 本来就达标，显式写出是为了
      让「前景走 *-readable」这条口径在本主题可读时也有出处；警示琥珀 #ffb347 在浅底
      只有 1.55:1（超时/失败条提示文字），压暗到 #9e5d00 后对淡琥珀底 4.57:1。 */

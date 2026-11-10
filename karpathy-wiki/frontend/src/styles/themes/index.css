@@ -25,3 +25,11 @@
 @import './ecommerce.css';
 @import './portfolio.css';
 @import './light-business.css';
+
+/* T04906：EP 排序三角激活态改走本主题 --sort-caret-active（5 个浅色主题各自接到 readable）。
+   EP 的两条激活态规则（.ascending/.descending）把三角硬接 --el-color-primary：库默认 #409eff 在
+   EP 白行仅 2.78:1，且浅色主题没有 --el-* 覆盖，不随主题换肤。
+   本文件在 element-plus/dist/index.css 之后导入（main.ts），同特异性后来者胜，故直接覆盖；
+   未声明该 token 的主题（creative / product / dark）走 fallback，行为不变。 */
+.el-table .ascending .sort-caret.ascending { border-bottom-color: var(--sort-caret-active, var(--el-color-primary)); }
+.el-table .descending .sort-caret.descending { border-top-color: var(--sort-caret-active, var(--el-color-primary)); }
