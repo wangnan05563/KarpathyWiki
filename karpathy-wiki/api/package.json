@@ -6,6 +6,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "gate": "tsc --noEmit && pnpm run typecheck:test && vitest run",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

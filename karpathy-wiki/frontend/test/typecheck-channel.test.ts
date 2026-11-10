@@ -44,3 +44,27 @@ describe('前端测试类型检查通道（T04518）', () => {
     expect(apiScript, 'api/package.json 的 typecheck:test 被删会让两侧口径再次分叉').toContain('tsconfig.test.json');
   });
 });
+
+// T04522：通道建成后必须至少有一个固定调用方，且两侧接入点一致（方案 B：独立 gate，不动发布链）。
+describe('发布前门禁 gate（T04522）', () => {
+  const feScripts = () => readJson(join(FRONTEND, 'package.json')).scripts ?? {};
+  const apiScripts = () => readJson(join(FRONTEND, '..', 'api', 'package.json')).scripts ?? {};
+
+  it('两侧 gate 都聚合了「生产类型 + 测试面类型 + 测试」，缺一项就等于通道再次无人调用', () => {
+    const fe = feScripts().gate;
+    const api = apiScripts().gate;
+    if (!fe) throw new Error('frontend/package.json 缺 gate 脚本，typecheck:test 重新变成无人调用的孤儿');
+    if (!api) throw new Error('api/package.json 缺 gate 脚本，两侧门禁口径再次分裂');
+    for (const need of ['check-theme-tokens', 'vue-tsc --noEmit', 'typecheck:test', 'vitest run']) {
+      expect(fe, `前端 gate 缺 ${need}`).toContain(need);
+    }
+    for (const need of ['tsc --noEmit', 'typecheck:test', 'vitest run']) {
+      expect(api, `api gate 缺 ${need}`).toContain(need);
+    }
+  });
+
+  it('gate 不并入 build：发布链耗时与阻塞面保持 T04518 的边界（改走方案 A 需重新立项）', () => {
+    expect(feScripts().build, '前端 build 不应圈进测试面类型检查或 gate').not.toMatch(/gate|typecheck:test/);
+    expect(apiScripts().build, 'api build 不应圈进测试面类型检查或 gate').not.toMatch(/gate|typecheck:test/);
+  });
+});

@@ -201,6 +201,15 @@
 | 换行 | 统一 CRLF（Windows）或 LF（Linux/Mac），不混用 |
 | 文件结尾 | 文件必须以换行符结尾 |
 
+### 5.5 发布前门禁（T04522）
+
+| 项 | 内容 |
+|----|------|
+| 命令 | 在 `karpathy-wiki/` 下依次执行 `pnpm --filter @karpathy-wiki/api run gate && pnpm --filter @karpathy-wiki/web run gate`（**不要用 `pnpm -r` 并行**：api 有 P95<100ms 的性能门禁，与前端全量并发会假红） |
+| 前端覆盖 | `check-theme-tokens` + `vue-tsc --noEmit` + 测试面 `typecheck:test` + `vitest run` |
+| api 覆盖 | `tsc --noEmit` + 测试面 `typecheck:test` + `vitest run` |
+| 边界 | 方案 B：`build` 保持原样，门禁在发布前手工执行；若要并入 `build-exe` / `publish-wiki` 脚本，需单独立项授权 |
+
 ---
 
 ## 六、常见问题速查表

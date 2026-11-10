@@ -16,7 +16,7 @@
 //   I 原子落盘：无 .tmp 残留、.bak 恒为上一版、rename 失败不破坏目标；
 //   R 备份还原：以 .bak 为准且不销毁备份，缺失/非法备份拒绝还原。
 //   全部在 fs.mkdtemp 临时目录内进行，绝不触碰真实 config.json。
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, type MockInstance } from 'vitest';
 import fs from 'node:fs/promises';
 import fsPromises from 'node:fs/promises';
 import os from 'node:os';
@@ -422,8 +422,8 @@ describe('K · 路径失效告警（T04558）', () => {
 // 全部在 mkdtemp 临时目录内构造「旧位置 / 新位置」，不触碰真实 api/config.json 与 %LOCALAPPDATA%。
 describe('G · legacy 配置一次性迁移（T04555）', () => {
   const tempDirs: string[] = [];
-  let logSpy: ReturnType<typeof vi.spyOn>;
-  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let logSpy: MockInstance<Parameters<typeof console.log>, void>;
+  let warnSpy: MockInstance<Parameters<typeof console.warn>, void>;
 
   async function makeDir(prefix: string): Promise<string> {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
