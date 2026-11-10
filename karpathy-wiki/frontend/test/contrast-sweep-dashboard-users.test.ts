@@ -88,7 +88,9 @@ const WRAPPED_LINES: Record<string, string[]> = {
  */
 const EXPECTED: Record<string, { n: number; readable: number; fam: Record<string, number>; tint: number }> = {
   'src/views/Dashboard.vue': { n: 6, readable: 10, fam: { accent: 4, pink: 2, purple: 4 }, tint: 0 },
-  'src/views/Users.vue': { n: 6, readable: 9, fam: { accent: 4, pink: 3, purple: 2 }, tint: 0 },
+  // T04904：`.role-guest` 原 `--text-dim` 压紫 a10 在 8 主题只有 2.06~3.29，改接紫 readable
+  // → purple 家族 2→3、readable 总数 9→10（本行是本单唯一改动的账目，其余计数不动）。
+  'src/views/Users.vue': { n: 6, readable: 10, fam: { accent: 4, pink: 3, purple: 3 }, tint: 0 },
 };
 
 /** 改前/改后对照用：12 个消费点的裸基色表达式（与 AUDIT 前 12 行一一对应） */

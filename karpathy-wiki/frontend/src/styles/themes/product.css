@@ -212,6 +212,31 @@
   --accent-cyan-a35: rgba(0, 255, 136, 0.35);
   --accent-pink-a35: rgba(255, 0, 128, 0.35);
   --accent-magenta-a35: rgba(0, 212, 255, 0.35);
+
+  /* T04904：Element Plus 表面桥接（此前本主题无 --el-* 表面 token，表格/弹层沿用库默认白面）——
+     EP 表格行/表头/斑马行默认是白面（--el-fill-color-blank #fff / -lighter #fafafa），
+     在纯黑页底上成了「白表」；`.role-user` 这类绿 a10 tint 徽章压白行合成出 #e6fff3，
+     绿字只剩 1.27:1。把表面/文字/描边整体映射回本主题 token，行底跟随页面深底，
+     tint 面的「深底前提」才成立（实算锁见 test/contrast-ep-surfaces.test.ts）。 */
+  --el-bg-color: var(--bg-deep);
+  --el-bg-color-overlay: var(--bg-mid);
+  --el-bg-color-page: var(--bg-void);
+  --el-text-color-primary: var(--text-bright);
+  --el-text-color-regular: var(--text-base);
+  --el-text-color-secondary: var(--text-soft);
+  /* 排序三角等图标走 placeholder：dim 在行面上只有 2.69，低于非文本 3.0，取 soft */
+  --el-text-color-placeholder: var(--text-soft);
+  --el-text-color-disabled: var(--text-dim);
+  --el-border-color: var(--border-color);
+  --el-border-color-light: var(--border-color);
+  --el-border-color-lighter: var(--border-color);
+  --el-border-color-extra-light: var(--border-color);
+  --el-fill-color: var(--bg-mid);
+  --el-fill-color-light: var(--bg-mid);
+  --el-fill-color-lighter: var(--bg-mid);
+  --el-fill-color-blank: var(--bg-deep);
+  --el-fill-color-dark: var(--bg-mid);
+  --el-color-primary-light-9: var(--bg-mid);
 }
 
 /* 产品背景层：深黑 + 霓虹光晕 */

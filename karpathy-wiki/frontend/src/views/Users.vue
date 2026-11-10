@@ -975,7 +975,8 @@ onMounted(loadUsers);
 
 .role-admin { color: var(--text-bright); background: var(--neon-magenta); }
 .role-user { color: var(--accent-readable, var(--neon-cyan)); background: var(--accent-cyan-a10); }
-.role-guest { color: var(--text-dim); background: var(--accent-purple-a10); }
+/* T04904：guest 徽章原 --text-dim 压紫 a10 在 8 主题实测 2.06~3.29（AA 需 4.5），改接紫 readable（4.95~6.87）。 */
+.role-guest { color: var(--purple-readable, var(--neon-purple)); background: var(--accent-purple-a10); }
 
 .td-date {
   font-family: var(--font-mono);
