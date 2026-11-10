@@ -99,6 +99,9 @@
      压在 :root 的青 tint 面上实测 4.31:1（差 AA 一档）。取同色相提亮版 #9dc0ff → 7.50:1，
      只覆盖这一面的前景，不动 :root 的青 tint 本体（全站同族徽章共用一张面）。 */
   --on-badge-cyan-fg: #9dc0ff;
+  /* T04905：users 页 .role-admin 实底徽章原 --text-bright(#e6edf3) 压 --neon-magenta(#f85149) 实测 2.84 < AA；
+     底色压深一档红（#e6edf3 字 5.19:1），前景仍 --text-bright；--neon-magenta 危险红本体不变。 */
+  --role-admin-bg: #b62f28;
 
   /* 引用溯源命中高亮（FR-21）：暗色下提高黄底不透明度，
      避免半透明黄叠深底后黑字对比不足（浅色主题走组件 fallback） */

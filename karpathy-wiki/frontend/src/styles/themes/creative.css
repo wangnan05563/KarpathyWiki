@@ -26,6 +26,9 @@
   /* T04447：用户气泡直接复用本主题这一档压深背景（白字两端最差 5.45:1），
      不再压 --grad-fire 原霓虹渐变（白字仅 3.83:1）。--grad-fire 其它消费点不受影响。 */
   --bubble-user-bg: var(--menu-active-bg);
+  /* T04905：users 页 .role-admin 实底徽章原 --text-bright(#f3e9ff) 压 --neon-magenta(#ff006e) 实测 3.27 < AA；
+     底色单独压深一档品红（#f3e9ff 字 5.24:1），前景仍 --text-bright；--neon-magenta 品牌本体不变。 */
+  --role-admin-bg: #c20052;
 
   /* T04904：Element Plus 表面桥接（此前本主题 --el-* 覆盖数为 0）——
      EP 表格行/表头/斑马行默认是白面（--el-fill-color-blank #fff / -lighter #fafafa），

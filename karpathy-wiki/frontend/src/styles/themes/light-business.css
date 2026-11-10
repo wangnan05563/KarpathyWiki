@@ -26,6 +26,9 @@
   --neon-violet: #3b6fd4;
   --neon-pink: #e0792b;     /* 警告琥珀 */
   --neon-lime: #2faa6a;     /* 成功绿 */
+  /* T04905：.role-admin 实底徽章原 --text-bright(#111111) 压 --neon-magenta(#d93636) 实测 4.07 < AA；
+     浅底主题反方向——底色提浅一档红（#111 字 5.06:1），前景仍 --text-bright；危险红本体不变。 */
+  --role-admin-bg: #e45252;
 
   /* 背景层次：白底 + 极浅灰填充（与移动端 --m-bg / --m-bg-soft 对齐） */
   --bg-void: #f5f6f8;

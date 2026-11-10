@@ -973,7 +973,9 @@ onMounted(loadUsers);
   border-radius: 10px;
 }
 
-.role-admin { color: var(--text-bright); background: var(--neon-magenta); }
+/* T04905：admin 实底徽章原 --text-bright 压 --neon-magenta 在 creative/product/dark/light-business 实测 3.27/3.77/2.84/4.07 < AA；
+   底色单独取成对 token --role-admin-bg（深主题压深品红、light-business 提浅红），前景仍 --text-bright；未声明主题回落品牌品红（实测 ≥4.85）。 */
+.role-admin { color: var(--text-bright); background: var(--role-admin-bg, var(--neon-magenta)); }
 .role-user { color: var(--accent-readable, var(--neon-cyan)); background: var(--accent-cyan-a10); }
 /* T04904：guest 徽章原 --text-dim 压紫 a10 在 8 主题实测 2.06~3.29（AA 需 4.5），改接紫 readable（4.95~6.87）。 */
 .role-guest { color: var(--purple-readable, var(--neon-purple)); background: var(--accent-purple-a10); }

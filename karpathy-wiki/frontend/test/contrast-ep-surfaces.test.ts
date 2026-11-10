@@ -18,6 +18,7 @@ import {
   resolve,
   rgbToHex,
   worstRatio,
+  type RGB,
   type ThemeTokens,
 } from './helpers/contrast';
 
@@ -248,6 +249,66 @@ describe('T04906 · 浅色主题表头文字与排序三角（EP 白行）', () 
       expect(ratio(pre, ep(pre, '--el-text-color-secondary')), `${name} 表头改前 3.08`).toBeCloseTo(3.08, 2);
       expect(ratio(pre, ep(pre, '--el-text-color-placeholder')), `${name} 未激活三角改前 2.30`).toBeCloseTo(2.3, 2);
       expect(ratio(pre, SORT_CARET_ACTIVE), `${name} 激活三角改前 2.78`).toBeCloseTo(2.78, 2);
+    }
+  });
+});
+
+// T04905：users 页 .role-admin 是「亮字压实底」（color:--text-bright / background:--neon-magenta）。
+// 改前 creative/product/dark/light-business 实测 3.27/3.77/2.84/4.07 < AA 4.5。徽章底是不透明实底，
+// 对比度与行面深浅无关（普通行/斑马行同值，两腿都断言以证「实底」而非 tint）。底色单独取成对 token
+// --role-admin-bg（深主题压深品红、light-business 提浅红），前景仍 --text-bright；未声明主题回落品牌品红
+// （enterprise 4.85 / macaron 6.25 / ecommerce 6.02 / portfolio 7.73 实测达标，不改 --neon-magenta 本体）。
+describe('T04905 · .role-admin 实底徽章（8 主题）', () => {
+  const ROLE_ADMIN_FG = 'var(--text-bright)';
+  const ROLE_ADMIN_BG = 'var(--role-admin-bg, var(--neon-magenta))';
+  const ratio = (t: ThemeTokens, face: RGB) => worstRatio(ROLE_ADMIN_FG, ROLE_ADMIN_BG, t.decls, face);
+
+  it('8 主题 × {普通行, 斑马行}：.role-admin 均达 AA 4.5（实底与行面无关）', () => {
+    const failures: string[] = [];
+    for (const t of RENDERED) {
+      for (const [face, row] of [['普通行', rowOf(t)], ['斑马行', stripedOf(t)]] as const) {
+        const r = ratio(t, row);
+        if (r < THRESHOLD.text) failures.push(`${t.name} · ${face} .role-admin = ${r.toFixed(2)}（需 ≥ ${THRESHOLD.text}）`);
+      }
+    }
+    expect(failures, failures.join('\n  ')).toEqual([]);
+  });
+
+  it('取值锁：4 失败主题取压深/提浅配对底，4 达标主题回落品牌品红；前景恒 --text-bright', () => {
+    const want = {
+      creative: ['#f3e9ff', '#c20052'],
+      product: ['#ffffff', '#cc0066'],
+      'dark(tokens.css)': ['#e6edf3', '#b62f28'],
+      'light-business': ['#111111', '#e45252'],
+      enterprise: ['#0f172a', '#3b82f6'],
+      macaron: ['#4a3a52', '#ffb3d1'],
+      ecommerce: ['#1a1a2e', '#ff6b35'],
+      portfolio: ['#1a1a1a', '#c9a961'],
+    } as const;
+    for (const [name, [fg, bg]] of Object.entries(want)) {
+      const t = theme(name);
+      expect(rgbToHex(solid(ROLE_ADMIN_FG, t)), `${name} 前景`).toBe(fg);
+      expect(rgbToHex(solid(ROLE_ADMIN_BG, t)), `${name} 底色`).toBe(bg);
+    }
+  });
+
+  it('源码接入锁：Users.vue 徽章走成对 token，creative/product/light-business/dark 声明 --role-admin-bg', () => {
+    const src = readFileSync(join(ROOT, 'src/views/Users.vue'), 'utf8');
+    expect(src).toContain(`.role-admin { color: ${ROLE_ADMIN_FG}; background: ${ROLE_ADMIN_BG}; }`);
+    for (const name of ['creative', 'product', 'light-business']) {
+      const tsrc = readFileSync(join(ROOT, 'src/styles/themes', `${name}.css`), 'utf8');
+      expect(tsrc, `${name} 缺 --role-admin-bg`).toContain('--role-admin-bg:');
+    }
+    const tokens = readFileSync(join(ROOT, 'src/styles/tokens.css'), 'utf8');
+    expect(tokens, 'dark(tokens.css) 缺 --role-admin-bg').toContain('--role-admin-bg:');
+  });
+
+  it('负控制：撤掉 --role-admin-bg 回落品牌品红，4 主题复现改前 3.27/3.77/2.84/4.07', () => {
+    for (const [name, want] of [['creative', 3.27], ['product', 3.77], ['dark(tokens.css)', 2.84], ['light-business', 4.07]] as const) {
+      const decls = new Map(theme(name).decls);
+      decls.delete('--role-admin-bg');
+      const pre = { name, decls };
+      expect(ratio(pre, rowOf(pre)), `${name} 改前实测 ${want}`).toBeCloseTo(want, 2);
     }
   });
 });
