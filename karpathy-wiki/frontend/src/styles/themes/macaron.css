@@ -36,13 +36,16 @@
   /* Dark text on light background */
   --text-bright: #4a3a52;
   --text-base: #5c4a66;
-  --text-soft: #8a7a96;
+  /* T04530：弹窗内前景按模态落点面重算，原 #8a7a96 在「遮罩压卡片」面上 3.37、
+     紫 a08 淡底面 3.53，整族跌破 AA；同色相压暗到 #73617f 后最紧 4.78（淡面）/
+     4.32→5.12（卡片面），紫 a08 面 4.78。仍保持本主题灰紫调。 */
+  --text-soft: #73617f;
   --text-dim: #b5a8c0;
 
   /* T04906：EP 表格表头/排序三角走本主题文字色与 readable——浅色主题此前无 --el-* 覆盖，
      落到 EP 库默认：表头 #909399 白行 3.08、未激活三角 #a8abb2 2.30、激活三角 #409eff 2.78，
-     三项全部低于 AA / 3:1。表头取正文色、未激活三角取 soft（本主题 #8a7a96 白行 3.96，
-     五主题最紧但 ≥3.0）、激活三角取 readable；行面仍为 EP 白。 */
+     三项全部低于 AA / 3:1。表头取正文色、未激活三角取 soft（本主题 #73617f 白行 5.61，
+     T04530 压暗后余量更足）、激活三角取 readable；行面仍为 EP 白。 */
   --el-text-color-secondary: var(--text-base);
   --el-text-color-placeholder: var(--text-soft);
   --sort-caret-active: var(--accent-readable);
@@ -67,7 +70,9 @@
   --pink-readable: #8c6273;
   --purple-readable: #76608a;
   --lime-readable: #657350;
-  --warning-readable: #a36000;
+  /* T04530：弹窗重启引导提示落在淡琥珀底上，原 #a36000 实算 4.35 < 4.5；
+     同色相压深到 #945600 后该面 5.13，其余琥珀落点同向变好。 */
+  --warning-readable: #945600;
 
   /* 语义状态色（T01728）：柔和粉嫩适配 */
   --success: #4d9e63;

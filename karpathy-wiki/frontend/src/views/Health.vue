@@ -1677,7 +1677,7 @@ onMounted(() => {
 .estimate-label {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--text-soft);
 }
 
 .estimate-sub {

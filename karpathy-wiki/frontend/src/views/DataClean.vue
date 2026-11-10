@@ -1942,7 +1942,7 @@ onMounted(() => loadPages());
   display: inline-block;
   width: 40px;
   text-align: right;
-  color: var(--text-dim);
+  color: var(--text-soft);
   padding-right: 8px;
   user-select: none;
 }

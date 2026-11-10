@@ -861,7 +861,7 @@ onBeforeUnmount(() => {
 .empty-hint {
   text-align: center;
   padding: 32px 0;
-  color: var(--text-dim);
+  color: var(--text-soft);
   font-size: 13px;
 }
 
@@ -891,7 +891,7 @@ onBeforeUnmount(() => {
 }
 
 .license-version {
-  color: var(--text-dim);
+  color: var(--text-soft);
   margin-left: 6px;
   font-size: 12px;
 }
@@ -902,7 +902,7 @@ onBeforeUnmount(() => {
 
 .dialog-footer-hint {
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--text-soft);
   font-family: var(--font-mono);
 }
 

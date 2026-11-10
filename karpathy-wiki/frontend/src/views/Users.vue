@@ -983,7 +983,8 @@ onMounted(loadUsers);
 .td-date {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--text-dim);
+  /* T04530：弹窗内日期按模态落点面重算不足 AA，--text-dim 改 --text-soft */
+  color: var(--text-soft);
 }
 
 /* 弹窗表单：字段纵向排列，错误与提示各占一行（原 form-grid 三列在 460px 弹窗里放不下） */
@@ -1006,7 +1007,8 @@ onMounted(loadUsers);
 
 .field-hint {
   font-size: 11px;
-  color: var(--text-dim);
+  /* T04530：弹窗表单提示按模态落点面重算不足 AA，--text-dim 改 --text-soft */
+  color: var(--text-soft);
 }
 
 .field-error-text {
@@ -1040,7 +1042,8 @@ onMounted(loadUsers);
 .audit-hint {
   margin: 10px 0 0;
   font-size: 11px;
-  color: var(--text-dim);
+  /* T04530：弹窗审计提示按模态落点面重算不足 AA，--text-dim 改 --text-soft */
+  color: var(--text-soft);
 }
 
 /* 霓虹按钮：与缓存与日志清理/页面质量清洗页统一风格 */

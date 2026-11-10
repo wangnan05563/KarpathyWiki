@@ -17,13 +17,16 @@ import { join } from 'node:path';
 import { ROOT, THRESHOLD, loadThemes, worstRatio, pageOf, listBareBaseForegroundUses, type AuditFailure } from './helpers/contrast';
 
 const THEMES = loadThemes();
-const CARD = 'var(--bg-card-solid)';
+// T04530：本文件只审页面级落点——CARD_OVER_PAGE = 卡片压页底（不含弹窗遮罩层）。
+// 弹窗内的同一类前景点改由 contrast-modal-internal-face.test.ts 按 modalFaces() 两张落点实算，
+// 两套口径不要混用：这里把卡片当最终面，弹窗锁里卡片只是「遮罩压底」之上的一层。
+const CARD_OVER_PAGE = 'var(--bg-card-solid)';
 
 interface Point {
   f: string;
   ln: number;
   sel: string;
-  /** 落点面：CARD = 规则自身无底（组件共享，按首组公共组件口径取卡片实底）；其余为块内自声明 tint */
+  /** 落点面：CARD_OVER_PAGE = 规则自身无底（页面级口径取卡片压页底）；其余为块内自声明 tint */
   face: string;
   fg: string;
   bare: string;
@@ -34,26 +37,26 @@ interface Point {
 const POINTS: Point[] = [
   { f: 'AttachmentUploader.vue', ln: 213, sel: '.upload-btn:hover', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'AttachmentUploader.vue', ln: 233, sel: '.attachment-list.drag-over', face: 'var(--accent-cyan-a10)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
-  { f: 'CitationModal.vue', ln: 131, sel: '.citation-chunk-head', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
-  { f: 'CitationText.vue', ln: 58, sel: 'sup.cite-ref', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
-  { f: 'CitationText.vue', ln: 59, sel: 'sup.cite-ref', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
+  { f: 'CitationModal.vue', ln: 131, sel: '.citation-chunk-head', face: CARD_OVER_PAGE, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
+  { f: 'CitationText.vue', ln: 58, sel: 'sup.cite-ref', face: CARD_OVER_PAGE, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
+  { f: 'CitationText.vue', ln: 59, sel: 'sup.cite-ref', face: CARD_OVER_PAGE, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   // T04542：徽章 min-width/min-height 抬到 44px 使 hover 落点由 L108 平移到 L114（blockOfLine
   // 取的是声明行所在块，故指针必须落在 border-color 行而非选择器行）；面/前景/族均未变
   // （本次只加尺寸声明），仅刷新行号指针，实算结论沿用。
-  { f: 'ContextUsageBadge.vue', ln: 114, sel: '.ctx-badge-inner:hover', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
+  { f: 'ContextUsageBadge.vue', ln: 114, sel: '.ctx-badge-inner:hover', face: CARD_OVER_PAGE, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
   { f: 'FloatingChat.vue', ln: 941, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a12)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'ui' },
   { f: 'FloatingChat.vue', ln: 942, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a12)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'text' },
   { f: 'FollowupsChips.vue', ln: 70, sel: '.followup-chip:hover:not(:disabled)', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
   { f: 'FollowupsChips.vue', ln: 71, sel: '.followup-chip:hover:not(:disabled)', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'GuideButton.vue', ln: 58, sel: '.guide-entry-btn:hover', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
-  { f: 'GuideButton.vue', ln: 64, sel: '.guide-entry-btn:focus-visible', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
-  { f: 'GuideOverlay.vue', ln: 220, sel: '.guide-box', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
-  { f: 'GuideOverlay.vue', ln: 266, sel: '.guide-step', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
+  { f: 'GuideButton.vue', ln: 64, sel: '.guide-entry-btn:focus-visible', face: CARD_OVER_PAGE, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
+  { f: 'GuideOverlay.vue', ln: 220, sel: '.guide-box', face: CARD_OVER_PAGE, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
+  { f: 'GuideOverlay.vue', ln: 266, sel: '.guide-step', face: CARD_OVER_PAGE, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'MessageActions.vue', ln: 106, sel: '.action-btn:hover', face: 'var(--accent-cyan-a10)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
-  { f: 'MessageActions.vue', ln: 109, sel: '.action-btn.active', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
+  { f: 'MessageActions.vue', ln: 109, sel: '.action-btn.active', face: CARD_OVER_PAGE, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'MessageToolbar.vue', ln: 587, sel: '.toolbar-btn.danger-btn:hover', face: 'var(--accent-pink-a12)', fg: 'var(--pink-readable)', bare: 'var(--neon-pink)', kind: 'text' },
   { f: 'MultimodalOutputCard.vue', ln: 267, sel: '.card-body :deep(.markdown-body code)', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-purple)', kind: 'text' },
-  { f: 'ThemeSwitcher.vue', ln: 310, sel: '.theme-check', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
+  { f: 'ThemeSwitcher.vue', ln: 310, sel: '.theme-check', face: CARD_OVER_PAGE, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'ThinkingBlock.vue', ln: 85, sel: '.thinking-block', face: 'var(--accent-purple-a04)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'ui' },
   { f: 'ThinkingBlock.vue', ln: 91, sel: '.thinking-block.live', face: 'var(--accent-purple-a08)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'ui' },
 ];
@@ -214,7 +217,7 @@ describe('T04470 批次 C：13 个组件 21 面逐主题实算', () => {
     expect(bad, `仍有裸基色前景：${bad.join(' ')}`).toEqual([]);
   });
 
-  it('落点面与源码互证：tint 面块内确有该背景声明，CARD 面块内不得自带淡底（防「面被偷抬」）', () => {
+  it('落点面与源码互证：tint 面块内确有该背景声明，CARD_OVER_PAGE 面块内不得自带淡底（防「面被偷抬」）', () => {
     const bad: string[] = [];
     for (const p of POINTS) {
       const block = blockOfLine(srcOf(p.f), p.ln);
@@ -222,7 +225,7 @@ describe('T04470 批次 C：13 个组件 21 面逐主题实算', () => {
         bad.push(`${p.f}:L${p.ln} 规则块没扫到（行号漂移会让整份清单失去意义）`);
         continue;
       }
-      if (p.face === CARD) {
+      if (p.face === CARD_OVER_PAGE) {
         if (OWN_TINT_BG.test(block)) bad.push(`${p.f}:L${p.ln} 记为卡片实底，块内却有淡底声明`);
       } else {
         const bgs = [...block.matchAll(/background[^;]*/g)].map((x) => x[0]);

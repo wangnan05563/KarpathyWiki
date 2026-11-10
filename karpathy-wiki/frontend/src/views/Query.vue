@@ -2674,7 +2674,8 @@ onBeforeUnmount(() => {
 }
 .ib-slider-value {
   font-size: 13px;
-  color: var(--text-dim);
+  /* T04530：弹窗内数值标签按模态落点面重算不足 AA，--text-dim 改 --text-soft */
+  color: var(--text-soft);
   min-width: 38px;
   text-align: right;
 }
@@ -2705,7 +2706,8 @@ onBeforeUnmount(() => {
 .ib-qr-del {
   border: none;
   background: transparent;
-  color: var(--text-dim);
+  /* T04530：弹窗内删除控件按模态落点面重算不足 AA，--text-dim 改 --text-soft */
+  color: var(--text-soft);
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
@@ -2715,7 +2717,8 @@ onBeforeUnmount(() => {
 }
 .ib-qr-empty {
   font-size: 12px;
-  color: var(--text-dim);
+  /* T04530：弹窗内空态提示按模态落点面重算不足 AA，--text-dim 改 --text-soft */
+  color: var(--text-soft);
 }
 .ib-qr-add {
   display: flex;

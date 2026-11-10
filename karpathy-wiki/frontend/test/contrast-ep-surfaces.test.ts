@@ -209,7 +209,7 @@ describe('T04906 · 浅色主题表头文字与排序三角（EP 白行）', () 
 
   it('取值锁：表头=正文色 / 未激活三角=soft / 激活三角=readable', () => {
     const want = {
-      macaron: ['#5c4a66', '#8a7a96', '#2b7a6e'],
+      macaron: ['#5c4a66', '#73617f', '#2b7a6e'],
       enterprise: ['#1e293b', '#475569', '#046e80'],
       ecommerce: ['#2d2d3f', '#6b6b7d', '#006b93'],
       portfolio: ['#2d2d2d', '#5a5a5a', '#6f5b44'],

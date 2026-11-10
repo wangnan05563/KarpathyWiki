@@ -761,7 +761,13 @@ export function overlayExpr(): { expr: string; source: OverlaySource } {
 }
 
 /**
- * 弹窗内元素的两张真实落点面：遮罩压卡片合成底、遮罩压页底。
+ * 弹窗内容的两张真实落点面。
+ *
+ * 画序（T04530 真实渲染复核）：`.el-dialog` 是 `.el-overlay` 的子节点，卡片画在遮罩【之上】——
+ * 遮罩只能透过卡片自身的 (1-alpha) 渗进来，不是「遮罩压在卡片上」。实现必须跟浏览器一致：
+ *   面 = composite(--bg-card-solid, composite(遮罩, 卡片背后的底))
+ * 卡片背后取两张候选：页面上普通卡片面（pageOf）与页底 --bg-void。
+ * 不透明卡片（ecommerce/light-business/dark 的 #fff/#161b22）下两张面相等且等于卡片本体。
  * theme 用于把 modal.css 里 `[data-theme='X']` 的遮罩减淡覆盖并进来（浅色主题走 rgba(17,17,17,.34)）——
  * 那份声明不在 themes/ 下，loadThemes() 天然看不见它。
  */
@@ -772,7 +778,12 @@ export function modalFaces(theme: ThemeTokens): RGB[] {
     for (const [k, v] of themeBlockDecls(readFileSync(MODAL_CSS, 'utf8'), theme.name)) decls.set(k, v);
   }
   const overlay = solidOf(expr, decls, `遮罩表达式 ${expr}`);
-  return [composite(overlay, pageOf(theme.decls)), composite(overlay, solidOf('var(--bg-void)', theme.decls, '--bg-void'))];
+  const card = solidOf('var(--bg-card-solid)', theme.decls, '--bg-card-solid');
+  const backdrops = [
+    composite(overlay, pageOf(theme.decls)),
+    composite(overlay, solidOf('var(--bg-void)', theme.decls, '--bg-void')),
+  ];
+  return backdrops.map((b) => composite(card, b));
 }
 
 function solidOf(expr: string, decls: Map<string, string>, what: string): RGB {

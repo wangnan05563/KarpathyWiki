@@ -268,6 +268,10 @@
   --accent-danger-a10: rgba(248, 81, 73, 0.1);
   --accent-danger-a30: rgba(248, 81, 73, 0.3);
 
+  /* T04530：弹窗内删除按钮 hover 落在青 a10 tint 上，继承 :root 的 #ff338b 实算 4.30 < 4.5；
+     同色相提亮到 #ff5b9b 后该面 5.10，深底其余粉族落点同向变好。 */
+  --pink-readable: #ff5b9b;
+
   /* ---- Element Plus --el-* 桥接（FR-24 规格 5）----
      EP 弹层 teleport 到 body，但 data-theme 挂在 <html>，变量经继承到达，
      因此此处声明即可整体换肤，无需逐组件深覆盖 */

@@ -1329,7 +1329,8 @@ onBeforeUnmount(() => {
 .login-output pre {
   margin-top: 8px;
   font-size: 11px;
-  color: var(--text-dim, #888);
+  /* T04530：弹窗内登录输出按模态落点面重算不足 AA，--text-dim 改 --text-soft */
+  color: var(--text-soft, #888);
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 120px;

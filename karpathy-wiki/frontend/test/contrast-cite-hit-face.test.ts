@@ -5,12 +5,14 @@
 //   - 它的落点在弹窗内，而 T04449/T04470 的普查只列页面级规则 → 页面清单也没有它。
 // 生效值因此是 CitationModal.vue 里的字面 fallback `rgba(255,213,79,.55)`（8/9 主题），
 // 按本单新定的**模态面**口径实算，3 套深底主题（default/creative/product）两张落点全部跌破 AA
-// （3.94~4.07），其余 6 套 7.08~9.99 达标。取证阶段还纠正了一处口径错误：
+// （4.21~4.27，T04530 修正画序后重算），其余 6 套 10.17~14.32 达标。取证阶段还纠正了一处口径错误：
 // 遮罩不是 element-plus 的 `--el-overlay-color-lighter`，而是 modal.css 覆盖后的 `--modal-mask`
 // （main.ts 里 modal.css 最后导入，同特异性后来者胜）—— 照抄 EP 默认值会把整族数字算偏一档。
+// T04530 真实渲染复核又纠正了**画序**：`.el-dialog` 是 `.el-overlay` 的子节点、画在遮罩之上，
+// 遮罩只透过卡片 alpha 渗入（见 helpers 的 modalFaces 注释）；原实现把遮罩压在卡片上，深底读数偏黑一档。
 //
 // 修法沿用已验证口径：**面优先不动，只把达标值 token 化**。
-//   :root 给 `rgba(255,213,79,.9)`（与 tokens.css 里 dark 那一档同一个值，实算 9.92~9.93），
+//   :root 给 `rgba(255,213,79,.9)`（与 tokens.css 里 dark 那一档同一个值，实算 10.03~10.06），
 //   5 套浅底主题各自覆盖回 `.55`（它们本就达标，观感逐字节不变），
 //   组件 fallback 抬到与 :root 同值 —— 未登记的新主题必须落到达标档（fail closed）。
 //   不动 `--bg-card-solid` 本体（全站卡片语言，牵一发动全身）。
@@ -52,7 +54,7 @@ const CITE_FG = 'var(--cite-hit-fg, #1a1a1a)';
 const LIGHT = ['ecommerce', 'enterprise', 'light-business', 'macaron', 'portfolio'];
 /** 主题全集（含 tokens.css 的辅助暗色主题：高亮片在它下面同样要读得清） */
 const ALL_THEMES: ThemeTokens[] = [...loadThemes(), loadAuxTheme('dark')];
-const FACE_LABELS = ['对话框覆盖处（遮罩压卡片）', '卡片外沿（遮罩压页底）'] as const;
+const FACE_LABELS = ['对话框压页面卡片（遮罩透卡片 alpha）', '对话框压页底（遮罩透卡片 alpha）'] as const;
 
 /** 一次给一个主题算两张落点，把每条的比值都带回去（不压缩成数组，避免口径被压后看不见） */
 function measure(t: ThemeTokens, bgExpr = CITE_BG, fgExpr = CITE_FG) {
@@ -89,15 +91,15 @@ describe('T04524 · A 取证：改前值喂进同一模态口径', () => {
     const bad = ALL_THEMES.flatMap((t) => measure(t, BEFORE_BG(t.name))).filter((r) => r.ratio < THRESHOLD.text);
     expect(bad.map((b) => b.key).sort()).toEqual(BEFORE_FAILED);
     expect(bad.length).toBe(6);
-    expect(beforeWorst['default(:root)'].toFixed(3)).toBe('3.958');
-    expect(beforeWorst['creative'].toFixed(3)).toBe('3.958');
-    expect(beforeWorst['product'].toFixed(3)).toBe('3.940');
+    expect(beforeWorst['default(:root)'].toFixed(3)).toBe('4.213');
+    expect(beforeWorst['creative'].toFixed(3)).toBe('4.213');
+    expect(beforeWorst['product'].toFixed(3)).toBe('4.270');
   });
 
-  it('A2 · 当年达标的 6 套不是「余量刚好够」：最差一档也有 7.09，两侧口径本来就分得很开', () => {
+  it('A2 · 当年达标的 6 套不是「余量刚好够」：最差一档也有 10.17，两侧口径本来就分得很开', () => {
     const passed = Object.entries(beforeWorst).filter(([n]) => !BEFORE_FAILED.some((k) => k.startsWith(n)));
     expect(passed.map(([n]) => n).sort()).toEqual(['dark(tokens.css)', 'ecommerce', 'enterprise', 'light-business', 'macaron', 'portfolio']);
-    expect(Math.min(...passed.map(([, v]) => v)).toFixed(3)).toBe('7.085');
+    expect(Math.min(...passed.map(([, v]) => v)).toFixed(3)).toBe('10.172');
   });
 
   it('A3 · 除本单新建的锁之外，仓库里不存在任何 --cite-hit-* 审计（缺的是可达径，不是余量）', () => {
@@ -123,11 +125,11 @@ describe('T04524 · B 主锁：9 主题 × 2 张落点实算达 AA', () => {
     expect(all.length).toBe(18);
   });
 
-  it('最差侧登记：全站最差是 portfolio 的卡片外沿 7.08（本单不动它，跌到 4.5 以下会被上一条抓住）', () => {
+  it('最差侧登记：画序修正后全站最差是 default 的页底落点 10.03（本单不动它，跌到 4.5 以下会被上一条抓住）', () => {
     const worst = all.reduce((a, b) => (b.ratio < a.ratio ? b : a));
-    expect(worst.theme).toBe('portfolio');
+    expect(worst.theme).toBe('default(:root)');
     expect(worst.face).toBe(1);
-    expect(worst.ratio.toFixed(2)).toBe('7.08');
+    expect(worst.ratio.toFixed(2)).toBe('10.03');
   });
 });
 
@@ -207,7 +209,7 @@ describe('T04524 · D 模态面口径前提锁', () => {
     expect((m as RegExpMatchArray)[1].trim()).toBe('#00000080');
   });
 
-  it('D3 · 对话框容器背景仍取 --bg-card-solid（「遮罩压卡片」这张落点的前提）', () => {
+  it('D3 · 对话框容器背景仍取 --bg-card-solid（对话框自身面 = 卡片，遮罩只能透 alpha 渗入）', () => {
     // modal.css 里那条是选择器列表（.app-modal.el-dialog, .app-modal.el-drawer），
     // ruleBodies 只认「选择器直接接 {」的写法，所以这里按列表块整段匹配，不作废成结构断言
     const modal = stripComments(modalSrc());
@@ -258,7 +260,7 @@ describe('T04524 · E 可达径锁', () => {
   it('E2 · 每主题两个 token 都有声明：组件里的字面 fallback 才是永久不可达的', () => {
     const offenders: string[] = [];
     for (const t of ALL_THEMES) for (const tok of ['--cite-hit-bg', '--cite-hit-fg']) if (!t.decls.get(tok)) offenders.push(`${t.name} ${tok}`);
-    expect(offenders, `这些 token 缺声明，组件 fallback 会变成真实生效值（改前的 3.94 会静默回来）：${offenders.join(' / ')}`).toEqual([]);
+    expect(offenders, `这些 token 缺声明，组件 fallback 会变成真实生效值（改前的 4.21 会静默回来）：${offenders.join(' / ')}`).toEqual([]);
   });
 
   it('E3 · 组件 fallback 与 :root 声明逐字同值（未登记主题必须 fail closed 到达标档，而不是退回 .55）', () => {

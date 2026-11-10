@@ -1076,7 +1076,8 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
 }
 
 .log-ts {
-  color: var(--text-dim);
+  /* T04530：弹窗内日志时间戳落在「遮罩压卡片」两张落点上，--text-dim 不足 AA，改 soft */
+  color: var(--text-soft);
   flex-shrink: 0;
 }
 

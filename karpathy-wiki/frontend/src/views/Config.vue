@@ -5617,7 +5617,7 @@ async function importConfig() {
 
 .restart-guide-reason {
   display: block;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-soft);
   line-height: 1.5;
 }
 
@@ -5632,13 +5632,15 @@ async function importConfig() {
 }
 
 .restart-guide-notice {
-  color: var(--warning-accent, var(--warning, #d29922));
+  /* T04530：--warning-accent 是填充色口径，浅底主题原色压浅黄底只有 ~2.1 → 走 readable 档 */
+  color: var(--warning-readable, var(--warning-accent, var(--warning, #d29922)));
   background: var(--warning-accent-soft, rgba(210, 153, 34, 0.1));
   border: 1px solid var(--warning-accent-border, rgba(210, 153, 34, 0.35));
 }
 
 .restart-guide-alert {
-  color: var(--danger, #f85149);
+  /* T04530：--danger 是填充色口径，深底压 8% 红底只有 ~4.3 → 走 readable 档 */
+  color: var(--danger-readable, var(--danger, #f85149));
   background: rgba(248, 81, 73, 0.08);
   border: 1px solid rgba(248, 81, 73, 0.35);
 }
@@ -5665,7 +5667,7 @@ async function importConfig() {
   margin: 10px 0 0;
   font-size: 12px;
   line-height: 1.6;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-soft);
 }
 
 /* T02916：二级导航 + 表单两列在 901-1100 的侧栏壳下已放不下（内容列 ≈656-856px），
