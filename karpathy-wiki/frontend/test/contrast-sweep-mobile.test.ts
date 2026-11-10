@@ -137,6 +137,8 @@ const TEXT_PROPS = /^(?:color|-webkit-text-fill-color)$/;
 const DECORATIVE_TINT_BASELINE = new Set([
   'MobileBrowse.vue::.mb-chip-type::border-color',
   'MobileBrowse.vue::.mb-error::border',
+  // T04554(bf37a8f)：坏 frontmatter 警示 .mb-fm-error 描边走 --m-danger-border(rgba .3 装饰 tint)，与 .mb-error 同族，非 readable 状态图形
+  'MobileBrowse.vue::.mb-fm-error::border',
   'MobileIngest.vue::.mi-result-head.ok::border-color',
   'MobileIngest.vue::.mi-result-head.err::border-color',
   'MobileListen.vue::.ml-mini::border',

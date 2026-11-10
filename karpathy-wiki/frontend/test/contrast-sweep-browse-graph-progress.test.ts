@@ -1,7 +1,7 @@
 // T04449 口径推广·第四组：浏览页（Browse.vue）+ 进度页（Progress.vue）+ 图谱页（Graph.vue）。
 // 与前三组同一缺陷族：为深色霓虹底设计的强调色基名被直接写进 color / border(-color) / outline，
-// 在浅底主题的白卡片与淡 tint 面上跌破 WCAG AA。本组覆盖 117 处「基色当前景」消费点
-// （浏览 50 / 进度 31 / 图谱 36）。
+// 在浅底主题的白卡片与淡 tint 面上跌破 WCAG AA。本组覆盖 119 处「基色当前景」消费点
+// （浏览 52 / 进度 31 / 图谱 36）。
 //
 // 本组顺带暴露并修掉的口径层缺陷：`--purple-readable` 压在 `--accent-purple-a12/a15` tint 面上只有
 // 4.34~4.37（6 个主题全中，含深色母主题 default/creative/product），portfolio 的 `--accent-readable`
@@ -88,6 +88,9 @@ const AUDIT: AuditRow[] = [
   { label: '浏览页·.fullscreen-overlay .markdown-body h3 [color·purple]', fg: 'var(--purple-readable)', bg: 'var(--bg-scene)', kind: 'text' },
   { label: '浏览页·.fullscreen-overlay .markdown-body code [color·purple]', fg: 'var(--purple-readable)', bg: 'var(--accent-purple-a15)', kind: 'text' },
   { label: '浏览页·.fullscreen-overlay .markdown-body pre code [color·accent]', fg: 'var(--accent-readable)', bg: 'var(--bg-scene)', kind: 'text' },
+  // T04554(bf37a8f)：坏 frontmatter 警示 .fm-error-alert 新增 2 处 pink-readable（描边 + strong 前景），落在 --accent-magenta-a08 tint 面
+  { label: '浏览页·.fm-error-alert [border·pink]', fg: 'var(--pink-readable)', bg: 'var(--accent-magenta-a08)', kind: 'ui' },
+  { label: '浏览页·.fm-error-alert strong [color·pink]', fg: 'var(--pink-readable)', bg: 'var(--accent-magenta-a08)', kind: 'text' },
   { label: '进度页·.head-tag [color·accent]', fg: 'var(--accent-readable)', bg: 'var(--bg-card-solid)', kind: 'text' },
   { label: '进度页·.head-model code [color·accent]', fg: 'var(--accent-readable)', bg: 'var(--bg-card-solid)', kind: 'text' },
   { label: '进度页·.tl-status.done [color·accent]', fg: 'var(--accent-readable)', bg: 'var(--accent-cyan-a15, rgba(0, 245, 255, 0.15))', kind: 'text' },
@@ -159,7 +162,7 @@ const AUDIT: AuditRow[] = [
 
 // T04468 起 readable 计数含描边账（三页 83 处 tint 描边接入 readable）；Graph 余 1 处非描边 tint 前景。
 const EXPECTED: Record<string, { n: number; readable: number; fam: Record<string, number>; tint: number }> = {
-  'src/views/Browse.vue': { n: 50, readable: 86, fam: { accent: 46, pink: 15, purple: 25 }, tint: 0 },
+  'src/views/Browse.vue': { n: 52, readable: 88, fam: { accent: 46, pink: 17, purple: 25 }, tint: 0 }, // T04554(bf37a8f)：+.fm-error-alert 描边/strong 两处 pink-readable（+2 readable +2 pink）
   'src/views/Progress.vue': { n: 31, readable: 48, fam: { accent: 19, pink: 15, purple: 14 }, tint: 0 },
   'src/views/Graph.vue': { n: 36, readable: 66, fam: { accent: 35, pink: 14, purple: 17 }, tint: 1 },
 };
@@ -181,7 +184,7 @@ describe('T04449 推广第四组：逐主题达标', () => {
   });
 
   it('清单规模与三页实现严格对齐（防止清单与代码脱钩空转）', () => {
-    expect(AUDIT.length).toBe(117);
+    expect(AUDIT.length).toBe(119);
     for (const f of FILES) {
       const src = readFileSync(join(ROOT, f), 'utf8');
       const exp = EXPECTED[f];
