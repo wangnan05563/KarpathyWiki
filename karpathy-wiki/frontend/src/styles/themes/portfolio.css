@@ -169,7 +169,7 @@
   --graph-entities-readable: #a08037; /* 1.845/2.199 → 3.055/3.640 */
   --graph-concepts-readable: var(--graph-concepts);
   --graph-comparisons-readable: var(--graph-comparisons);
-  --graph-queries-readable: #a27f32; /* 1.617/1.926 → 3.065/3.652 */
+  --graph-queries-readable: #8f702c; /* T04569：原 #a27f32 与 entities #a08037 最近对 ΔE=2.6（＜5 难分辨），调色相/明度拉开 → 6.44；画布面/卡片面 3.81/4.54 */
   --graph-qa-readable: var(--graph-qa);
   --graph-solutions-readable: var(--graph-solutions);
   --graph-entities-border-readable: #a27f32; /* 1.617/1.926 → 3.065/3.652 */

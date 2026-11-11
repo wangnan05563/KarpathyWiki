@@ -164,8 +164,8 @@
   /* T04513：画布配对 token（dark 只作画布辅助主题参与审计，不扩 loadThemes() 的 8 主题口径）。 */
   --graph-entities-readable: var(--graph-entities);
   --graph-concepts-readable: var(--graph-concepts);
-  --graph-comparisons-readable: var(--graph-comparisons);
-  --graph-queries-readable: var(--graph-queries);
+  --graph-comparisons-readable: #3b76f6; /* T04569：原 var(--graph-comparisons)=#3b82f6 与 entities #4d8dff 最近对 ΔE=4.62（＜5 难分辨），色相+4° 拉开 → 全局最近对 11.49 */
+  --graph-queries-readable: #5ab1ff; /* T04569：原 var(--graph-queries)=#5a9bff 与 concepts #6b9dff 最近对 ΔE=3.09（＜5 难分辨），色相-8° 拉开 → 13.25+ */
   --graph-qa-readable: var(--graph-qa);
   --graph-solutions-readable: var(--graph-solutions);
   --graph-entities-border-readable: var(--graph-entities-border);

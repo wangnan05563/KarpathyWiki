@@ -144,7 +144,7 @@ const CANVAS_BASELINE: Record<string, Record<string, number>> = {
   macaron: { '--graph-entities-readable': 3.05, '--graph-concepts-readable': 3.1, '--graph-comparisons-readable': 3.136, '--graph-queries-readable': 3.109, '--graph-qa-readable': 3.081, '--graph-solutions-readable': 3.051, '--graph-entities-border-readable': 3.109, '--graph-concepts-border-readable': 3.16, '--graph-comparisons-border-readable': 3.075, '--graph-queries-border-readable': 3.094, '--graph-qa-border-readable': 3.164, '--graph-solutions-border-readable': 3.067, '--graph-edge-readable': 3.136, '--graph-edge-highlight-readable': 3.1, '--graph-label': 9.697 },
   portfolio: { '--graph-entities-readable': 3.055, '--graph-concepts-readable': 3.678, '--graph-comparisons-readable': 14.271, '--graph-queries-readable': 3.065, '--graph-qa-readable': 3.859, '--graph-solutions-readable': 3.12, '--graph-entities-border-readable': 3.065, '--graph-concepts-border-readable': 3.076, '--graph-comparisons-border-readable': 8.907, '--graph-queries-border-readable': 3.079, '--graph-qa-border-readable': 3.076, '--graph-solutions-border-readable': 3.103, '--graph-edge-readable': 3.055, '--graph-edge-highlight-readable': 3.055, '--graph-label': 14.271 },
   product: { '--graph-entities-readable': 5.393, '--graph-concepts-readable': 15.179, '--graph-comparisons-readable': 4.557, '--graph-queries-readable': 11.497, '--graph-qa-readable': 10.664, '--graph-solutions-readable': 5.145, '--graph-entities-border-readable': 5.969, '--graph-concepts-border-readable': 15.869, '--graph-comparisons-border-readable': 6.824, '--graph-queries-border-readable': 13.75, '--graph-qa-border-readable': 12.062, '--graph-solutions-border-readable': 7.704, '--graph-edge-readable': 15.179, '--graph-edge-highlight-readable': 5.393, '--graph-label': 20.355 },
-  'dark(tokens.css)': { '--graph-entities-readable': 5.787, '--graph-concepts-readable': 6.951, '--graph-comparisons-readable': 5.029, '--graph-queries-readable': 6.665, '--graph-qa-readable': 7.308, '--graph-solutions-readable': 7.282, '--graph-entities-border-readable': 6.951, '--graph-concepts-border-readable': 8.901, '--graph-comparisons-border-readable': 6.871, '--graph-queries-border-readable': 7.815, '--graph-qa-border-readable': 8.901, '--graph-solutions-border-readable': 8.855, '--graph-edge-readable': 5.787, '--graph-edge-highlight-readable': 5.787, '--graph-label': 15.655 },
+  'dark(tokens.css)': { '--graph-entities-readable': 5.787, '--graph-concepts-readable': 6.951, '--graph-comparisons-readable': 4.499, '--graph-queries-readable': 6.665, '--graph-qa-readable': 7.308, '--graph-solutions-readable': 7.282, '--graph-entities-border-readable': 6.951, '--graph-concepts-border-readable': 8.901, '--graph-comparisons-border-readable': 6.871, '--graph-queries-border-readable': 7.815, '--graph-qa-border-readable': 8.901, '--graph-solutions-border-readable': 8.855, '--graph-edge-readable': 5.787, '--graph-edge-highlight-readable': 5.787, '--graph-label': 15.655 },
 };
 
 /** 改后事实留档：6 个图例点（可读档）对卡片面（--bg-card-solid 合成到页面底）的最差对比度 */
@@ -157,7 +157,7 @@ const LEGEND_BASELINE: Record<string, Record<string, number>> = {
   macaron: { '--graph-entities-readable': 3.273, '--graph-concepts-readable': 3.326, '--graph-comparisons-readable': 3.365, '--graph-queries-readable': 3.336, '--graph-qa-readable': 3.306, '--graph-solutions-readable': 3.274 },
   portfolio: { '--graph-entities-readable': 3.64, '--graph-concepts-readable': 4.383, '--graph-comparisons-readable': 17.005, '--graph-queries-readable': 3.652, '--graph-qa-readable': 4.598, '--graph-solutions-readable': 3.718 },
   product: { '--graph-entities-readable': 5.047, '--graph-concepts-readable': 14.206, '--graph-comparisons-readable': 4.265, '--graph-queries-readable': 10.76, '--graph-qa-readable': 9.98, '--graph-solutions-readable': 4.815 },
-  'dark(tokens.css)': { '--graph-entities-readable': 5.412, '--graph-concepts-readable': 6.501, '--graph-comparisons-readable': 4.703, '--graph-queries-readable': 6.233, '--graph-qa-readable': 6.834, '--graph-solutions-readable': 6.81 },
+  'dark(tokens.css)': { '--graph-entities-readable': 5.412, '--graph-concepts-readable': 6.501, '--graph-comparisons-readable': 4.208, '--graph-queries-readable': 6.233, '--graph-qa-readable': 6.834, '--graph-solutions-readable': 6.81 },
 };
 
 /**
@@ -175,7 +175,7 @@ const GLOW_BASELINE: Record<string, Record<string, number>> = {
   macaron: { '--graph-entities-readable': 2.216, '--graph-concepts-readable': 2.072, '--graph-comparisons-readable': 2.068, '--graph-queries-readable': 2.248, '--graph-qa-readable': 2.076, '--graph-solutions-readable': 2.042 },
   portfolio: { '--graph-entities-readable': 2.02, '--graph-concepts-readable': 2.237, '--graph-comparisons-readable': 5.249, '--graph-queries-readable': 2.026, '--graph-qa-readable': 2.303, '--graph-solutions-readable': 2.055 },
   product: { '--graph-entities-readable': 2.806, '--graph-concepts-readable': 6.821, '--graph-comparisons-readable': 2.561, '--graph-queries-readable': 5.362, '--graph-qa-readable': 5.04, '--graph-solutions-readable': 2.795 },
-  'dark(tokens.css)': { '--graph-entities-readable': 3.23, '--graph-concepts-readable': 3.741, '--graph-comparisons-readable': 2.895, '--graph-queries-readable': 3.614, '--graph-qa-readable': 3.848, '--graph-solutions-readable': 3.861 },
+  'dark(tokens.css)': { '--graph-entities-readable': 3.23, '--graph-concepts-readable': 3.741, '--graph-comparisons-readable': 2.660, '--graph-queries-readable': 3.614, '--graph-qa-readable': 3.848, '--graph-solutions-readable': 3.861 },
 };
 
 /**
@@ -240,7 +240,7 @@ const READABLE_OVERRIDES: Record<string, Record<string, string>> = {
   },
   portfolio: {
     '--graph-entities-readable': '#a08037',
-    '--graph-queries-readable': '#a27f32',
+    '--graph-queries-readable': '#8f702c', /* T04569：与 entities #a08037 最近对 ΔE 2.6→6.44 */
     '--graph-entities-border-readable': '#a27f32',
     '--graph-concepts-border-readable': '#958254',
     '--graph-queries-border-readable': '#9f8028',
@@ -250,7 +250,11 @@ const READABLE_OVERRIDES: Record<string, Record<string, string>> = {
     '--graph-edge-highlight-readable': '#a08037',
   },
   product: { '--graph-edge-readable': '#00ff88' },
-  'dark(tokens.css)': { '--graph-edge-readable': '#4d8dff' },
+  'dark(tokens.css)': {
+    '--graph-edge-readable': '#4d8dff',
+    '--graph-comparisons-readable': '#3b76f6', /* T04569：与 entities 最近对 ΔE 4.62→13.25 */
+    '--graph-queries-readable': '#5ab1ff', /* T04569：与 concepts 最近对 ΔE 3.09→16.92 */
+  },
 };
 
 /** 留档表按 3 位小数四舍五入过，比对容差 0.001（等于允许末位取整，不允许真实劣化） */
@@ -580,5 +584,57 @@ describe('F · 防错接：目录/边色只读可读档，且不再叠加 vis op
       expect(bare, `${fn} 里出现未调深的基色：${bare.join(', ')}（画布节点会重新掉回不达标配色）`).toEqual([]);
       expect(used.length, `${fn} 的取色项数变了，DIRS 需同步`).toBe(DIRS.length);
     }
+  });
+});
+
+// ============================================================
+// T04569：目录填充色可辨识锁（ΔE76 最近对 ≥ 5）
+//
+// 与 D 腿的「对画布底对比度（WCAG 1.4.11 ≥ 3.0）」是两条独立尺子：
+//   D 腿管「节点色 vs 背景」是否够亮；本腿管「6 类目录彼此」是否够分得开。
+// T04513 把 6 色压深达标时收窄了色间距，portfolio 最近一对从 5.3 掉到 2.6、dark 存量 3.1，
+// 并排几乎分不出谁是谁。本腿把「最近一对 ΔE ≥ 5」定为可辨识下限，改色板时一并锁住。
+// 阈值取任务建议的低档（≥ 5；高档 ≥ 10 留给后续统一重冻基线）：≥ 5 即人眼并排可分辨。
+// ============================================================
+const DE_THRESHOLD = 5.0;
+
+/** sRGB(#rrggbb) → CIELAB（D65），自实现，不依赖第三方色彩库 */
+function srgbToLab(hex: string): [number, number, number] {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  const R = lin(r), G = lin(g), B = lin(b);
+  const X = (R * 0.4124 + G * 0.3576 + B * 0.1805) / 0.95047;
+  const Y = (R * 0.2126 + G * 0.7152 + B * 0.0722) / 1.0;
+  const Z = (R * 0.0193 + G * 0.1192 + B * 0.9505) / 1.08883;
+  const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  const fx = f(X), fy = f(Y), fz = f(Z);
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+
+/** 一组 hex 的两两 ΔE76 最近一对（越小越难分辨） */
+function nearestDeltaE(hexes: string[]): number {
+  let best = Infinity;
+  for (let i = 0; i < hexes.length; i++) {
+    for (let j = i + 1; j < hexes.length; j++) {
+      const [L1, a1, b1] = srgbToLab(hexes[i]);
+      const [L2, a2, b2] = srgbToLab(hexes[j]);
+      const d = Math.sqrt((L1 - L2) ** 2 + (a1 - a2) ** 2 + (b1 - b2) ** 2);
+      if (d < best) best = d;
+    }
+  }
+  return best;
+}
+
+describe('G · 目录填充色可辨识（T04569）：同底 6 类目录最近一对 ΔE76 ≥ 5', () => {
+  it('每个底的 6 个 --graph-<dir>-readable 两两最近对 ΔE ≥ 5（并排可分辨，不互相吞色）', () => {
+    const fails: string[] = [];
+    for (const base of BASES) {
+      const hexes = DIRS.map((d) => hexOf(base.decls, `var(--graph-${d}-readable)`));
+      const de = nearestDeltaE(hexes);
+      if (de < DE_THRESHOLD) fails.push(`${base.name}：最近一对 ΔE=${de.toFixed(2)} < ${DE_THRESHOLD}`);
+    }
+    expect(fails, `以下底的目录填充色彼此太接近，画布节点会难以区分：\n  ${fails.join('\n  ')}`).toEqual([]);
   });
 });
