@@ -67,6 +67,9 @@ export interface BatchFixSnapshot {
   // T02922：流程跑完但定点复检未确认消解的项（与失败区分——LLM 没报错，只是问题还在）
   ineffectiveCount: number;
   ineffective: BatchFixFailedItem[];
+  // T04565(B)：修复前确定性预复检已判消项的计数（不烧 LLM、不计入 failCount）。
+  skippedCount: number;
+  skippedKeys: string[];
   currentIssueKey: string;
   pauseRequested: boolean;
   startedAt: number;
@@ -302,6 +305,8 @@ export class BatchFixJobManager {
       failCount: 0,
       ineffectiveCount: 0,
       ineffective: [],
+      skippedCount: 0,
+      skippedKeys: [],
       currentIssueKey: '',
       pauseRequested: false,
       startedAt: now,
@@ -588,6 +593,33 @@ export class BatchFixJobManager {
     const snap = entry.snapshot;
     const opts = this.options;
     const maxAttempts = Math.max(1, opts.maxRetries + 1);
+    // T04565(B)：修复前确定性预复检——已被外部（Obsidian 手改 / 另一轮编译 / 上一轮修复）消解的问题，
+    // 在烧 LLM 之前剔掉，省一轮模型往返。复用 adapter.recheckIssueResolved（与 doHealthCheck、finishSuccessfulFix 同口径）。
+    // 跳过项不计 failCount、不调用 harness.run，推独立事件 issue_skipped；返回 true 使其结算（nextIndex 前移，resume 不重跑）。
+    let preResolved = false;
+    let preNote = '';
+    try {
+      preResolved = (await this.adapter.recheckIssueResolved?.(item.input)) ?? false;
+    } catch (err: unknown) {
+      // 预复检自身异常：保守放行进入真实修复，不让复检故障阻断整条作业
+      preResolved = false;
+      preNote = `预复检失败，放行修复: ${err instanceof Error ? err.message : String(err)}`;
+    }
+    if (preResolved) {
+      snap.skippedCount = (snap.skippedCount ?? 0) + 1;
+      (snap.skippedKeys ??= []).push(item.issueKey);
+      this.emit(entry, 'issue_skipped', {
+        step: 'done',
+        status: 'skipped',
+        issueIndex,
+        totalIssues: snap.total,
+        issueKey: item.issueKey,
+        issueDone: true,
+        message: preNote || '问题已被外部消解，跳过修复（不消耗 LLM）',
+      });
+      await this.persist(entry);
+      return true;
+    }
     let outcome: FixOutcome | null = null;
     let firstAttemptMs = 0;
     let totalMs = 0;

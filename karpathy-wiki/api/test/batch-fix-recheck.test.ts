@@ -188,9 +188,16 @@ describe('B/C · BatchFixJobManager：复检裁定 + 耗时样本口径', () => 
   });
 
   it('流程成功且复检消解 → doneKeys 收下该 key（正常路径不被误伤）', async () => {
+    // 预复检必须先返回 false（问题尚未消解 → 进入修复），修复成功后再复检才返回 true。
+    // 这一顺序正是 T04565(B) 引入「修复前预复检」后，仍要保障的「修复后定点复检」口径：
+    // 预复检不抢占正常消解路径。
+    let calls = 0;
     const { adapter } = jobAdapter({
       flow: [DONE_OK],
-      recheck: async () => true,
+      recheck: async () => {
+        calls += 1;
+        return calls > 1;
+      },
     });
     const input: FixInput = { issueType: 'orphan', target: 'entities/target.md' };
     const { events, snapshot } = await runJob(adapter, [{ issueKey: 'orphan:entities/target.md', input }]);
@@ -202,19 +209,57 @@ describe('B/C · BatchFixJobManager：复检裁定 + 耗时样本口径', () => 
     expect(events).not.toContain('issue_ineffective');
   });
 
-  it('流程本身失败 → 不进复检，失败项同样计入耗时样本（口径一致）', async () => {
+  it('流程本身失败 → 不进修复后复检，失败项同样计入耗时样本（口径一致）', async () => {
+    // 预复检返回 false（不跳过）→ 进入修复 → 流程报错失败；失败不该触发修复后定点复检。
+    let calls = 0;
     const { adapter, recheck } = jobAdapter({
       flow: [{ step: 'done', status: 'error', message: 'engine-failed' }],
-      recheck: async () => true,
+      recheck: async () => {
+        calls += 1;
+        return calls > 1;
+      },
     });
     const input: FixInput = { issueType: 'orphan', target: 'entities/target.md' };
     const { events, snapshot } = await runJob(adapter, [{ issueKey: 'orphan:entities/target.md', input }]);
 
     expect(snapshot).toMatchObject({ successCount: 0, ineffectiveCount: 0, failCount: 1 });
     expect(events).toContain('issue_error');
-    // 流程没成功就不该消耗复检
-    expect(recheck).not.toHaveBeenCalled();
+    // T04565(B) 之后：预复检会在修复前调用一次；流程失败不再触发修复后定点复检，故总共只有 1 次
+    expect(recheck).toHaveBeenCalledTimes(1);
     expect((await readStats()).samples).toBe(1);
+  });
+
+  it('T04565(B) 修复前预复检已判消 → 跳过修复（不烧 LLM、不进 failCount、发 issue_skipped）', async () => {
+    // onFlow 仅在 healthCheckFix 真被调用时触发；预复检命中后不应进入修复流程
+    const onFlowSpy = vi.fn(async () => {
+      throw new Error('预复检已判消，不应进入修复流程');
+    });
+    const { adapter, recheck } = jobAdapter({
+      flow: [DONE_OK],
+      recheck: async () => true, // 预复检直接判定问题已被外部消解
+      onFlow: onFlowSpy,
+    });
+    const input: FixInput = { issueType: 'orphan', target: 'entities/target.md' };
+    const { events, snapshot } = await runJob(adapter, [{ issueKey: 'orphan:entities/target.md', input }]);
+
+    // 预复检命中：跳过修复，整条作业照常结算为 completed
+    expect(snapshot).toMatchObject({
+      status: 'completed',
+      doneCount: 1,
+      successCount: 0,
+      failCount: 0,
+      ineffectiveCount: 0,
+      skippedCount: 1,
+    });
+    expect(snapshot?.skippedKeys).toEqual(['orphan:entities/target.md']);
+    // 事件口径：有 issue_skipped、没有 issue_done（没真去修）、没有 issue_ineffective
+    expect(events).toContain('issue_skipped');
+    expect(events).not.toContain('issue_done');
+    expect(events).not.toContain('issue_ineffective');
+    // 预复检被调用且按 input 口径；修复流程（healthCheckFix 的 onFlow）未被触发，省一轮模型往返
+    expect(recheck).toHaveBeenCalledTimes(1);
+    expect(recheck).toHaveBeenCalledWith(input);
+    expect(onFlowSpy).not.toHaveBeenCalled();
   });
 
   it('真实 vault 闭环：流程写了回链 → 复检消解；流程只回「成功」没写 → 复检未消解', async () => {
