@@ -8,6 +8,8 @@ param(
     [string]$ConfigPath = "$PSScriptRoot\config.json",
     [switch]$SkipInstall,
     [switch]$SkipBuild,
+    # T04910：跳过发布门禁（pnpm gate）。默认发布/部署前执行双侧 gate，失败即停
+    [switch]$SkipGate,
     [switch]$SkipDeploy,
     [switch]$SkipRestart,
     # 默认发布 GitHub Release；只想部署 SPA（不发 Release）时加 -SkipPublish
@@ -177,6 +179,25 @@ if ($SkipInstall) {
     & $pkgManager @installArgs
     if ($LASTEXITCODE -ne 0) { Write-Log "依赖安装失败" -Level ERROR -Step "1/6"; exit 1 }
     Write-Log "依赖安装完成" -Level OK -Step "1/6"
+}
+
+# ============ 1.5) 发布门禁（T04910）============
+# 把双侧 pnpm gate 接入发布校验：串行执行（先 api 后 web），避免 api 性能用例与前端全量并发导致假红；
+# 任一侧失败即 exit 1（失败即停），不让带类型错误/测试失败的产物进入部署与重启。
+Write-Log "步骤 1.5/6 发布门禁（pnpm gate）..." -Level STEP -Step "1.5/6"
+if ($SkipGate) {
+    Write-Log "跳过发布门禁（-SkipGate）" -Level SKIP -Step "1.5/6"
+} else {
+    if ($pkgManager -notmatch 'pnpm') {
+        Write-Log "发布门禁依赖 pnpm --filter 过滤 workspace 包；当前包管理器为 $pkgManager（T04910）" -Level ERROR -Step "1.5/6"
+        exit 1
+    }
+    & $pkgManager --filter @karpathy-wiki/api run gate
+    if ($LASTEXITCODE -ne 0) { Write-Log "api gate 未通过，发布中止" -Level ERROR -Step "1.5/6"; exit 1 }
+    Write-Log "api gate 通过" -Level OK -Step "1.5/6"
+    & $pkgManager --filter @karpathy-wiki/web run gate
+    if ($LASTEXITCODE -ne 0) { Write-Log "web gate 未通过，发布中止" -Level ERROR -Step "1.5/6"; exit 1 }
+    Write-Log "web gate 通过" -Level OK -Step "1.5/6"
 }
 
 # ============ 2) 构建前端 SPA ============

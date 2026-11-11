@@ -207,6 +207,23 @@ if (Test-Path (Join-Path $harnessPath "package.json")) {
     Write-Warn "未找到本地 wiki-harness 目录，跳过（若已发布到 npm 可忽略）"
 }
 
+# ============== 2.5 发布门禁（T04910）==============
+# 在打包前串行跑双侧 pnpm gate（先 api 后 web，避免 api 性能用例与前端全量并发假红）；
+# 放在 harness 构建之后，是因为 api 的 tsc 依赖重建后的 @wiki/harness dist。
+# 任一侧失败即 throw（失败即停），不让带类型/测试问题的产物进入 esbuild/pkg。
+Write-Host "`n[2.5/8] 发布门禁（pnpm gate）..." -ForegroundColor Yellow
+if (-not $UsePnpm) {
+    throw "发布门禁依赖 pnpm --filter 过滤 workspace 包；当前未使用 pnpm（T04910）"
+}
+Write-Step "api gate：tsc --noEmit + typecheck:test + vitest"
+& $pkgCmd --filter @karpathy-wiki/api run gate
+if ($LASTEXITCODE -ne 0) { throw "api gate 未通过，发布中止（T04910）" }
+Write-Ok "api gate 通过"
+Write-Step "web gate：theme-tokens + vue-tsc + typecheck:test + vitest"
+& $pkgCmd --filter @karpathy-wiki/web run gate
+if ($LASTEXITCODE -ne 0) { throw "web gate 未通过，发布中止（T04910）" }
+Write-Ok "web gate 通过"
+
 # ============== 3. 构建 SPA ==============
 Write-Host "`n[3/8] 构建 SPA..." -ForegroundColor Yellow
 
