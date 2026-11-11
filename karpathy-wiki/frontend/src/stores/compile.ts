@@ -658,9 +658,10 @@ export const useCompileStore = defineStore('compile', () => {
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
       await consumeSSE(res, (eventType, parsed) => {
         if (eventType === 'deduped' || eventType === 'batch_deduped') deduped = true;
-        handleEvent(eventType, parsed);
-        // T04508：重试流同样逐事件落盘，切页/刷新后分组进度与重试结果不丢
-        persistProgress();
+        // T05554：重试流走 handleStreamEvent（与首连同一入口）——捕获 `job` 帧更新
+        //   currentJobId/lastStreamSeq，F5 后才能续订到重试的新作业而非首轮失败作业；
+        //   逐事件落盘由 handleStreamEvent 内部完成（T04508 切页/刷新不丢进度）。
+        handleStreamEvent(eventType, parsed);
       }, retryAbortController?.signal);
       // 流结束仍停在 running：没有终止事件，按「可重试的失败」收口（与 T03438 同口径）
       if (group.status === 'running') {
@@ -680,6 +681,9 @@ export const useCompileStore = defineStore('compile', () => {
       retryAbortController = null;
       retryingIndexes.value = retryingIndexes.value.filter((i) => i !== fileIndex);
       refreshBatchOutcome();
+      // T05554：把收敛后的终态落盘——否则快照停在重试期间最后一次事件的 isCompiling=true，
+      //   F5 后 restoreBatchSnapshot 误判「仍在编译」并续订到首轮失败作业，重贴「编译失败」。
+      persistProgress();
     }
   }
 
