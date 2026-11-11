@@ -343,7 +343,9 @@ onBeforeUnmount(() => {
       <button v-for="h in searchHits" :key="h.path" class="mb-card" @click="openHit(h)">
         <div class="mb-card-top">
           <span class="mb-card-title">{{ titleOfHit(h) }}</span>
-          <span v-if="h.hits" class="mb-chip mb-chip-hit">{{ h.hits }} 命中</span>
+          <!-- T04560：不再显示「N 命中」原始数字。2-gram 取词下这个数被高频 gram 稀释，
+               长问句天然命中项多，数字大小与「有多相关」不成正比，只会误导；改固定文案。 -->
+          <span v-if="h.hits" class="mb-chip mb-chip-hit">相关</span>
         </div>
         <p class="mb-snippet">{{ h.snippet }}</p>
       </button>

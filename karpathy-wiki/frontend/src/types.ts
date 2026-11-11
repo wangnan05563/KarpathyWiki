@@ -629,6 +629,9 @@ export interface SearchHit {
   title: string;
   snippet: string;
   hits: number;
+  // T04560：加权相关性分（后端排序主键）。前端不参与排序，故可选——
+  // 移动端已不再展示命中数，此处只为契约透明，避免「后端多给一个字段」被当成漂移。
+  score?: number;
 }
 
 // 搜索响应（GET /api/search）

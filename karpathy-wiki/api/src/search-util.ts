@@ -10,14 +10,20 @@ import { PAGE_DIRS } from './vault/page-scope.js';
 import { DEFAULT_SCAN_CONCURRENCY, mapWithConcurrency } from './utils/async-pool.js';
 // T04458（裁决：必须共用取词）：与索引路径、召回层共用同一份取词，不再各自按空白切词
 import { toSearchTerms } from './utils/query-keywords.js';
+// T04560：相关性与 snippet 锚点的单一来源（与索引路径共用，避免两路排序分叉）
+import { computeTermStats, scoreLower, pickAnchorIndex, type TermStats } from './utils/search-rank.js';
 
 // 全文检索命中结果
 export interface SearchHit {
   path: string;
   title: string;
   snippet: string;
-  // 命中关键词数（相关性排序用）
+  // 命中关键词数。T04560 起**不再**用作排序主键（保留展示/断言口径）：
+  // 2-gram 取词下长问句天然命中项多，按它排序等于奖励「词多」而不是「词准」。
   hits: number;
+  // T04560：加权相关性分（Σ 命中词权重 = IDF × 词长权重），排序主键。
+  // 纯范围限定（无关键词）的列出分支没有相关性概念，记 0。
+  score: number;
 }
 
 export interface SearchFilter {
@@ -99,7 +105,31 @@ function matchSearchFilter(
   return { matched: true, content: parsed.content };
 }
 
-// 处理单个页面文件：读取内容、过滤、匹配关键词，返回 SearchHit 或 null
+// T04560：命中页的中间形态。打分需要「候选页集合」上的 IDF，而 IDF 只有在全库扫完之后才知道
+// ⇒ 逐页阶段只收集文本，打分/排序统一挪到扫描结束后一次完成（两路共用同一套算法）。
+interface ScannedPage {
+  path: string;
+  title: string;
+  /** 参与 snippet 的原文（不是 lower——大小写要按原文展示） */
+  searchContent: string;
+  /** 参与匹配与打分的 lower 文本 */
+  lower: string;
+}
+
+type ScanOutcome =
+  | { kind: 'listed'; hit: SearchHit }
+  | { kind: 'matched'; page: ScannedPage };
+
+// snippet：锚点取「最长命中词」（T04560），而不是词表首项。
+// 中文问句的词表首项常是虚词后的首二字（知识/价值里先出现谁全看语序），区分度弱，
+// 于是命中页的摘要经常落在一句无关的过渡句上。锚点返回 -1 时（理论不可达：调用前已保证命中）回退 0。
+function buildSnippet(searchContent: string, lower: string, terms: string[], stats: TermStats): string {
+  const anchor = pickAnchorIndex(lower, terms, stats);
+  const start = Math.max(0, (anchor >= 0 ? anchor : 0) - 30);
+  return searchContent.slice(start, start + 120).replaceAll('\n', ' ');
+}
+
+// 处理单个页面文件：读取内容、过滤、匹配关键词，返回待打分页或（无关键词时）直接可用的列出项
 // T04176：badPageSink 收集「frontmatter 解析失败」的页面。为什么必须就地吞掉而不是让它冒出去：
 // gray-matter 对坏 YAML 是抛异常（未闭合 flow collection / 重复键 / 值里裸冒号），而带 source、
 // status、type、tags 任一过滤条件时每个页面都会过一次整页解析。mapWithConcurrency 的约定是
@@ -114,7 +144,7 @@ async function processSearchFile(
   terms: string[],
   filter?: SearchFilter,
   badPageSink?: Array<{ path: string; reason: string }>,
-): Promise<SearchHit | null> {
+): Promise<ScanOutcome | null> {
   if (!f.endsWith('.md')) return null;
   let content: string;
   try {
@@ -139,19 +169,19 @@ async function processSearchFile(
   if (terms.length === 0) {
     const title = f.slice(0, -3);
     const snippet = content.slice(0, 120).replaceAll('\n', ' ');
-    return { path: rel, title, snippet, hits: 1 };
+    return { kind: 'listed', hit: { path: rel, title, snippet, hits: 1, score: 0 } };
   }
 
   const searchContent = filterResult.content || content;
   const lower = searchContent.toLowerCase();
-  const hitCount = terms.filter((t) => lower.includes(t)).length;
-  if (hitCount === 0) return null;
+  // 相关性全 0 命中在这里就丢掉（省一次全库 IDF 之后的打分开销）：
+  // 命中判据与打分的「是否命中」必须同源，故用同一个 includes 语义（scoreLower 内部亦然）。
+  if (!terms.some((t) => lower.includes(t))) return null;
 
-  const title = f.slice(0, -3);
-  const firstIdx = lower.indexOf(terms[0]);
-  const start = Math.max(0, firstIdx - 30);
-  const snippet = searchContent.slice(start, start + 120).replaceAll('\n', ' ');
-  return { path: rel, title, snippet, hits: hitCount };
+  return {
+    kind: 'matched',
+    page: { path: rel, title: f.slice(0, -3), searchContent, lower },
+  };
 }
 
 // 简单全文搜索：扫描所有页面目录，按关键词匹配标题与正文。
@@ -187,12 +217,11 @@ export async function searchPages(
   // 这条兜底路径服务「纯过滤查询」与索引不可用时的降级：串行读全库是秒级队头阻塞，
   // 与索引路径同口径走有界并发（O3）
   const badPages: Array<{ path: string; reason: string }> = [];
-  const hits = await mapWithConcurrency(
+  const outcomes = await mapWithConcurrency(
     candidates,
     DEFAULT_SCAN_CONCURRENCY,
     ({ dir, file }) => processSearchFile(vault, `${dir}/${file}`, dir, file, terms, filter, badPages),
   );
-  const results = hits.filter((hit): hit is SearchHit => hit !== null);
 
   // 一次扫描只打一条：坏页多时逐页 warn 会把日志刷满，排查要的只是「哪几页坏了 + 一共几页」
   if (badPages.length > 0) {
@@ -202,7 +231,41 @@ export async function searchPages(
     }));
   }
 
+  const listed: SearchHit[] = [];
+  const matched: ScannedPage[] = [];
+  for (const outcome of outcomes) {
+    if (!outcome) continue;
+    if (outcome.kind === 'listed') listed.push(outcome.hit);
+    else matched.push(outcome.page);
+  }
+
+  // 无关键词：列出分支，按标题稳定排序（与打分无关）
+  if (terms.length === 0) {
+    listed.sort((a, b) => a.title.localeCompare(b.title));
+    return listed.slice(0, limit);
+  }
+
+  // T04560：IDF 在「本次查询的候选页集合」上算——候选指「通过过滤且有命中」的页，
+  // 与索引路径的候选集口径相同（FTS 召回后同样只保留有命中的页），两路因此同排序。
+  // 注意：legacy 的 lower 含 frontmatter 原文、索引路径只有正文 chunk，df 的绝对数会有细小差异；
+  // 这一步是要收掉「按命中词数排序」的失真，不是要造一套全局词权重，df 差异落在噪声量级。
+  // 内存代价：命中页的正文在打分期间同时驻留（只留命中页，不是全库）；这条路径是索引不可用时的
+  //   降级 + 纯过滤查询，正常 /api/search 走索引路径不经过这里。
+  const stats = computeTermStats(terms, matched.map((p) => p.lower));
+  const results: SearchHit[] = matched.map((page) => {
+    const { score, hits } = scoreLower(page.lower, terms, stats);
+    return {
+      path: page.path,
+      title: page.title,
+      snippet: buildSnippet(page.searchContent, page.lower, terms, stats),
+      hits,
+      score,
+    };
+  });
+
+  // 排序：加权分优先（区分度高的词命中者在上），同分退回命中词数，最后标题兜底保证确定性
   results.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
     if (b.hits !== a.hits) return b.hits - a.hits;
     return a.title.localeCompare(b.title);
   });

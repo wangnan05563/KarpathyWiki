@@ -76,7 +76,9 @@ export async function retrieveForQuery(
         embedding: options.embedding,
       });
       if (hits.length > 0) {
-        return hits.map((h) => ({ path: h.path, title: h.title, snippet: h.snippet, hits: 0, source: h.source }));
+        // 语义路的命中数/关键词加权分不适用（它是向量相似度排序），占位 0 表示「非关键词口径」；
+        // 契约字段保留是为了让两条取数路径对下游同形（T04560 加 score 时一并补齐）。
+        return hits.map((h) => ({ path: h.path, title: h.title, snippet: h.snippet, hits: 0, score: 0, source: h.source }));
       }
     } catch {
       // 混合检索不可用（索引缺失 / embedding 调用失败）：退回关键词扫描，与 FR-20 静默降级一致

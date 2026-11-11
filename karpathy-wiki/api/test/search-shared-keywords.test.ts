@@ -223,6 +223,81 @@ describe('D · 负控制：改造前后都必须绿（证明红来自缺陷而�
   });
 });
 
+describe('F · T04560：相关性加权（IDF × 词长）与 snippet 锚点，两路必须同口径', () => {
+  // 三页的命中词分布刻意做成「宽命中 vs 窄命中」：p1 命中 3 词、p2/p3 各 1 词，
+  // 且 知识/检索 是 df=2 的常见 gram，识库 是 df=1 的窄 gram。
+  async function seedRankVault(): Promise<void> {
+    await writePage('concepts/p1.md', '知识库检索让零散笔记可查。\n');
+    await writePage('concepts/p2.md', '检索很慢，需要优化。\n');
+    await writePage('concepts/p3.md', '知识需要沉淀成网络。\n');
+    vault = new VaultService(vaultDir);
+    await vault.init();
+    await ensureIndexSynced(dataDir, vault, true);
+  }
+
+  it('R13 同一查询：两路的 hits 与加权分逐页一致，排序一致（任一路改口径即红）', async () => {
+    await seedRankVault();
+    const q = '知识库 检索';
+    const legacy = await searchPages(vault, q, 20);
+    const indexed = await searchPagesIndexed(dataDir, vault, q, 20);
+    expect(pathsOf(legacy).length, '先证明不是「两边都空」的空断言').toBe(3);
+    expect(indexed, '索引路径返回 null 表示不可用，本腿要求它真的完成检索').not.toBeNull();
+
+    const byPath = new Map((indexed ?? []).map((h) => [h.path, h]));
+    for (const hit of legacy) {
+      const other = byPath.get(hit.path);
+      expect(other, `索引路径漏召回 ${hit.path}`).toBeDefined();
+      // 这两条是本单的锁腿：hits 语义保持「命中词项数」，score 是新增排序键，
+      // 两路各自实现过一次打分（T04458 的教训：口径分叉不会报错，只会让同一查询两次排序不同）。
+      expect(other!.hits, `${hit.path} 的命中词数两路口径不一致`).toBe(hit.hits);
+      expect(other!.score, `${hit.path} 的加权分两路口径不一致`).toBeCloseTo(hit.score, 10);
+    }
+    expect(pathsOf(indexed ?? []), '两路排序分叉：同一查询在搜索页出现两种顺序').toEqual(pathsOf(legacy));
+    // 顺带钉住 score 的语义：命中 3 词的页面加权分必须最高
+    expect(legacy[0].path).toBe('concepts/p1.md');
+  });
+
+  it('R14 加权排序翻转：命中 1 个高区分度词的页面压过命中 2 个常见 gram 的页面', async () => {
+    await writePage('concepts/rare-latin.md', '这里只有 obsidian 一词，别的概念都没展开。\n');
+    await writePage('concepts/many-grams.md', '知识库的价值：知识沉淀。\n');
+    vault = new VaultService(vaultDir);
+    await vault.init();
+
+    const hits = await searchPages(vault, 'obsidian 知识库', 20);
+    expect(pathsOf(hits).length, '两页都必须被召回，否则排序断言无意义').toBe(2);
+    expect(
+      pathsOf(hits)[0],
+      '按 hits 排序会把「命中 2 个 gram」的页面排前面；加权分必须让它退位',
+    ).toBe('concepts/rare-latin.md');
+
+    // 反向锁：hits 语义没被顺手改掉（仍是被命中词项的个数）
+    const many = hits.find((h) => h.path === 'concepts/many-grams.md');
+    expect(many?.hits, 'hits 必须仍是命中词项数，不是加权分').toBe(2);
+    expect(hits[0].hits).toBe(1);
+  });
+
+  it('R15 snippet 锚在最长命中词附近：词表首项在文首时不再锚它（两路都要）', async () => {
+    // 填充段落不含任何查询词；knowledge 落在 300+ 字符之后，锚点必须跟过去
+    const filler = 'lorem ipsum dolor sit amet '.repeat(12);
+    await writePage('concepts/anchor.md', `ai ${filler}knowledge 的正文。\n`);
+    vault = new VaultService(vaultDir);
+    await vault.init();
+    await ensureIndexSynced(dataDir, vault, true);
+
+    const legacy = await searchPages(vault, 'ai knowledge', 20);
+    expect(legacy[0]?.path).toBe('concepts/anchor.md');
+    expect(legacy[0].snippet, 'snippet 仍锚在文首的 ai 上（摘要里看不到真正的查询词）').toContain('knowledge');
+    // 窗口从锚点前 30 字符开始 ⇒ 改造前（锚在文首 ai）snippet 必然以 'ai ' 开头；
+    // 锚点挪到文末后，开头应落在填充段落的中段（'et lorem ipsum…'）。
+    expect(legacy[0].snippet.startsWith('ai '), '起始偏移仍取词表首项位置').toBe(false);
+
+    const indexed = await searchPagesIndexed(dataDir, vault, 'ai knowledge', 20);
+    const indexedHit = (indexed ?? []).find((h) => h.path === 'concepts/anchor.md');
+    expect(indexedHit, '索引路径必须召回该页').toBeDefined();
+    expect(indexedHit!.snippet, '索引路径的锚点必须与 legacy 同口径').toContain('knowledge');
+  });
+});
+
 describe('E · 结构锁：三个出口必须共用同一份取词，不许各自 split', () => {
   const SITES = [
     { label: 'search-util', file: path.resolve(__dirname, '..', 'src', 'search-util.ts') },

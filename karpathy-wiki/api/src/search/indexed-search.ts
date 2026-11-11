@@ -13,6 +13,8 @@ import { mapWithConcurrency } from '../utils/async-pool.js';
 import { getPageSnapshot } from '../utils/derived-cache.js';
 // T04458：与 legacy 扫描、召回层共用同一份取词（整句中文不再当成一个词项）
 import { toSearchTerms } from '../utils/query-keywords.js';
+// T04560：加权打分与 snippet 锚点与 legacy 路径共用同一实现（否则两路对同一查询排序分叉）
+import { computeTermStats, scoreLower, pickAnchorIndex, type TermStats } from '../utils/search-rank.js';
 import { keywordRecall, listIndexedPageTimes, removePageIndex } from './sqlite-index.js';
 import { indexPage, listVaultPages } from './hybrid-search.js';
 
@@ -196,11 +198,13 @@ async function matchesFrontmatter(
   return matchFilter(parsed.data, filter);
 }
 
-function buildSnippet(chunks: PageChunks['chunks'], terms: string[]): string {
+// T04560：锚点取「最长命中词」而非词表首项——中文 2-gram 下首项常是虚词后的首二字，区分度弱，
+// 摘要会落到无关过渡句上。逐 chunk 找锚点：先命中的 chunk 未必含最有区分度的词。
+function buildSnippet(chunks: PageChunks['chunks'], terms: string[], stats: TermStats): string {
   for (const chunk of chunks) {
     const lower = chunk.content.toLowerCase();
-    const idx = terms.map((t) => lower.indexOf(t)).find((i) => i >= 0);
-    if (idx === undefined) continue;
+    const idx = pickAnchorIndex(lower, terms, stats);
+    if (idx < 0) continue;
     const start = Math.max(0, idx - 30);
     return chunk.content.slice(start, start + 120).replaceAll('\n', ' ');
   }
@@ -232,22 +236,18 @@ export async function searchPagesIndexed(
   // 与 legacy 扫描（search-util.searchPages）同一条坏页记账口径：一次检索只打一条，
   // 排查要的是「哪几页坏了 + 一共几页」，而不是逐页刷日志。
   const badPages: Array<{ path: string; reason: string }> = [];
-  const hits: SearchHit[] = [];
+  // T04560：先收集候选页（有命中且过过滤），再统一算 IDF 与分数——IDF 依赖候选集，
+  // 边遍历边打分就会用上半截候选集算权重，结果随 chunk 返回顺序漂移。
+  const candidates: Array<{ rel: string; entry: PageChunks; combined: string }> = [];
   for (const [rel, entry] of byPage) {
     if (filter?.folder && !rel.startsWith(`${filter.folder}/`)) continue;
     const combined = entry.chunks.map((c) => c.content).join('\n').toLowerCase();
-    const hitCount = terms.filter((t) => combined.includes(t)).length;
-    if (hitCount === 0) continue;
+    if (!terms.some((t) => combined.includes(t))) continue;
 
     if (needsFrontmatterFilter(filter) && !(await matchesFrontmatter(vault, rel, filter, badPages))) continue;
 
     entry.chunks.sort((a, b) => a.index - b.index);
-    hits.push({
-      path: rel,
-      title: rel.split('/').pop()?.replace(/\.md$/, '') ?? rel,
-      snippet: buildSnippet(entry.chunks, terms),
-      hits: hitCount,
-    });
+    candidates.push({ rel, entry, combined });
   }
 
   if (badPages.length > 0) {
@@ -257,6 +257,19 @@ export async function searchPagesIndexed(
     }));
   }
 
-  hits.sort((a, b) => (b.hits - a.hits) || a.title.localeCompare(b.title));
+  // 候选集口径与 legacy 一致（通过过滤且有命中的页），故两路对同一查询给出同一排序（R5）
+  const stats = computeTermStats(terms, candidates.map((c) => c.combined));
+  const hits: SearchHit[] = candidates.map(({ rel, entry, combined }) => {
+    const { score, hits: hitCount } = scoreLower(combined, terms, stats);
+    return {
+      path: rel,
+      title: rel.split('/').pop()?.replace(/\.md$/, '') ?? rel,
+      snippet: buildSnippet(entry.chunks, terms, stats),
+      hits: hitCount,
+      score,
+    };
+  });
+
+  hits.sort((a, b) => (b.score - a.score) || (b.hits - a.hits) || a.title.localeCompare(b.title));
   return hits.slice(0, limit);
 }
