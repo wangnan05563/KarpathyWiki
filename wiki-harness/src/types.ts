@@ -8,6 +8,25 @@ export interface LLMConfig {
   model: string;
   // 单次 LLM 请求超时（ms），默认 60000；由宿主配置注入，缺省保持历史行为
   timeoutMs?: number;
+  // T04565-A：出站速率闸配置。缺省（不传）时速率闸完全不生效，保持历史行为。
+  // 由宿主从 config.json 的 llm.rateLimit 读取并透传（见 api/src/index.ts）。
+  rateLimit?: Partial<RateLimitConfig>;
+}
+
+// T04565-A：LLM 出站速率闸配置。
+// 令牌桶（requestsPerMinute / tokensPerMinute）+ 并发上限（maxConcurrent）双约束，
+// 并对 429 做自适应降速（rateMul 临时减半，成功后缓慢恢复），避免把偶发 429 打成持续 429。
+// 注意：Retry-After 的实际等待由 retry-policy 的 withRetry 负责（T04564 已落地），
+// 本闸只在 429 时调整自身速率，不重复实现等待逻辑。
+export interface RateLimitConfig {
+  /** 总开关：false 时速率闸完全不生效。缺省按 true 处理（即配置块存在即启用） */
+  enabled: boolean;
+  /** 进程内同时进行的 LLM 请求上限（并发闸） */
+  maxConcurrent: number;
+  /** 每分钟请求数上限（令牌桶，按窗口滑动补充） */
+  requestsPerMinute: number;
+  /** 每分钟 token 数上限（令牌桶，按 countTokens 估算请求开销） */
+  tokensPerMinute: number;
 }
 
 export interface Message {

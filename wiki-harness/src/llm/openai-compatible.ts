@@ -1,5 +1,7 @@
 import type { Message, ToolDefinition, LLMResponse, LLMChunk, LLMConfig, ToolCall } from '../types.js';
 import type { LLMAdapter } from './llm-adapter.js';
+// T04565-A：出站速率闸（进程级共享）。chat/chatStream 共用 fetchWithRetry，闸门即卡在该处。
+import { RateLimiter, getSharedRateLimiter } from './rate-limiter.js';
 
 // OpenAI 兼容 API 响应结构（仅取关心的字段，避免 any）
 interface OpenAIChatResponse {
@@ -69,7 +71,13 @@ function createHttpError(status: number, text: string, retryAfterHeader: string 
 // OpenAI 兼容适配器：通过 baseUrl + apiKey + model 切换 GLM/Qwen/DeepSeek
 // 国产模型普遍兼容 OpenAI API 协议，零依赖原生 fetch 实现
 export class OpenAICompatibleAdapter implements LLMAdapter {
-  constructor(private config: LLMConfig) {}
+  // T04565-A：出站速率闸。显式注入优先（测试用）；否则按 config.rateLimit 取进程级共享实例
+  // （query / health / compile 各自 new adapter，但共用同一个闸；null 表示禁用，保持历史行为）。
+  private readonly rateLimiter: RateLimiter | null;
+
+  constructor(private config: LLMConfig, rateLimiter?: RateLimiter | null) {
+    this.rateLimiter = rateLimiter ?? getSharedRateLimiter(this.config.rateLimit);
+  }
 
   // 网络层错误判定：仅这些错误值得重试（代理抖动/连接重置/DNS 失败/超时）。
   // 与 HTTP 4xx/5xx 区分：后者是确定性错误，重试无意义。
@@ -98,9 +106,30 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
     retries = 3,
     baseDelayMs = 2000,
     timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    estimatedTokens = 0,
   ): Promise<Response> {
     let lastErr: unknown;
     for (let attempt = 1; attempt <= retries; attempt++) {
+      // T04565-A：速率闸卡在「每次尝试」入口——Layer A 的网络重试与 Layer B（withRetry）的
+      // 重试都会重新进入本循环，从而都被计入速率；token 仅在首个尝试计入，避免同一请求重复占额。
+      if (this.rateLimiter) {
+        await this.rateLimiter.acquire(attempt === 1 ? estimatedTokens : 0);
+        // 取令牌期间用户可能已主动停止：此时不发起请求，立即归还并发槽（停止语义优先）
+        if (externalSignal?.aborted) {
+          this.rateLimiter.release();
+          const abortErr = new Error('LLM 请求已取消') as Error & { code?: string };
+          abortErr.name = 'AbortError';
+          abortErr.code = 'ABORT_ERR';
+          throw abortErr;
+        }
+      }
+      // 每次尝试占用的并发槽必须在所有出口（成功/失败/重试）恰好释放一次
+      let released = false;
+      const release = (): void => {
+        if (released) return;
+        released = true;
+        this.rateLimiter?.release();
+      };
       const controller = new AbortController();
       let timedOut = false;
       const timer = setTimeout(() => {
@@ -112,9 +141,15 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
       try {
         const response = await fetch(url, { ...init, signal: merged });
         clearTimeout(timer);
+        // 429：通知速率闸自适应降速（实际等待 Retry-After 由 withRetry 负责，此处不休眠）
+        if (response.status === 429) {
+          this.rateLimiter?.onRateLimited(parseRetryAfterMs(response.headers.get('retry-after')));
+        }
+        release();
         return response;
       } catch (err) {
         clearTimeout(timer);
+        release();
         lastErr = err;
         // 用户已停止：不再重试（继续重试会违背"停止即终止"语义，白白消耗用户额度）
         if (externalSignal?.aborted) throw err;
@@ -153,7 +188,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
         'Authorization': `Bearer ${this.config.apiKey}`,
       },
       body: JSON.stringify(body),
-    }, signal, 3, 2000, this.config.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+    }, signal, 3, 2000, this.config.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS, this.countTokens(messages));
 
     if (!response.ok) {
       const text = await response.text();
@@ -191,7 +226,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
         'Authorization': `Bearer ${this.config.apiKey}`,
       },
       body: JSON.stringify(body),
-    }, signal, 3, 2000, this.config.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+    }, signal, 3, 2000, this.config.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS, this.countTokens(messages));
 
     if (!response.ok) {
       const text = await response.text();

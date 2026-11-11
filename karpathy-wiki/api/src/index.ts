@@ -353,6 +353,8 @@ export async function buildApp(): Promise<BuiltApp> {
         apiKey: apiKey ?? '',
         // T04564：单次请求超时从配置读取，缺省 60s（与 harness 默认值一致）
         timeoutMs: config.llm.timeoutMs ?? 60000,
+        // T04565-A：出站速率闸配置透传（缺省 undefined = 闸门禁用，保持历史行为）
+        rateLimit: config.llm.rateLimit,
       },
       tools: [],
       budget: config.budget,

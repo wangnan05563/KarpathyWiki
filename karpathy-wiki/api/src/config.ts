@@ -44,6 +44,14 @@ function defaultConfig(): AppConfig {
       stream: false,
       // T04564：单次 LLM 请求超时（原 harness 内硬编码 60s）
       timeoutMs: 60000,
+      // T04565-A：LLM 出站速率闸（进程级共享）。以下为保守占位默认值——
+      // 真实额度须按 provider 实际 RPM/TPM 覆盖（属产品/额度决策，见 T04565 约束）。
+      rateLimit: {
+        enabled: true,
+        maxConcurrent: 4,
+        requestsPerMinute: 60,
+        tokensPerMinute: 100000,
+      },
     },
     budget: { maxSteps: 20, tokenBudget: 50000 },
     // T04564：LLM 重试（Layer B）。与 harness DEFAULT_RETRY 同值；

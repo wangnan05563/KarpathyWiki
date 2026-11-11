@@ -3,6 +3,7 @@ export { Harness } from './harness.js';
 export type {
   HarnessConfig,
   LLMConfig,
+  RateLimitConfig,
   RunResult,
   RunContext,
   RunState,
@@ -33,6 +34,7 @@ export type {
 } from './types.js';
 export type { LLMAdapter } from './llm/llm-adapter.js';
 export { OpenAICompatibleAdapter } from './llm/openai-compatible.js';
+export { RateLimiter, getSharedRateLimiter, resetSharedRateLimiterForTest } from './llm/rate-limiter.js';
 export { FileStateStore } from './state/file-state-store.js';
 export { InMemorySessionLog, messagesToEvents, sessionLogFromMessages } from './session/session-log.js';
 export { SimpleConcatCompactor, compactLog, findSafeBoundary, DEFAULT_COMPACT_THRESHOLD } from './session/compaction.js';
