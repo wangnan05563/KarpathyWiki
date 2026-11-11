@@ -115,6 +115,7 @@ describe('T02924 估算口径', () => {
 
   it('失败 / 未消解项只要跑过 LLM 流程就计入样本，usage 一并累计', async () => {
     const usage = (steps: number, tokens: number) => ({ harnessSteps: steps, tokens });
+    const callsByTarget: Record<string, number> = {};
     const adapter = {
       healthCheckFix: async function* (input: FixInput): AsyncIterable<FixProgressEvent> {
         const target = String(input.target);
@@ -124,8 +125,14 @@ describe('T02924 估算口径', () => {
         }
         yield { step: 'done', status: 'done', message: 'ok', data: usage(3, 6_000) };
       },
-      // 未消解项：流程成功但复检说问题还在
-      recheckIssueResolved: async (input: FixInput) => String(input.target) !== 'ineffective.md',
+      // 修复前预复检（T04565 B）第 1 次调用一律返回 false（不抢跑跳过），
+      // 修复后定点复检（第 2 次）才按原口径判定；保证「已消解项跳过」与「正常修复后消解」两条路径都不被误伤。
+      recheckIssueResolved: async (input: FixInput) => {
+        const t = String(input.target);
+        callsByTarget[t] = (callsByTarget[t] ?? 0) + 1;
+        if (callsByTarget[t] === 1) return false;
+        return t !== 'ineffective.md';
+      },
     } as unknown as EngineAdapter;
 
     const mgr = manager(dir, adapter);
