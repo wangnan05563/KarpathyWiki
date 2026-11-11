@@ -43,11 +43,27 @@ interface AdapterStub {
 /** fixFor(eventsMap): 按 target 键返回不同事件序列/异常，覆盖多问题批处理 */
 function makeAdapter(
   fixImpl: (input: { issueType: string; target: unknown }) => AsyncIterable<FixProgressEvent>,
-  recheckImpl: (input: unknown) => Promise<boolean> = async () => true,
+  recheckImpl?: (input: unknown) => Promise<boolean>,
 ): AdapterStub {
   const healthCheck = vi.fn(async () => REPORT);
-  const fix = vi.fn(fixImpl);
-  const recheck = vi.fn(recheckImpl);
+  // T04565(B) 起同一次作业里 recheckIssueResolved 会被调两次（修复前预复检 / 修复后定点复检），
+  // 两次入参完全相同、桩无法从入参区分相位。默认桩若一律回 true（旧口径「默认已消解」），
+  // 预复检会把每一项都判成「已被外部消解」→ 作业一项都不跑，本文件的断言全部退化成
+  // successCount/failCount = 0 的空跑（实测 5 条红）。
+  // 相位判据用「该目标是否已发起过修复」：未发起 ⇒ 预复检，回 false 放行；已发起 ⇒ 定点复检，
+  // 回 true（沿用 T02922 的「默认已消解」语义）。用 delete 而不是 has：一次修复只消费一次复检判定。
+  const fixStarted = new Set<string>();
+  const fix = vi.fn((input: { issueType: string; target: unknown }) => {
+    fixStarted.add(String(input.target));
+    return fixImpl(input);
+  });
+  const recheck = vi.fn(
+    recheckImpl ??
+      (async (input: unknown) => {
+        const key = String((input as { target: unknown }).target);
+        return fixStarted.delete(key);
+      }),
+  );
   const markReviewed = vi.fn(async (paths: string[]) => ({ ok: true, paths, message: `reviewed ${paths.length}` }));
   const adapter = {
     healthCheck,
