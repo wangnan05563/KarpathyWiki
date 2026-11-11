@@ -744,7 +744,11 @@ export const useCompileStore = defineStore('compile', () => {
     doneMessage.value = snapshot.doneMessage;
     currentJobId.value = snapshot.jobId ?? '';
     lastStreamSeq.value = snapshot.lastSeq ?? 0;
-    return snapshot.isCompiling && !snapshot.isDone && !snapshot.isCancelled;
+    // T05079：F5 导航 teardown 会把在途流写成 isCompiling=false + errorMessage 的「假终态」快照，
+    //   但服务端「断连不取消」，作业可能已跑完。除既有「快照仍在编译」外，只要留有 jobId 且非
+    //   用户确认终态（done/cancelled），也按「已中断」上报，触发 Progress.vue 续订查后端真实终态，
+    //   而不是把 teardown 残留的 network error 当编译失败直接展示。
+    return (snapshot.isCompiling || !!snapshot.jobId) && !snapshot.isDone && !snapshot.isCancelled;
   }
 
   // 消费一条 SSE 事件：先分发状态，再落盘
@@ -873,6 +877,14 @@ export const useCompileStore = defineStore('compile', () => {
     if (snapshot.status === 'done') {
       isDone.value = true;
       isCompiling.value = false;
+      // T05079：后端确认完成——清掉断连 teardown 残留的假错误与中断标记，否则 errorMessage
+      //   优先于 isDone 渲染（BatchProgressBar/robotMood），红条会盖过「完成」。
+      errorMessage.value = '';
+      batchInterrupted.value = false;
+      // 终态帧被裁剪时分组可能停在 running/pending：作业既已完成，收敛为 done（保留 error 分组）
+      for (const g of batchGroups.value) {
+        if (g.status === 'running' || g.status === 'pending') g.status = 'done';
+      }
       if (!doneMessage.value && snapshot.message) doneMessage.value = snapshot.message;
       finishAllStages();
     } else if (snapshot.status === 'canceled') {
@@ -1126,6 +1138,9 @@ export const useCompileStore = defineStore('compile', () => {
       errorMessage.value = d.message || '批量编译部分文件失败';
     } else {
       isDone.value = true;
+      // T05079：成功终态清掉断连 teardown 残留的假错误与中断标记（重连续订回放 batch_done 时同样生效）
+      errorMessage.value = '';
+      batchInterrupted.value = false;
     }
     doneMessage.value = d.message ?? '';
     currentStep.value = null;
