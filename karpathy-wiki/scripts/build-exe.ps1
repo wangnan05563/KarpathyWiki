@@ -585,6 +585,19 @@ if (Test-Path $llmPresetsSource) {
     Write-Warn "llm-presets.json 源文件不存在：$llmPresetsSource，LLM 预设功能将不可用"
 }
 
+# 6.8 复制根 package.json（T04566：/api/about 的 version 与 build_date 权威源）
+# 为什么需要：about.ts 的 resolveVersionPackagePath() 在 IS_SEA 下返回
+# getResourcePath('package.json') = exe 同级目录；文件缺失时 readVersion() 回退 '0.0.0'、
+# readPackageMtime() 同样失败导致 build_date 兜底。根清单同时是 ISCC 版本号的来源（见步骤 7）。
+Write-Host "  [6.8] 复制根 package.json..."
+$rootPkgSource = Join-Path $repoRoot "package.json"
+if (Test-Path $rootPkgSource) {
+    Copy-Item -Force $rootPkgSource (Join-Path $pkgOutputDir "package.json")
+    Write-Ok "package.json 已复制（/api/about 版本权威源）"
+} else {
+    Write-Warn "根 package.json 不存在：$rootPkgSource，安装版 /api/about 版本将回退 0.0.0"
+}
+
 # 写入构建就绪标记
 Set-Content -Path $buildReadyMarker -Value (Get-Date -Format o) -Encoding UTF8
 
@@ -679,6 +692,7 @@ Source: "..\release\app\karpathy-wiki\public\*"; DestDir: "{app}\public"; Flags:
 Source: "..\release\app\karpathy-wiki\prompts\*"; DestDir: "{app}\prompts"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\release\app\karpathy-wiki\node_modules\*"; DestDir: "{app}\node_modules"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\release\app\karpathy-wiki\llm-presets.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\release\app\karpathy-wiki\package.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\app\karpathy-wiki\.env.example"; DestDir: "{app}"; Flags: ignoreversion
 ; 品牌图标：安装到 {app} 供快捷方式 / 卸载项引用（exe 图标另由 build-exe.ps1 用 Windows API 注入，不依赖 rcedit）
 Source: "assets\app.ico"; DestDir: "{app}"; Flags: ignoreversion
@@ -736,7 +750,7 @@ Write-Host "  - 安装包：$releaseDir\installer\KarpathyWiki-Setup-v*.exe（�
 Write-Host ""
 Write-Host "  首次运行前（配置位于 %LOCALAPPDATA%\KarpathyWiki）："
 Write-Host "  1. config.json 首次启动自动生成，可直接编辑该文件调整模型/provider"
-Write-Host "  2. 在同目录（KarpathyWiki）放置 .env 并填入 API Key（参考 .env.example）"
+Write-Host "  2. 在 %LOCALAPPDATA%\KarpathyWiki\ 放置 .env 并填入 API Key（参考 .env.example）"
 Write-Host "  3. 如需公网/域名访问：将 config.json 的 server.host 改为 0.0.0.0 并配合反向代理或内置隧道"
 Write-Host "========================================" -ForegroundColor Green
 

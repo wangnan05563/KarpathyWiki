@@ -34,6 +34,8 @@ Source: "..\release\app\karpathy-wiki\public\*"; DestDir: "{app}\public"; Flags:
 Source: "..\release\app\karpathy-wiki\prompts\*"; DestDir: "{app}\prompts"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\release\app\karpathy-wiki\node_modules\*"; DestDir: "{app}\node_modules"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\release\app\karpathy-wiki\llm-presets.json"; DestDir: "{app}"; Flags: ignoreversion
+; T04566：/api/about 在 SEA 下从 exe 同级读 package.json 取 version / build_date，缺了会回退 0.0.0
+Source: "..\release\app\karpathy-wiki\package.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\release\app\karpathy-wiki\.env.example"; DestDir: "{app}"; Flags: ignoreversion
 ; 品牌图标：安装到 {app} 供快捷方式 / 卸载项引用（exe 图标另由 build-exe.ps1 用 rcedit 注入）
 Source: "assets\app.ico"; DestDir: "{app}"; Flags: ignoreversion
