@@ -21,9 +21,14 @@ echo   Karpathy-Wiki One-Click Publish
 echo ============================================================
 echo   Builds the SPA, deploys it, restarts prod server,
 echo   and publishes a GitHub Release by default.
-echo   Options: -SkipInstall -SkipBuild -SkipDeploy
-echo            -SkipRestart -SkipPublish -DryRun
+echo   Auto-builds the installer (build-exe) when the
+echo   version-matched package is missing.
+echo   Options: -SkipInstall -SkipBuild -SkipGate
+echo            -SkipDeploy -SkipRestart -SkipPublish -DryRun
 echo            -ReleaseNotesFile ^<path^>  (formal release notes, T02743)
+echo            -NoAutoBuild   (block instead of auto-building)
+echo            -RebuildPackage (force rebuild even if package exists)
+echo            -StrictNotes   (block on missing release notes)
 echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command "chcp 65001 > $null; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8"

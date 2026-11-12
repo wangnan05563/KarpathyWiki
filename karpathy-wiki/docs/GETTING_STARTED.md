@@ -69,8 +69,12 @@ data/vault/
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish-wiki.ps1 -DryRun   # 先看要执行什么
-scripts\一键发布.bat                                                                    # 构建 → 部署 → 重启 → 健康检查
+scripts\一键发布.bat                                                                    # 按需打包 → 门禁 → 构建 → 部署 → 重启 → 健康检查 → 发布 Release
 ```
+
+安装包缺失时会**自动联动** `scripts\build-exe.ps1` 打好最新包再发布（build-exe 会 bump patch 版本号，
+脚本打完会重新读版本号继续）；发布说明缺失时自动生成草稿（`release-notes-<版本>.md`，可覆盖后重发）。
+想保持「缺件即阻断」的旧行为：加 `-NoAutoBuild`（不打）或 `-StrictNotes`（不写草稿）。
 
 发布前后的核对项（含「重启后页面总数两处一致」）见《[验收报告与发布检查清单](wiki三期/05-验收报告与发布检查清单.md)》。
 
