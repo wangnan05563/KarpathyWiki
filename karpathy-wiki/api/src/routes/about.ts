@@ -102,6 +102,33 @@ interface CheckUpdateData {
   //   unconfigured = 已启用但 manifestUrl/githubRepo 都没填
   //   remote-error = 远端检查失败回退（网络/仓库不可达）
   reason?: 'disabled' | 'unconfigured' | 'remote-error';
+  // T05702：失败细分。旧实现 catch {} 把「配置错误 / HTTP 404 / 非法 JSON / 网络中断」
+  // 一律压成 remote-error，前端只能笼统提示"远端更新源不可达"；而仓库当时无 published
+  // Release 时 /releases/latest 返回的是 404，属于"远端暂无版本"而非网络不可达。
+  // reason 保持旧枚举不变（既有消费方不受影响），细分信息走这两个新字段。
+  error_kind?: UpdateErrorKind;
+  error_detail?: string;
+}
+
+// 远端失败的四类：配置（地址/仓库形态非法）、网络（DNS/连接/超时）、
+// HTTP（远端明确返回非 2xx）、响应（拿到响应但解析/结构不对）。
+type UpdateErrorKind = 'config' | 'network' | 'http' | 'response';
+
+class UpdateSourceError extends Error {
+  constructor(
+    readonly kind: UpdateErrorKind,
+    message: string,
+    readonly detail = message,
+  ) {
+    super(message);
+    this.name = 'UpdateSourceError';
+  }
+}
+
+function classifyUpdateError(err: unknown): { kind: UpdateErrorKind; detail: string } {
+  if (err instanceof UpdateSourceError) return { kind: err.kind, detail: err.detail };
+  // 未预期异常按网络层兜底，避免把解析/逻辑错误误报成"不可达"之外的空白状态
+  return { kind: 'network', detail: err instanceof Error ? err.message : String(err) };
 }
 
 // 读取权威 package.json（workspace 根，见 resolveVersionPackagePath）中的版本号。
@@ -173,17 +200,39 @@ async function fetchManifest(cfg: UpdateConfig): Promise<UpdateManifest> {
 // trust-root 语义：manifestUrl 是管理员配置的信任根，不额外做 IP/私网拦截（见文件头设计取舍）。
 // 为什么 schedule 超时：网络挂起时若没有超时，check-update 会长时间阻塞前端轮询。
 async function fetchRemoteManifest(cfg: UpdateConfig): Promise<UpdateManifest> {
-  assertHttpUrl(cfg.manifestUrl);
+  // T05702：协议白名单失败属"配置错误"。assertHttpUrl 同时被 download-update 复用，
+  // 故分类只在调用处包一层，不改变工具函数本身的 Error 语义。
+  try {
+    assertHttpUrl(cfg.manifestUrl);
+  } catch (err) {
+    throw new UpdateSourceError('config', err instanceof Error ? err.message : String(err));
+  }
   const controller = new AbortController();
   const timeoutMs = cfg.timeoutMs ?? 8000;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(cfg.manifestUrl, {
-      signal: controller.signal,
-      headers: { 'User-Agent': UPDATE_UA },
-    });
-    if (!res.ok) throw new Error(`manifest HTTP ${res.status}`);
-    const data = (await res.json()) as Record<string, unknown>;
+    let res: Response;
+    try {
+      res = await fetch(cfg.manifestUrl, {
+        signal: controller.signal,
+        headers: { 'User-Agent': UPDATE_UA },
+      });
+    } catch (err) {
+      // fetch 抛错/abort 超时都归网络层；与"响应 200 但 JSON 解析失败"严格区分
+      throw new UpdateSourceError('network', err instanceof Error ? err.message : String(err));
+    }
+    if (!res.ok) {
+      throw new UpdateSourceError('http', `manifest HTTP ${res.status}`, `HTTP ${res.status}`);
+    }
+    let data: Record<string, unknown>;
+    try {
+      data = (await res.json()) as Record<string, unknown>;
+    } catch {
+      throw new UpdateSourceError('response', 'manifest 响应不是合法 JSON');
+    }
+    if (!data || typeof data !== 'object') {
+      throw new UpdateSourceError('response', 'manifest 响应不是对象');
+    }
     return {
       version: str(data.version),
       downloadUrl: str(data.downloadUrl),
@@ -205,17 +254,35 @@ async function fetchRemoteManifest(cfg: UpdateConfig): Promise<UpdateManifest> {
 //   前端按既有"声明了才校验"语义跳过（见文件头）。
 async function fetchGithubRelease(cfg: UpdateConfig): Promise<UpdateManifest> {
   const repo = (cfg.githubRepo ?? '').trim();
-  if (!GITHUB_REPO_RE.test(repo)) throw new Error('invalid githubRepo');
+  // T05702：仓库形态非法属配置错误，不是网络不可达
+  if (!GITHUB_REPO_RE.test(repo)) throw new UpdateSourceError('config', 'invalid githubRepo');
   const controller = new AbortController();
   const timeoutMs = cfg.timeoutMs ?? 8000;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${GITHUB_API_BASE}/repos/${repo}/releases/latest`, {
-      signal: controller.signal,
-      headers: { 'User-Agent': UPDATE_UA, Accept: 'application/vnd.github+json' },
-    });
-    if (!res.ok) throw new Error(`github releases HTTP ${res.status}`);
-    const data = (await res.json()) as Record<string, unknown>;
+    let res: Response;
+    try {
+      res = await fetch(`${GITHUB_API_BASE}/repos/${repo}/releases/latest`, {
+        signal: controller.signal,
+        headers: { 'User-Agent': UPDATE_UA, Accept: 'application/vnd.github+json' },
+      });
+    } catch (err) {
+      throw new UpdateSourceError('network', err instanceof Error ? err.message : String(err));
+    }
+    // 404 = 仓库尚无 published Release（本单用户实际遇到的场景），
+    // 403/429 = 限流，5xx = 上游故障；都不是"网络不可达"，带状态码交给前端如实提示。
+    if (!res.ok) {
+      throw new UpdateSourceError('http', `github releases HTTP ${res.status}`, `HTTP ${res.status}`);
+    }
+    let data: Record<string, unknown>;
+    try {
+      data = (await res.json()) as Record<string, unknown>;
+    } catch {
+      throw new UpdateSourceError('response', 'GitHub 响应不是合法 JSON');
+    }
+    if (!data || typeof data !== 'object') {
+      throw new UpdateSourceError('response', 'GitHub 响应不是对象');
+    }
     // 取第一个带下载地址的资产（本项目 release 只挂一个安装包）；无资产时回退 release 页，
     // 让前端"打开 release 页"分支仍可用，而不是拿到空串后卡在无动作状态。
     // 摘要必须与选中的资产同源，不能拿别的资产的 digest——否则安装包与校验值错配，
@@ -362,8 +429,12 @@ export function registerAboutRoute(app: FastifyInstance, config: AppConfig): voi
           checked_at: new Date().toISOString(),
           source: channel === 'github' ? 'github' : 'remote',
         };
-      } catch {
+      } catch (err) {
+        // T05702：不再吞掉异常，把细分原因透传给前端做准确提示
         data = localData(current, 'local-fallback', 'remote-error');
+        const failure = classifyUpdateError(err);
+        data.error_kind = failure.kind;
+        data.error_detail = failure.detail;
       }
     } else {
       // T04568：区分「显式关闭」与「启用但没填通道」，前端据此给出可操作提示。
@@ -373,7 +444,14 @@ export function registerAboutRoute(app: FastifyInstance, config: AppConfig): voi
       data = localData(current, 'local', reason);
     }
 
-    checkUpdateCache = { data, ts: now };
+    // T05702：失败结果不进缓存。旧实现连失败都缓存 5 分钟，用户点「重试」在缓存期内
+    // 拿到的仍是旧失败（文案却写「可重试」），远端恢复后也要等满 TTL 才生效。
+    // 成功结果仍按 TTL 缓存，避免前端 5 分钟轮询重复打外网。
+    if (data.source === 'local-fallback') {
+      checkUpdateCache = null;
+    } else {
+      checkUpdateCache = { data, ts: now };
+    }
     return reply.send(data);
   });
 

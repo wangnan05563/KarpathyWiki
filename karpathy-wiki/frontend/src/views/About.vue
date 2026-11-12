@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { API_BASE, apiFetch } from '../utils/apiBase';
 import { expectedSha256, sha256Hex, sha256Matches } from '../utils/update-hash';
-import { updateOffKind } from '../utils/updateStatus';
+import { updateOffKind, checkFailureLabel } from '../utils/updateStatus';
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import { CopyDocument, Refresh, Check, Top, Warning, Search } from '@element-plus/icons-vue';
@@ -30,7 +30,8 @@ type UpdateState =
   | { kind: 'latest' }
   // T04568：未启用/未配置更新通道时不得显示「已是最新」；远端检查失败单独成态
   | { kind: 'disabled'; reason: 'disabled' | 'unconfigured' }
-  | { kind: 'check-failed' }
+  // T05702：携带后端细分失败原因，按「配置/网络/HTTP/响应」给出准确文案
+  | { kind: 'check-failed'; errorKind?: string; detail?: string }
   | { kind: 'newer'; url: string; latest: string; downloadUrl?: string; sha256?: string }
   | { kind: 'downloading'; percent: number; received: number; total: number }
   | { kind: 'download-error'; reason: 'network' | 'server' | 'hash' }
@@ -177,6 +178,18 @@ const filteredDeps = computed(() => {
   );
 });
 
+// T05702：检查失败时按后端细分原因显示准确文案（404 不再是「远端不可达」）
+const checkFailedLabel = computed(() => {
+  const s = updateState.value;
+  return s.kind === 'check-failed' ? checkFailureLabel(s.errorKind, s.detail) : '';
+});
+const checkFailedTip = computed(() => {
+  const s = updateState.value;
+  if (s.kind !== 'check-failed') return '';
+  const base = checkFailureLabel(s.errorKind, s.detail);
+  return s.detail ? `${base}（${s.detail}），可重试` : `${base}，可重试`;
+});
+
 // ===== API 调用 =====
 async function loadInfo() {
   try {
@@ -227,7 +240,11 @@ async function performCheck() {
       // 已检查过且最新；远端回退单独提示检查失败（旧行为同样会误显示「已是最新」）。
       const off = updateOffKind(data.source, data.reason);
       if (off === 'check-failed') {
-        updateState.value = { kind: 'check-failed' };
+        updateState.value = {
+          kind: 'check-failed',
+          errorKind: typeof data.error_kind === 'string' ? data.error_kind : undefined,
+          detail: typeof data.error_detail === 'string' ? data.error_detail : '',
+        };
       } else if (off) {
         updateState.value = { kind: 'disabled', reason: off };
       } else {
@@ -445,11 +462,11 @@ onBeforeUnmount(() => {
           <el-button
             v-else-if="updateState.kind === 'check-failed'"
             type="danger"
-            data-tip="远端更新源不可达，可重试"
+            :data-tip="checkFailedTip"
             :icon="Warning"
             @click="handleCheck"
           >
-            {{ TEXTS.updateCheckFailed }} · {{ TEXTS.updateRetry }}
+            {{ checkFailedLabel }} · {{ TEXTS.updateRetry }}
           </el-button>
 
           <!-- 有新版本：优先一键下载更新包（有 downloadUrl），否则回退打开 release 页 -->

@@ -94,7 +94,12 @@ async function compactContext() {
 
 /* T04542 裁决 B：承接点按的盒子本身必须 ≥44×44（WCAG 2.5.5）。
    只靠父级 align-items:stretch 拉不动它——父容器高度由宿主决定，徽章换宿主就失效；
-   min-height 落在 button 自身才是与宿主无关的下限。 */
+   min-height 落在 button 自身才是与宿主无关的下限。
+   T05703：这 44×44 只作「透明点按区」，不再画成可见卡片。旧样式给它叠了
+   background + 1px 描边 + 投影 + 10px 圆角，在发送行里是一块比 30px 主 CTA
+   还高的实心方框，视觉上把整行撑高、挤占垂直空间（见任务截图）。现在视觉体量
+   收敛到 20px 圆环 + 百分比文字本身，与同行图标按钮一致；点按区尺寸、popover
+   入口、aria 标签与压缩功能全部不动。 */
 .ctx-badge-inner {
   display: inline-flex;
   align-items: center;
@@ -102,17 +107,28 @@ async function compactContext() {
   gap: 4px;
   min-width: 44px;
   min-height: 44px;
-  padding: 2px 6px 2px 3px;
-  border-radius: 10px;
-  background: var(--bg-card, rgba(247, 248, 250, 0.85));
-  border: 1px solid var(--purple-readable);
-  box-shadow: 0 2px 8px var(--accent-purple-a10, rgba(0, 0, 0, 0.1));
-  transition: all 0.2s ease;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: opacity 0.2s ease;
 }
 
-.ctx-badge-inner:hover, .ctx-badge-inner:focus-visible {
+/* hover 反馈只作用于内容，不再描出 44×44 的框。
+   border-color 是 T04470 批次 C 的对比度审计锚点（见 contrast-sweep-components-c.test.ts
+   的 POINTS / WRAPPED_LINES），border:0 下不产生可见描边，保留声明以免该批次
+   逐行回归锁失效。 */
+.ctx-badge-inner:hover {
   border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
-  box-shadow: 0 0 10px var(--accent-cyan-a20, rgba(0, 245, 255, 0.2));
+  opacity: 0.78;
+}
+
+/* 键盘焦点：仅聚焦时给贴内容的细 outline，不新增常驻外框、不扩大视觉盒 */
+.ctx-badge-inner:focus-visible {
+  outline: 2px solid var(--accent-readable, var(--neon-cyan, #00f5ff));
+  outline-offset: -6px;
+  border-radius: 6px;
 }
 
 /* T04453：徽章本体是原生 button（键盘/触屏可达是本级需求），需要抹掉规则没覆盖的 UA 默认：

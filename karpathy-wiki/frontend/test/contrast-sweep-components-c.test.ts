@@ -43,7 +43,10 @@ const POINTS: Point[] = [
   // T04542：徽章 min-width/min-height 抬到 44px 使 hover 落点由 L108 平移到 L114（blockOfLine
   // 取的是声明行所在块，故指针必须落在 border-color 行而非选择器行）；面/前景/族均未变
   // （本次只加尺寸声明），仅刷新行号指针，实算结论沿用。
-  { f: 'ContextUsageBadge.vue', ln: 114, sel: '.ctx-badge-inner:hover', face: CARD_OVER_PAGE, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
+  // T05703：去掉徽章常驻外框后，hover 规则由「:hover, :focus-visible 合并块」拆成独立的
+  // :hover 块，border-color 声明平移到 L123。声明原文、落点面（无自带淡底）、前景族均未变，
+  // 同样只刷新行号指针；本条仍是 CARD_OVER_PAGE 口径的 ui 点。
+  { f: 'ContextUsageBadge.vue', ln: 123, sel: '.ctx-badge-inner:hover', face: CARD_OVER_PAGE, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
   { f: 'FloatingChat.vue', ln: 941, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a12)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'ui' },
   { f: 'FloatingChat.vue', ln: 942, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a12)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'text' },
   { f: 'FollowupsChips.vue', ln: 70, sel: '.followup-chip:hover:not(:disabled)', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },

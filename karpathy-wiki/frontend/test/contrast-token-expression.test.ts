@@ -414,9 +414,15 @@ function dispositionOf(token: string): string {
 }
 
 describe('T04529 · A 普查归宿锁', () => {
-  it('A1 · 规模锁：192 族 / 2676 条消费点 / 36 个 gap 族（少一个族说明扫描口径退化，不是「更干净」）', () => {
+  // T05703 后基线：2676 → 2675。徽章外框精简移除 .ctx-badge-inner 基态的
+  //   background: var(--bg-card) / border: 1px solid var(--purple-readable) /
+  //   box-shadow: var(--accent-purple-a10) 三处消费点，同时保留 hover border-color
+  //   审计锚点（var(--accent-readable) / var(--neon-cyan)）并新增 focus-visible
+  //   outline（同一对 token）；净减 1 条消费点，是预期内的简化，不是扫描口径退化。
+  //   FAMILIES=192 / gap=36 未变：被移除的 token 在别处仍有消费，族面未缩小。
+  it('A1 · 规模锁：192 族 / 2675 条消费点 / 36 个 gap 族（少一个族说明扫描口径退化，不是「更干净」）', () => {
     expect(FAMILIES.size).toBe(192);
-    expect(CENSUS_ROWS.length).toBe(2676);
+    expect(CENSUS_ROWS.length).toBe(2675);
     expect([...FAMILIES.values()].filter((f) => !declaredEverywhere(f.token)).length).toBe(36);
   });
 

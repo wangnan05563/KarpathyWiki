@@ -333,15 +333,33 @@ describe('C · GitHub Releases 响应映射与新旧判定', () => {
     expect(data.source).toBe('local-fallback');
     expect(data.has_update).toBe(false);
     expect(data.latest).toBe(ROOT_PKG_VERSION);
+    // T05702：404 的真实原因是「远端暂无 published Release」，不是网络不可达
+    expect(data.error_kind).toBe('http');
+    expect(data.error_detail).toBe('HTTP 404');
   });
 
-  it('网络异常 → local-fallback；缓存让 5 分钟内的第二次调用不再触网', async () => {
-    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+  it('T05702 网络异常 → local-fallback（network）；失败不缓存，重试立即重新触网', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(jsonResponse(githubRelease({ tag_name: '9.9.9' })));
+    app = await buildApp({ enabled: true, manifestUrl: '', githubRepo: GITHUB_REPO });
+    const first = await checkUpdate(app);
+    expect(first.source).toBe('local-fallback');
+    expect(first.reason).toBe('remote-error');
+    expect(first.error_kind).toBe('network');
+    // 关键回归：旧实现连失败结果都缓存 5 分钟，用户点「重试」拿到的仍是旧失败，
+    // 远端恢复后也要等满 TTL。现在失败不缓存，第二次请求立刻重新触网并恢复成功。
+    const second = await checkUpdate(app);
+    expect(second.source).toBe('github');
+    expect(second.latest).toBe('9.9.9');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('成功结果仍按 5 分钟 TTL 缓存，避免前端轮询重复打外网', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(githubRelease({ tag_name: '9.9.9' })));
     app = await buildApp({ enabled: true, manifestUrl: '', githubRepo: GITHUB_REPO });
     const first = await checkUpdate(app);
     const second = await checkUpdate(app);
-    expect(first.source).toBe('local-fallback');
-    expect(first.reason).toBe('remote-error');
+    expect(first.source).toBe('github');
     expect(second).toEqual(first);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -378,5 +396,70 @@ describe('C · GitHub Releases 响应映射与新旧判定', () => {
     expect(res.headers['content-disposition']).toContain('KarpathyWiki-Setup-v0.1.202610301.exe');
     expect(res.rawPayload.equals(payload)).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+// T05702：远端失败必须按「配置 / 网络 / HTTP / 响应」分类透传。
+// 旧实现 catch {} 把所有异常压成同一句「远端更新源不可达」，而用户实际遇到的是
+// 仓库当时没有 published Release 导致的 404，属于「远端暂无版本」而非网络故障。
+describe('D · T05702 远端失败原因细分', () => {
+  const githubCfg: UpdateConfig = { enabled: true, manifestUrl: '', githubRepo: GITHUB_REPO };
+
+  it('非法 githubRepo → config（配置错误，不是不可达），且不触网', async () => {
+    app = await buildApp({ ...githubCfg, githubRepo: '../../evil' });
+    const data = await checkUpdate(app);
+    expect(data.source).toBe('local-fallback');
+    expect(data.error_kind).toBe('config');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('manifestUrl 协议非法 → config', async () => {
+    app = await buildApp({ enabled: true, manifestUrl: 'file:///etc/passwd' });
+    const data = await checkUpdate(app);
+    expect(data.error_kind).toBe('config');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('fetch 连接失败 → network，原始错误信息保留在 error_detail', async () => {
+    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+    app = await buildApp(githubCfg);
+    const data = await checkUpdate(app);
+    expect(data.error_kind).toBe('network');
+    expect(data.error_detail).toContain('fetch failed');
+  });
+
+  it('HTTP 404 → http + HTTP 404（仓库无 Release，不是不可达）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ message: 'Not Found' }, false, 404));
+    app = await buildApp(githubCfg);
+    const data = await checkUpdate(app);
+    expect(data.error_kind).toBe('http');
+    expect(data.error_detail).toBe('HTTP 404');
+  });
+
+  it('HTTP 429 限流 → http + HTTP 429（与 404 区分开）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ message: 'rate limited' }, false, 429));
+    app = await buildApp(githubCfg);
+    const data = await checkUpdate(app);
+    expect(data.error_kind).toBe('http');
+    expect(data.error_detail).toBe('HTTP 429');
+  });
+
+  it('响应 200 但 JSON 解析失败 → response（请求成功不算网络不可达）', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => { throw new SyntaxError('Unexpected token'); },
+    } as unknown as Response);
+    app = await buildApp(githubCfg);
+    const data = await checkUpdate(app);
+    expect(data.error_kind).toBe('response');
+    expect(data.source).toBe('local-fallback');
+  });
+
+  it('响应 200 但 body 为 null → response（结构异常）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(null));
+    app = await buildApp(githubCfg);
+    const data = await checkUpdate(app);
+    expect(data.error_kind).toBe('response');
   });
 });
