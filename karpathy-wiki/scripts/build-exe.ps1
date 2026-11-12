@@ -5,6 +5,7 @@
 #   powershell -File scripts/build-exe.ps1            # 默认完整构建
 #   powershell -File scripts/build-exe.ps1 -SkipSPA   # 跳过 SPA 构建（前端无变更时用）
 #   powershell -File scripts/build-exe.ps1 -SkipDeps  # 跳过依赖安装（依赖无变更时用）
+#   powershell -File scripts/build-exe.ps1 -SkipGate  # 跳过双侧 gate（门禁已在本次发布链跑过时用）
 #   powershell -File scripts/build-exe.ps1 -Clean     # 清理所有缓存重新构建
 #
 # 产物：release/app/karpathy-wiki/ 目录 + release/installer/KarpathyWiki-Setup-v*.exe
@@ -21,6 +22,9 @@
 param(
     [switch]$SkipSPA,
     [switch]$SkipDeps,
+    # 跳过 [2.5/8] 双侧 gate。publish-wiki.ps1 的 -SkipGate 会原样透传到这里：
+    # 否则「一键发布 -SkipGate」仍会在自动打包里把 12 分钟门禁跑一遍，开关名不副实。
+    [switch]$SkipGate,
     [switch]$Clean
 )
 
@@ -212,17 +216,21 @@ if (Test-Path (Join-Path $harnessPath "package.json")) {
 # 放在 harness 构建之后，是因为 api 的 tsc 依赖重建后的 @wiki/harness dist。
 # 任一侧失败即 throw（失败即停），不让带类型/测试问题的产物进入 esbuild/pkg。
 Write-Host "`n[2.5/8] 发布门禁（pnpm gate）..." -ForegroundColor Yellow
-if (-not $UsePnpm) {
-    throw "发布门禁依赖 pnpm --filter 过滤 workspace 包；当前未使用 pnpm（T04910）"
+if ($SkipGate) {
+    Write-Warn "跳过发布门禁（-SkipGate）：本次发布链已自行校验，或为本地快速重打包"
+} else {
+    if (-not $UsePnpm) {
+        throw "发布门禁依赖 pnpm --filter 过滤 workspace 包；当前未使用 pnpm（T04910）"
+    }
+    Write-Step "api gate：tsc --noEmit + typecheck:test + vitest"
+    & $pkgCmd --filter @karpathy-wiki/api run gate
+    if ($LASTEXITCODE -ne 0) { throw "api gate 未通过，发布中止（T04910）" }
+    Write-Ok "api gate 通过"
+    Write-Step "web gate：theme-tokens + vue-tsc + typecheck:test + vitest"
+    & $pkgCmd --filter @karpathy-wiki/web run gate
+    if ($LASTEXITCODE -ne 0) { throw "web gate 未通过，发布中止（T04910）" }
+    Write-Ok "web gate 通过"
 }
-Write-Step "api gate：tsc --noEmit + typecheck:test + vitest"
-& $pkgCmd --filter @karpathy-wiki/api run gate
-if ($LASTEXITCODE -ne 0) { throw "api gate 未通过，发布中止（T04910）" }
-Write-Ok "api gate 通过"
-Write-Step "web gate：theme-tokens + vue-tsc + typecheck:test + vitest"
-& $pkgCmd --filter @karpathy-wiki/web run gate
-if ($LASTEXITCODE -ne 0) { throw "web gate 未通过，发布中止（T04910）" }
-Write-Ok "web gate 通过"
 
 # ============== 3. 构建 SPA ==============
 Write-Host "`n[3/8] 构建 SPA..." -ForegroundColor Yellow

@@ -75,6 +75,14 @@ scripts\一键发布.bat                                                        
 安装包缺失时会**自动联动** `scripts\build-exe.ps1` 打好最新包再发布（build-exe 会 bump patch 版本号，
 脚本打完会重新读版本号继续）；发布说明缺失时自动生成草稿（`release-notes-<版本>.md`，可覆盖后重发）。
 想保持「缺件即阻断」的旧行为：加 `-NoAutoBuild`（不打）或 `-StrictNotes`（不写草稿）。
+本轮已独立跑过双侧门禁时，加 `-SkipGate` 可跳过发布门禁；该开关会**同步透传**给自动打包的
+`build-exe.ps1`，否则打包内部仍会把两侧 gate 再跑一遍。
+
+生产服务的启动命令由 `scripts/config.json` 的 `publish.prod_start` 配置：默认用解析到的
+`node.exe` 直接执行 `api/node_modules/tsx/dist/cli.mjs src/index.ts`（工作目录 `api`）。
+不再走 `pnpm --filter @karpathy-wiki/api exec -- tsx`——步骤 5/7 在隐藏 `cmd.exe` 中启动时，
+pnpm recursive exec 不会把 `api/node_modules/.bin` 注入 PATH，会报
+`'tsx' 不是内部或外部命令` 并让端口 3000 永远等不到就绪。日志见 `logs/publish-prod.log`。
 
 发布前后的核对项（含「重启后页面总数两处一致」）见《[验收报告与发布检查清单](wiki三期/05-验收报告与发布检查清单.md)》。
 

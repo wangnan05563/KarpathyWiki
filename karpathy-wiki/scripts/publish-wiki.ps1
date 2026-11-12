@@ -8,7 +8,8 @@ param(
     [string]$ConfigPath = "$PSScriptRoot\config.json",
     [switch]$SkipInstall,
     [switch]$SkipBuild,
-    # T04910：跳过发布门禁（pnpm gate）。默认发布/部署前执行双侧 gate，失败即停
+    # T04910：跳过发布门禁（publish 自身的 pnpm gate，以及自动打包 build-exe 的 [2.5/8]）。
+    # 默认发布/部署前执行双侧 gate，失败即停；仅在本轮已独立跑过门禁时用。
     [switch]$SkipGate,
     [switch]$SkipDeploy,
     [switch]$SkipRestart,
@@ -65,7 +66,26 @@ if ($pkgManager -eq 'npm.cmd') { $installArgs = @('install', '--no-audit', '--no
 $apiPort = [int]$Config.ports.api
 $p = $Config.publish
 $buildArgs = $p.build_args
-$prodStartArgs = $p.prod_start_args
+
+# 生产服务启动（配置驱动）：默认走「解析到的 node.exe + api 本地 tsx CLI」直调。
+# 为什么不再用 pnpm --filter @karpathy-wiki/api exec -- tsx：步骤 5 由 Start-Process cmd.exe /c
+# 在隐藏窗口里拉起，pnpm recursive exec 在该上下文不会把 api/node_modules/.bin 注入 PATH，
+# 实测报 "'tsx' 不是内部或外部命令" -> [ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] -> 端口 3000 永不就绪。
+# 直调 api/node_modules/tsx/dist/cli.mjs 是项目里已验证的启动方式，不依赖 PATH 注入。
+# 仍兼容旧配置：没有 prod_start 节点时回退到 $pkgManager + prod_start_args。
+$prodStart = $p.prod_start
+$prodExe = $NodeExe
+$prodArgs = @()
+$prodWorkDir = $Root
+$legacyProdStart = $false
+if ($prodStart) {
+    if ($prodStart.exe -and ([string]$prodStart.exe) -ne '$NodeExe') { $prodExe = [string]$prodStart.exe }
+    $prodArgs = @($prodStart.args)
+    if ($prodStart.workdir) { $prodWorkDir = Join-Path $Root ([string]$prodStart.workdir) }
+} else {
+    $legacyProdStart = $true
+    $prodArgs = @($p.prod_start_args)
+}
 $buildLog = Join-Path $Root $p.build_log_file
 $prodLog = Join-Path $Root $p.prod_log_file
 $deployScript = Join-Path $Root $p.deploy_script
@@ -77,6 +97,21 @@ $spaUrl = "http://localhost:$apiPort$($p.spa_probe_path)"
 $deployTargetDir = Join-Path (Join-Path (Join-Path (Split-Path $deployScript) '..') '..') (Join-Path 'release' 'spa')
 
 function Join-Args([array]$a) { return ($a -join ' ') }
+
+# cmd.exe /c 参数拼接：含空格的路径（node.exe / 日志 / 自定义参数）必须加引号，否则会被断词
+function Join-CmdArgs([array]$a) {
+    return (($a | ForEach-Object {
+        $s = [string]$_
+        if ($s -match '\s') { '"' + $s + '"' } else { $s }
+    }) -join ' ')
+}
+
+# 供 dry-run 展示与步骤 5 实际启动共用同一条命令行，避免「打印的命令」与「真正跑的命令」漂移
+if ($legacyProdStart) {
+    $prodCmdLine = "$pkgManager $(Join-Args $prodArgs)"
+} else {
+    $prodCmdLine = "`"$prodExe`" $(Join-CmdArgs $prodArgs)"
+}
 
 # Inno Setup 编译器探测（与 build-exe.ps1 的 Find-ISCC 同口径）。
 # 为什么要在这里重复探测：build-exe 在 Inno 不可用时只打一行 WARN「跳过安装包制作」并**仍以 0 退出**，
@@ -223,7 +258,11 @@ if ($doPublish) {
             }
             # 走子进程而不是 .bat：build-exe.bat 结尾有 pause，被脚本调用会挂住；
             # 子进程也让 build-exe 的 Set-Location / PATH 变更 / throw 不影响本脚本。
-            & (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $buildExePs1
+            # -SkipGate 必须透传：门禁是发布链级开关，只在 publish 侧跳过、打包里照跑等于没跳。
+            $buildArgsList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $buildExePs1)
+            if ($SkipGate) { $buildArgsList += '-SkipGate' }
+            if ($SkipGate) { Write-Log "透传 -SkipGate 给自动打包（跳过 [2.5/8] 双侧 gate）" -Level INFO -Step "0/7" }
+            & (Join-Path $PSHOME 'powershell.exe') @buildArgsList
             if ($LASTEXITCODE -ne 0) {
                 Write-Log "自动打包失败（exit $LASTEXITCODE），见上方 build-exe 输出" -Level ERROR -Step "0/7"
                 Write-Log "常见原因：release 目录空间不足（可清 release/builds 与最旧 public_live_*）、Inno Setup 不可用、gate 未通过" -Level ERROR -Step "0/7"
@@ -301,7 +340,7 @@ if ($DryRun) {
     Write-Log "4) 部署     : $NodeExe $($p.deploy_script) $deploySrc" -Level INFO
     $dt = Resolve-Path $deployTargetDir -ErrorAction SilentlyContinue
     Write-Log "   部署目标 : $dt (每次新建 public_live_<ts>，由 index.ts 自动选用最新)" -Level INFO
-    Write-Log "5) 重启生产 : 停止端口 $apiPort -> $pkgManager $(Join-Args $prodStartArgs) (日志 $prodLog)" -Level INFO
+    Write-Log "5) 重启生产 : 停止端口 $apiPort -> $prodCmdLine (cwd $prodWorkDir, 日志 $prodLog)" -Level INFO
     Write-Log "6) 健康检查 : $healthUrl / $spaUrl" -Level INFO
     if ($doPublish) {
         if ($relCtx.PyExe -and $relCtx.Asset -and $relCtx.Ver) {
@@ -397,13 +436,27 @@ if ($SkipRestart) {
     if ($oldPids.Count -eq 0) { Write-Log "端口 $apiPort 无旧进程" -Level SKIP -Step "5/7" }
     Start-Sleep -Seconds 1
 
-    # 后台启动生产服务（单端口：API + 内置 SPA）
-    Start-Process cmd.exe -ArgumentList "/c", "$pkgManager $(Join-Args $prodStartArgs) > `"$prodLog`" 2>&1" -WorkingDirectory $Root -WindowStyle Hidden
-    Write-Log "生产服务已启动（日志 $prodLog）" -Level INFO -Step "5/7"
+    # 后台启动生产服务（单端口：API + 内置 SPA）。
+    # 隐藏 cmd 是独立进程，继承不到主脚本的 chcp 65001，故显式切 UTF-8，保证 prodLog 中文不乱码。
+    # WorkingDirectory 必须是 prod_start.workdir（默认 api）：cli.mjs / src/index.ts / spaRoot 都按该相对路径解析。
+    if (-not (Test-Path $prodWorkDir)) {
+        Write-Log "生产服务工作目录不存在: $prodWorkDir" -Level ERROR -Step "5/7"
+        exit 1
+    }
+    $prodShellCmd = "chcp 65001 >nul && $prodCmdLine > `"$prodLog`" 2>&1"
+    Start-Process cmd.exe -ArgumentList "/c", $prodShellCmd -WorkingDirectory $prodWorkDir -WindowStyle Hidden
+    Write-Log "生产服务已启动: $prodCmdLine (cwd $prodWorkDir)" -Level INFO -Step "5/7"
+    Write-Log "生产日志: $prodLog" -Level INFO -Step "5/7"
 
     $ready = Wait-PortReady -Port $apiPort -MaxTries ([int]$p.wait_max_tries) -IntervalSeconds ([int]$p.ping_interval_seconds)
     if (-not $ready) {
         Write-Log "端口 $apiPort 在超时内未就绪" -Level ERROR -Step "5/7"
+        if (-not $legacyProdStart -and $prodArgs.Count -gt 0) {
+            $entryAbs = Join-Path $prodWorkDir ([string]$prodArgs[0])
+            if (-not (Test-Path $entryAbs)) {
+                Write-Log "启动入口不存在: $entryAbs（依赖可能缺失，去掉 -SkipInstall 重跑）" -Level ERROR -Step "5/7"
+            }
+        }
         if (Test-Path $prodLog) { Get-Content $prodLog -Tail 30 -Encoding UTF8 | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray } }
         exit 1
     }

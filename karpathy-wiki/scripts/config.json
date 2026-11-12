@@ -72,7 +72,11 @@
     "build_args": ["--filter", "@karpathy-wiki/web", "build"],
     "deploy_src": "../release/spa/public",
     "deploy_script": "api/_deploy_live.mjs",
-    "prod_start_args": ["--filter", "@karpathy-wiki/api", "exec", "--", "tsx", "src/index.ts"],
+    "prod_start": {
+      "exe": "$NodeExe",
+      "args": ["node_modules/tsx/dist/cli.mjs", "src/index.ts"],
+      "workdir": "api"
+    },
     "prod_log_file": "logs/publish-prod.log",
     "build_log_file": "logs/publish-build.log",
     "health_path": "/health",

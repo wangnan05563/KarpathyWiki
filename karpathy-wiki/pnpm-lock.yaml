@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@wiki/harness':
-        specifier: file:D:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/../wiki-harness
+        specifier: file:D:/code/otherProjects/KarpathyWiki/karpathy-wiki/../wiki-harness
         version: file:../wiki-harness
     devDependencies:
       '@yao-pkg/pkg':
