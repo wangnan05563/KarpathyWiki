@@ -1,4 +1,5 @@
 
+from pathlib import Path
 import sys
 sys.stdout.reconfigure(encoding="utf-8")
 B = chr(96)  # backtick
@@ -14,7 +15,7 @@ RB = chr(125)
 LP = chr(91)
 RP = chr(93)
 
-path = "D:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/utils/url-crawl.ts"
+path = str(Path(__file__).with_name("url-crawl.ts"))
 
 lines = []
 def a(s):

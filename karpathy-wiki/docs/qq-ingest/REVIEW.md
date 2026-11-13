@@ -2,7 +2,7 @@
 
 - 文档版本: v1.1 (SRS v1.1 修订后同步更新)
 - 日期: 2026-07-22
-- 评审对象: [SRS.md](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/qq-ingest/SRS.md)
+- 评审对象: [SRS.md](SRS.md)
 - 评审范围: 五维正式评审 (架构相容性/数据流安全性/性能与成本/可维护性/可扩展性)
 - 评审结论: **通过** (SRS v1.1 已修复 v1.0 全部 8 项建议，详见 §7.4)
 
@@ -27,7 +27,7 @@
 
 #### 2.1.1 与现有 compile 流水线的一致性
 
-SRS 明确"不修改 compile.ts 路由主流程" (§12.2)，复用 [compile-workflow.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/workflows/compile-workflow.ts) 的 `compileWorkflow` 与 `bridgeHarnessToEvents`。这与现有架构范式完全一致。
+SRS 明确"不修改 compile.ts 路由主流程" (§12.2)，复用 [compile-workflow.ts](../../api/src/workflows/compile-workflow.ts) 的 `compileWorkflow` 与 `bridgeHarnessToEvents`。这与现有架构范式完全一致。
 
 **优点**:
 - 复用 `Harness` 引擎 + `afterStep` hook 推送 SSE 事件，无新概念引入
@@ -300,4 +300,4 @@ SRS v1.0 → v1.1 修复记录:
 
 ---
 
-文档结束。请配合 [SRS.md](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/qq-ingest/SRS.md) 一并审阅。
+文档结束。请配合 [SRS.md](SRS.md) 一并审阅。

@@ -9,9 +9,10 @@
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-const ROOT = 'D:/code/otherProjects/19_Karpathy-AI+Obsidian知识库';
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const API = path.join(ROOT, 'karpathy-wiki/api');
 const PFX = path.join(ROOT, 'tooling/perf-tests');
 const RESULTS = path.join(PFX, 'results');

@@ -57,7 +57,7 @@
 
 **根因**: `VaultService.startFileWatcher()` 在大 vault 下超时后的 `watcher.close()` 异步清理行为异常。
 
-代码路径（[vault-service.ts:155-193](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/vault/vault-service.ts#L155-193)）：
+代码路径（[vault-service.ts:155-193](../../../karpathy-wiki/api/src/vault/vault-service.ts#L155-193)）：
 
 ```typescript
 async startFileWatcher(): Promise<void> {

@@ -12,7 +12,7 @@
 
 ### 1.1 背景
 
-Karpathy-Wiki 已具备完整的"原始资料 → AI 编译 → 体系化页面"流水线，原始入口见 [compile-workflow.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/workflows/compile-workflow.ts)。现有用例面向技术文档/Markdown，信噪比高。QQ 群聊记录信噪比极低 (90%+ 噪声)，且含隐私数据，直接灌入会导致 token 浪费、提炼质量下降、知识库污染与合规风险。
+Karpathy-Wiki 已具备完整的"原始资料 → AI 编译 → 体系化页面"流水线，原始入口见 [compile-workflow.ts](../../api/src/workflows/compile-workflow.ts)。现有用例面向技术文档/Markdown，信噪比高。QQ 群聊记录信噪比极低 (90%+ 噪声)，且含隐私数据，直接灌入会导致 token 浪费、提炼质量下降、知识库污染与合规风险。
 
 ### 1.2 目标
 
@@ -317,7 +317,7 @@ qq-ingest/
 
 #### 5.3.2 VaultService 白名单扩展
 
-修改 [vault-service.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/vault/vault-service.ts):
+修改 [vault-service.ts](../../api/src/vault/vault-service.ts):
 - `WRITE_ALLOWED_DIRS` 新增 `'qa', 'solutions'`
 - `PAGE_DIRS` 同步扩展为 `['entities', 'concepts', 'comparisons', 'queries', 'qa', 'solutions']`
 
@@ -352,7 +352,7 @@ draft 页面作为 compile 输入，AI 组织为体系化页面:
 | POST | /api/qq-ingest/compile/:draftPath | 触发单 draft 编译为正式页面 | SSE 流 (复用 compile 事件) |
 | POST | /api/qq-ingest/compile/batch | 批量编译多个 draft | SSE 流 |
 
-路由注册遵循项目硬约束:在 [index.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/index.ts) 显式 `registerQqIngestRoute`，避免 404。
+路由注册遵循项目硬约束:在 [index.ts](../../api/src/index.ts) 显式 `registerQqIngestRoute`，避免 404。
 
 ### 6.2 配置扩展 (config.json → qq 字段)
 
@@ -384,11 +384,11 @@ draft 页面作为 compile 输入，AI 组织为体系化页面:
 
 **token 预算**:`extract_token_budget` 默认 50000，与全局 `budget.tokenBudget` 解耦。抽取阶段消耗 token 独立统计，便于成本核算与限流。若未配置则回退至全局 `budget.tokenBudget`。
 
-在 [config.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/config.ts) 的 `defaultConfig()` 与 `AppConfig` 接口扩展 `qq` 字段，遵循现有 `saveXxxConfig` 范式新增 `saveQqConfig`。
+在 [config.ts](../../api/src/config.ts) 的 `defaultConfig()` 与 `AppConfig` 接口扩展 `qq` 字段，遵循现有 `saveXxxConfig` 范式新增 `saveQqConfig`。
 
 ### 6.3 类型扩展 (types.ts)
 
-在 [types.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/types.ts) 新增:
+在 [types.ts](../../api/src/types.ts) 新增:
 
 ```typescript
 export interface QqConfig {
@@ -541,17 +541,17 @@ export interface QqSolution {
 
 | 现有模块 | 集成方式 | 修改程度 |
 |---|---|---|
-| [compile-workflow.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/workflows/compile-workflow.ts) | 复用 compileWorkflow + bridgeHarnessToEvents | 无修改 |
-| [vault-service.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/vault/vault-service.ts) | 扩展白名单 + PAGE_DIRS | 2 行修改 |
-| [config.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/config.ts) | 扩展 defaultConfig + saveQqConfig | 新增 ~30 行 |
-| [types.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/types.ts) | 新增 QqConfig/QqPreprocessResult 等 | 新增 ~50 行 |
-| [index.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/index.ts) | 注册 registerQqIngestRoute | 1 行 |
-| [compile.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/prompts/compile.md) | 新增 qq-extract.md (不动 compile.md) | 新增文件 |
-| [health-check-fix-workflow.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/workflows/health-check-fix-workflow.ts) | 扫描范围同步扩展 qa/solutions (复用 PAGE_DIRS) | 0-2 行 (若硬编码 PAGE_DIRS 则改) |
-| [cleanup.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/routes/cleanup.ts) | raw_archive 清理支持按 source: qq-chat 过滤 | 新增 ~20 行 |
-| [Ingest.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/views/Ingest.vue) | 新增 Tab | 新增 ~100 行 |
-| [Config.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/views/Config.vue) | 新增 QQ 配置面板 | 新增 ~80 行 |
-| [Browse.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/views/Browse.vue) | 新增 source/status 过滤 + "发布"按钮 | 新增 ~50 行 |
+| [compile-workflow.ts](../../api/src/workflows/compile-workflow.ts) | 复用 compileWorkflow + bridgeHarnessToEvents | 无修改 |
+| [vault-service.ts](../../api/src/vault/vault-service.ts) | 扩展白名单 + PAGE_DIRS | 2 行修改 |
+| [config.ts](../../api/src/config.ts) | 扩展 defaultConfig + saveQqConfig | 新增 ~30 行 |
+| [types.ts](../../api/src/types.ts) | 新增 QqConfig/QqPreprocessResult 等 | 新增 ~50 行 |
+| [index.ts](../../api/src/index.ts) | 注册 registerQqIngestRoute | 1 行 |
+| [compile.ts](../../api/src/prompts/compile.md) | 新增 qq-extract.md (不动 compile.md) | 新增文件 |
+| [health-check-fix-workflow.ts](../../api/src/workflows/health-check-fix-workflow.ts) | 扫描范围同步扩展 qa/solutions (复用 PAGE_DIRS) | 0-2 行 (若硬编码 PAGE_DIRS 则改) |
+| [cleanup.ts](../../api/src/routes/cleanup.ts) | raw_archive 清理支持按 source: qq-chat 过滤 | 新增 ~20 行 |
+| [Ingest.vue](../../frontend/src/views/Ingest.vue) | 新增 Tab | 新增 ~100 行 |
+| [Config.vue](../../frontend/src/views/Config.vue) | 新增 QQ 配置面板 | 新增 ~80 行 |
+| [Browse.vue](../../frontend/src/views/Browse.vue) | 新增 source/status 过滤 + "发布"按钮 | 新增 ~50 行 |
 
 ### 12.2 不修改的现有模块
 
@@ -561,4 +561,4 @@ export interface QqSolution {
 
 ---
 
-文档结束。请配合 [REVIEW.md](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/qq-ingest/REVIEW.md) 评审报告一并审阅。
+文档结束。请配合 [REVIEW.md](REVIEW.md) 评审报告一并审阅。

@@ -149,7 +149,11 @@ desktop.ini
 
 # ---------- 本地工具/Agent 工作目录 ----------
 .workbuddy/
+.workbuddy-ai/
 .trae/
+# Agent 草稿/探针工作目录（下划线前缀 = 本地临时，与 _smoke_* 同约定；内容可整体删除）
+_scratch_*/
+.screenshots/
 
 # 测试数据备份（不入库）
 .backup-test-*

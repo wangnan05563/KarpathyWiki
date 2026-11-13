@@ -1,0 +1,31 @@
+name: 功能建议
+description: 提出一个新功能或改进建议
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        谢谢建议！请描述清楚背景与期望方案，方便我们评估排期。较大的设计改动建议先在 Issue 中讨论确认方向。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 背景与问题
+      description: 当前缺少什么能力？遇到了什么不便？
+      placeholder: 例如：现在无法直接导入某类文件，需要手动转换后才能投递。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望的方案
+      description: 你希望如何解决这个问题？或期望的行为是什么？
+      placeholder: 描述理想的用户体验或接口形态。
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 补充信息
+      description: 相关截图、参考链接、使用场景或受影响模块
+      placeholder: 可附设计稿、竞品参考、相关文档链接等。

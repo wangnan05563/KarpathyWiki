@@ -26,7 +26,7 @@ Karpathy-Wiki 知识库已具备完整的数据采集成文流水线（原始资
 
 **f) 跨分类重复**：4 个页名同时出现在 entities/ 和 concepts/ 中（batch-compile-test、supply-chain-commercial-paper-platform、中国票据业务系统直连接口规范、恒生电子）。
 
-当前系统已有一套轻量清理机制（[cleanup.ts](file:///D:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/routes/cleanup.ts)），仅能按天数清理 .harness/ 下的缓存和日志，以及 ault/raw/input-*.md 归档。**不存在针对知识库页面质量本身的检查、去重、评分和修复机制。**
+当前系统已有一套轻量清理机制（[cleanup.ts](../api/src/routes/cleanup.ts)），仅能按天数清理 .harness/ 下的缓存和日志，以及 ault/raw/input-*.md 归档。**不存在针对知识库页面质量本身的检查、去重、评分和修复机制。**
 
 ### 1.2 目标
 
@@ -571,7 +571,7 @@ archive/
 
 ### 附录 A：现有页面 Schema 规范
 
-来自 [vault/SCHEMA.md](file:///D:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/data/vault/SCHEMA.md)：
+来自 [vault/SCHEMA.md](../data/vault/SCHEMA.md)：
 
 `yaml
 # 页面类型

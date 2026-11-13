@@ -175,7 +175,7 @@
 ## 6. 目录结构
 
 ```
-19_Karpathy-AI+Obsidian知识库/
+KarpathyWiki/
 ├── Karpathy-AI+Obsidian知识库概要设计说明书.md   # 设计文档 V1.3
 ├── wiki-harness/                    # Agent 引擎
 │   └── src/
@@ -544,10 +544,10 @@ Playwright 自动化测试（webapp-testing Skill），26/26 通过：
 
 | 功能 | 验收点 | 实现文件 | 状态 |
 |------|--------|---------|------|
-| **F-3.1 思考动画** | 三态切换：加载态圆点脉动 / 流式输出气泡光晕 / 折叠态平滑过渡 ≤ 200ms | [ThinkingBlock.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/components/ThinkingBlock.vue) / [Query.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/views/Query.vue) | ✅ |
-| **F-3.2 流式渲染扩展** | 代码块语言徽章（17 种已知语言）/ 图片懒加载 / 图片点击放大预览 / 流式过程不闪屏 | [markdown.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/utils/markdown.ts) / [Query.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/views/Query.vue) | ✅ |
-| **F-3.7 文本复制** | hover 浮窗淡入 / 复制纯文本（去 MD 语法）/ 复制 Markdown 源码 / 代码块独立复制按钮 / 剪贴板降级 execCommand | [MessageToolbar.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/components/MessageToolbar.vue)（新增）/ [markdown.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/utils/markdown.ts) / [Query.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/views/Query.vue) | ✅ |
-| **F-3.12 联想提问微调** | 位置迁移到 refs 上方 / 横向 chip 不换行（横向滚动）/ CSS tooltip 200ms 内淡入 | [Query.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/views/Query.vue) | ✅ |
+| **F-3.1 思考动画** | 三态切换：加载态圆点脉动 / 流式输出气泡光晕 / 折叠态平滑过渡 ≤ 200ms | [ThinkingBlock.vue](../frontend/src/components/ThinkingBlock.vue) / [Query.vue](../frontend/src/views/Query.vue) | ✅ |
+| **F-3.2 流式渲染扩展** | 代码块语言徽章（17 种已知语言）/ 图片懒加载 / 图片点击放大预览 / 流式过程不闪屏 | [markdown.ts](../frontend/src/utils/markdown.ts) / [Query.vue](../frontend/src/views/Query.vue) | ✅ |
+| **F-3.7 文本复制** | hover 浮窗淡入 / 复制纯文本（去 MD 语法）/ 复制 Markdown 源码 / 代码块独立复制按钮 / 剪贴板降级 execCommand | [MessageToolbar.vue](../frontend/src/components/MessageToolbar.vue)（新增）/ [markdown.ts](../frontend/src/utils/markdown.ts) / [Query.vue](../frontend/src/views/Query.vue) | ✅ |
+| **F-3.12 联想提问微调** | 位置迁移到 refs 上方 / 横向 chip 不换行（横向滚动）/ CSS tooltip 200ms 内淡入 | [Query.vue](../frontend/src/views/Query.vue) | ✅ |
 
 ### 13.2 关键技术决策
 
@@ -603,9 +603,9 @@ Playwright 自动化测试（webapp-testing Skill），26/26 通过：
 
 | 功能 | 验收点 | 实现文件 | 状态 |
 |------|--------|---------|------|
-| **F-3.11 侧栏折叠** | 三态切换（expanded 280px / collapsed 60px / hidden 0px）；Ctrl+B 全局快捷键；250ms 平滑过渡；状态持久化到 localStorage | [ConversationSidebar.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/components/ConversationSidebar.vue) / [Query.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/views/Query.vue) | ✅ |
-| **F-3.13 消息操作栏** | 重新生成（回溯找 user 问题 + 丢弃 assistant 回答 + 重新发起）；👍/👎 反馈（localStorage 持久化，重复点击=取消）；与 F-3.7 浮窗集成 | [MessageToolbar.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/components/MessageToolbar.vue) / [Query.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/views/Query.vue) / [query.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/stores/query.ts) | ✅ |
-| **F-3.3 历史对话管理** | 重命名（ElMessageBox.prompt + 后端 POST /rename）；删除（ElMessageBox.confirm + 后端 DELETE）；hover 显现操作按钮；CRUD 后端 v1.1.1 已实施 | [ConversationSidebar.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/components/ConversationSidebar.vue) / [conversations.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/stores/conversations.ts) | ✅ |
+| **F-3.11 侧栏折叠** | 三态切换（expanded 280px / collapsed 60px / hidden 0px）；Ctrl+B 全局快捷键；250ms 平滑过渡；状态持久化到 localStorage | [ConversationSidebar.vue](../frontend/src/components/ConversationSidebar.vue) / [Query.vue](../frontend/src/views/Query.vue) | ✅ |
+| **F-3.13 消息操作栏** | 重新生成（回溯找 user 问题 + 丢弃 assistant 回答 + 重新发起）；👍/👎 反馈（localStorage 持久化，重复点击=取消）；与 F-3.7 浮窗集成 | [MessageToolbar.vue](../frontend/src/components/MessageToolbar.vue) / [Query.vue](../frontend/src/views/Query.vue) / [query.ts](../frontend/src/stores/query.ts) | ✅ |
+| **F-3.3 历史对话管理** | 重命名（ElMessageBox.prompt + 后端 POST /rename）；删除（ElMessageBox.confirm + 后端 DELETE）；hover 显现操作按钮；CRUD 后端 v1.1.1 已实施 | [ConversationSidebar.vue](../frontend/src/components/ConversationSidebar.vue) / [conversations.ts](../frontend/src/stores/conversations.ts) | ✅ |
 
 ### 14.2 关键技术决策
 
@@ -652,7 +652,7 @@ Playwright 自动化测试（webapp-testing Skill），26/26 通过：
 
 #### 14.3.2 截图证据
 
-11 张截图保存在 [docs/test-evidence/sprint1-2/](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/docs/test-evidence/sprint1-2/)：
+11 张截图保存在 [docs/test-evidence/sprint1-2/](test-evidence/sprint1-2)：
 - `01-initial.png` / `01b-query-view.png` — 初始加载 + 视图切换
 - `02-sidebar-collapsed.png` / `03-sidebar-hidden.png` — 侧栏三态
 - `04-ctrl-b-expanded.png` / `05-persisted-after-refresh.png` — Ctrl+B + 持久化
@@ -697,9 +697,9 @@ Playwright 自动化测试（webapp-testing Skill），26/26 通过：
 
 | 功能 | 验收点 | 实现文件 | 状态 |
 |------|--------|---------|------|
-| **F-3.4 输入工具栏** | 7 类 chip（快速/写作/PPT/图像/视频/翻译/更多）；"更多"展开下拉显示联网搜索/深度思考；hover 玻璃光泽动效；选中态高亮；键盘可达 `:focus-visible`；移动端横滑 | [InputToolbar.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/components/InputToolbar.vue)（重写）/ [Query.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/views/Query.vue) | ✅ |
-| **F-3.5 多模态图片** | 粘贴/拖拽/点选三种方式；压缩到 ≤ 2MB；缩略图 200x200；vision 能力灰显（不支持时 disabled + tooltip）；格式/大小校验 | [AttachmentUploader.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/components/AttachmentUploader.vue) / [stores/model.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/stores/model.ts) / [routes/ai.ts](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/routes/ai.ts)（后端 vision 字段） | ✅ |
-| **F-3.9 模型切换** | isLoading 检查（in-flight 问答禁止切换）；Toast 200ms 提示「已切换到 xxx」；状态持久化（localStorage selectedModelPreset）；切换失败回滚到上一预设 | [ModelSelector.vue](file:///d:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/frontend/src/components/ModelSelector.vue)（重构） | ✅ |
+| **F-3.4 输入工具栏** | 7 类 chip（快速/写作/PPT/图像/视频/翻译/更多）；"更多"展开下拉显示联网搜索/深度思考；hover 玻璃光泽动效；选中态高亮；键盘可达 `:focus-visible`；移动端横滑 | [InputToolbar.vue](../frontend/src/components/InputToolbar.vue)（重写）/ [Query.vue](../frontend/src/views/Query.vue) | ✅ |
+| **F-3.5 多模态图片** | 粘贴/拖拽/点选三种方式；压缩到 ≤ 2MB；缩略图 200x200；vision 能力灰显（不支持时 disabled + tooltip）；格式/大小校验 | [AttachmentUploader.vue](../frontend/src/components/AttachmentUploader.vue) / [stores/model.ts](../frontend/src/stores/model.ts) / [routes/ai.ts](../api/src/routes/ai.ts)（后端 vision 字段） | ✅ |
+| **F-3.9 模型切换** | isLoading 检查（in-flight 问答禁止切换）；Toast 200ms 提示「已切换到 xxx」；状态持久化（localStorage selectedModelPreset）；切换失败回滚到上一预设 | [ModelSelector.vue](../frontend/src/components/ModelSelector.vue)（重构） | ✅ |
 
 ### 15.2 关键技术决策
 

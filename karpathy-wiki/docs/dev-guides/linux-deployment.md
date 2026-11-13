@@ -16,10 +16,10 @@
 | ffmpeg         | 视频转写 / TTS 后处理（可选）                                         | ⚠️ 可选，缺失时对应功能自动降级                               |
 | Tailscale `ln` | 隧道（tunnel）功能，Windows 专属定位                                  | ⚠️ 可选；Linux 对应 `tailscale`，且该功能默认不参与问答          |
 
-**检出/安装中唯一必须处理的点是根** **`package.json`** **门依赖**：`@wiki/harness` 以
-`file:D:/code/.../wiki-harness`（Windows 绝对盘符）声明，Linux 上无法 resolve 会导致
-`pnpm install` 失败。`deploy.sh install` 已用 `sed` 自动改写为相对路径
-`file:../wiki-harness`（`api/package.json` 本就用相对路径，不受影响）。
+**检出/安装中唯一必须处理的点是根** **`package.json`** **门依赖**：`@wiki/harness` 现已声明为
+相对路径 `file:../wiki-harness`，Linux 与 Windows 均可直接 resolve。`deploy.sh install`
+仍保留兼容改写（若检测到旧版 `file:D:/...` 绝对盘符会自动改为相对路径，`api/package.json`
+本就是相对路径，不受影响）。
 
 ## 2. 资源需求评估
 

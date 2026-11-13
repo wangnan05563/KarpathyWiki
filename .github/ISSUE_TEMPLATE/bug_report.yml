@@ -1,0 +1,53 @@
+name: Bug 报告
+description: 报告一个可复现的问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请尽量填写以下信息，便于我们快速复现与定位。提交前请确认已脱敏，不要包含真实业务资料、密钥或个人信息。
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境与版本
+      description: 操作系统、Node / pnpm 版本、部署形态（本地 / 内网 / 公网）
+      placeholder: |
+        - OS: Windows 11 / macOS 14 / Ubuntu 22.04
+        - Node.js: 22.19
+        - pnpm: 11.12.0
+        - 部署: 本地一键安装 / 内网 / 公网(Tailscale)
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述
+      description: 发生了什么？期望的结果是什么？
+      placeholder: 简明描述现象与预期行为的差异。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 一步步说明如何复现该问题
+      placeholder: |
+        1. 打开 ...
+        2. 点击 ...
+        3. 看到 ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图
+      description: 粘贴相关错误日志（可脱敏）或界面截图
+      render: shell
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: 提交确认
+      options:
+        - label: 我已确认内容未包含真实业务资料、密钥或个人信息
+          required: true

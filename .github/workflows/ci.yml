@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 本仓库是两个独立的 pnpm workspace：
+#   - wiki-harness/  : @wiki/harness（Agent 引擎），需先 build 出 dist
+#   - karpathy-wiki/ : @karpathy-wiki/api + @karpathy-wiki/web，依赖 file:../wiki-harness
+# 因此先构建并测试 harness，再构建并测试应用工程。
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.12.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22" # 下限 22.19；取自 README 环境要求
+
+      - name: Install & build & test wiki-harness
+        working-directory: wiki-harness
+        run: |
+          pnpm install
+          pnpm build
+          pnpm test
+
+      - name: Install & build karpathy-wiki
+        working-directory: karpathy-wiki
+        run: |
+          pnpm install
+          pnpm -r build
+
+      - name: Test @karpathy-wiki/api
+        working-directory: karpathy-wiki
+        run: pnpm --filter @karpathy-wiki/api test
+
+      - name: Test @karpathy-wiki/web
+        working-directory: karpathy-wiki
+        run: pnpm --filter @karpathy-wiki/web test

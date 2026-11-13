@@ -1,7 +1,8 @@
-﻿import sys
+﻿from pathlib import Path
+import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
-path = "D:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api/src/utils/url-crawl.ts"
+path = str(Path(__file__).with_name("url-crawl.ts"))
 with open(path, "rb") as f:
     data = f.read()
 

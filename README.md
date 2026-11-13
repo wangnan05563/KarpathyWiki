@@ -12,6 +12,12 @@
 [![Vue](https://img.shields.io/badge/Vue-3.4-4FC08D?logo=vuedotjs)](https://vuejs.org/)
 [![Fastify](https://img.shields.io/badge/Fastify-4-000000?logo=fastify)](https://www.fastify.io/)
 [![pnpm](https://img.shields.io/badge/pnpm-workspace-F69220?logo=pnpm)](https://pnpm.io/)
+[![GitHub](https://img.shields.io/badge/GitHub-wangnan05563%2FKarpathyWiki-181717?logo=github)](https://github.com/wangnan05563/KarpathyWiki)
+[![Stars](https://img.shields.io/github/stars/wangnan05563/KarpathyWiki?logo=github)](https://github.com/wangnan05563/KarpathyWiki/stargazers)
+[![Forks](https://img.shields.io/github/forks/wangnan05563/KarpathyWiki?logo=github)](https://github.com/wangnan05563/KarpathyWiki/network/members)
+[![Issues](https://img.shields.io/github/issues/wangnan05563/KarpathyWiki?logo=github)](https://github.com/wangnan05563/KarpathyWiki/issues)
+[![License](https://img.shields.io/github/license/wangnan05563/KarpathyWiki)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/wangnan05563/KarpathyWiki/ci.yml?branch=main&label=CI)](https://github.com/wangnan05563/KarpathyWiki/actions/workflows/ci.yml)
 
 </div>
 
@@ -342,6 +348,35 @@ cd ../wiki-harness && pnpm test           # Agent 引擎（node --test）
 5. 触碰删除面/清理逻辑前请阅读 `karpathy-wiki/api/src/utils/cleanup-surface.ts` 的写入口矩阵——该文件是删除能力的单一口径。
 
 > 项目仍在快速迭代，核心接口与配置 schema 可能随版本调整；较大改动建议先开 Issue 讨论。
+
+## GitHub 与开源协作
+
+仓库地址：<https://github.com/wangnan05563/KarpathyWiki>（默认分支 `main`）
+
+### 克隆与运行
+
+```bash
+git clone https://github.com/wangnan05563/KarpathyWiki.git
+cd KarpathyWiki
+# 后续步骤见上方「安装」与「快速开始」
+```
+
+### 反馈与讨论
+
+- **Bug 报告 / 功能建议**：请在 [Issues](https://github.com/wangnan05563/KarpathyWiki/issues) 提交，尽量附复现步骤、环境版本（Node / pnpm）与截图。
+- **较大的设计改动**：建议先开 Issue 讨论确认方向，再动手实现，避免返工。
+- **文档与翻译**：欢迎直接提 PR 修正错别字、补全说明或改进示例。
+
+### 提交 Pull Request
+
+流程与上方 [贡献指南](#贡献指南) 一致：从 `main` 切出分支（`git checkout -b feature/xxx`）→ 本地 `pnpm build` 与测试通过 → 提交信息写清动机与影响范围 → 在 GitHub 发起 PR。涉及 UI 的行为变更请用真机实测复验后再提交。
+
+### 版本发布
+
+正式发布走「构建 → 打包 → GitHub Release」流程：
+
+- 构建产物与 Release 说明由 `karpathy-wiki/scripts/publish-release.py` 生成（建 Release + 附带说明 md + 上传资产），凭据走 `GH_TOKEN` / git 凭据库，不落盘。
+- Release 资产与回退目录口径、发布脚本清单见上方 [构建与发布](#构建与发布)。
 
 ## 致谢
 

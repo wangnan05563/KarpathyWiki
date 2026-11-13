@@ -1,5 +1,5 @@
 # ============================================================
-# Workspace Cleanup - 项目专属配置 (19_Karpathy-AI+Obsidian知识库)
+# Workspace Cleanup - 项目专属配置 (KarpathyWiki)
 # 派生自 skill examples/cleanup-config.example.yaml，按本工作空间实际垃圾模式裁剪
 # 设计原则：零硬编码、配置驱动、安全优先（删前哈希备份、删后验证）
 # ============================================================

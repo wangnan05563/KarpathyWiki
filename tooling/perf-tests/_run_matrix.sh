@@ -3,8 +3,8 @@
 # Runs Plans A/B/C + compilelock across normal/high/peak load on SMALL vault,
 # then generates a LARGE vault and runs Plan A baseline/high, then restores.
 set -u
-API="D:/code/otherProjects/19_Karpathy-AI+Obsidian知识库/karpathy-wiki/api"
-ROOT="D:/code/otherProjects/19_Karpathy-AI+Obsidian知识库"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+API="$ROOT/karpathy-wiki/api"
 PFX="$ROOT/tooling/perf-tests"
 VAULT="$ROOT/karpathy-wiki/data/vault"
 JM="D:/code/Jmeter/apache-jmeter-5.6.3/bin/jmeter.bat"
