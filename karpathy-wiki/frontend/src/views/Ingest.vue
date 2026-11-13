@@ -9,6 +9,7 @@ import IconActionButton from '../components/IconActionButton.vue';
 import StateBlock from '../components/StateBlock.vue';
 import { useCompileStore } from '../stores/compile';
 import { consumeSSE } from '../utils/sse';
+import { buildUrlCompilePages } from '../utils/urlPageCompile';
 import { listUploadedDocuments, downloadUploadedDocument, type UploadedDocument } from '../services/uploads';
 import type { ConfigData, QqUploadEvent, DraftCompileEvent, UrlCrawlEvent, UrlCrawlPageSummary, UrlCrawlAttachment } from '../types';
 
@@ -543,10 +544,12 @@ function goToDraftReview() {
 }
 
 // ============================================================
-// URL 爬取两段式流程
-// 阶段 1：crawl（BFS 爬取）→ 阶段 2：compile（用 combinedMarkdown 作为 text 编译）
+// URL 爬取两段式流程（T05721）
+// 阶段 1：crawl（BFS 爬取，SSE）→ done.pages[] 每页携带独立 markdown
+// 阶段 2：compile（把勾选的每一页作为独立编译单元提交 /api/compile/url-pages）
 // 为什么独立于 compile store：爬取阶段走 /api/url-ingest/crawl 路由，不复用 /api/compile
-// 编译阶段才复用 store.prepareCompile({ type: 'text', content: combinedMarkdown })
+// 编译阶段才进 compile store 的批量模式；combinedMarkdown 仅保留给外部调用方兼容，
+// 前端不再把它当单文件 text 编译输入——那会把 60 页压成 1 次编译且成功率恒为 1/N。
 // ============================================================
 
 // URL 流程阶段：idle/crawling/crawled/error（编译由 store.isCompiling 接管）
@@ -728,6 +731,8 @@ function handleUrlDoneEventWithResult(d: NonNullable<UrlCrawlEvent['data']>) {
     attachments: d.attachments ?? [],
     elapsedMs: d.elapsedMs,
     diagnosis: d.diagnosis,
+    // T05721：保留失败页数，爬取进度条据此区分「全部成功」与「部分页面失败」
+    errorCount: d.errorCount ?? 0,
   };
   selectedPageUrls.value = new Set((d.pages ?? []).map((p) => p.url));
   urlStage.value = 'crawled';
@@ -831,6 +836,12 @@ async function compileBookmarks() {
   }
 }
 
+// T05721：URL 爬取结果逐页独立编译。
+// 旧实现把选中页拼成 1 份 text 交给 /api/compile，只触发 1 次 adapter.compile()；
+// 且后端 done.pages[] 当时不带 markdown，逐页循环恒空转 → 勾选形同虚设，
+// 60 个解析页被压成 1 次编译，进度页却按单文件阶段完成显示「100%」。
+// 现在每页一个编译单元走 /api/compile/url-pages 的批量事件流，
+// 成功率由 BatchProgressBar 按「成功页 / 入队页」真实计算。
 function startUrlCompile() {
   if (!urlCrawlResult.value || urlCrawlResult.value.pages.length === 0) {
     ElMessage.warning('没有可编译的内容，请先完成爬取');
@@ -841,24 +852,24 @@ function startUrlCompile() {
     return;
   }
   if (store.isCompiling || submitting.value) return;
-  // 5.4.1 基于勾选状态拼接 markdown
-  // 为什么不直接用 combinedMarkdown：用户可能取消勾选部分页面，需重新拼接
+
   const selectedPages = urlCrawlResult.value.pages.filter((p) => selectedPageUrls.value.has(p.url));
-  const markdownParts: string[] = [];
-  for (const p of selectedPages) {
-    if (p.markdown) {
-      markdownParts.push(p.markdown);
-    }
+  if (selectedPages.length === 0) {
+    ElMessage.warning('请至少勾选一个页面进行编译');
+    return;
   }
-  // 兜底：若 pages 未携带 markdown 字段（旧后端兼容），回退到 combinedMarkdown
-  const finalMarkdown = markdownParts.length > 0 ? markdownParts.join('\n\n') : urlCombinedMarkdown.value;
-  if (!finalMarkdown) {
+  const built = buildUrlCompilePages(selectedPages, urlCombinedMarkdown.value);
+  if (!built) {
     ElMessage.warning('没有可编译的内容，请先完成爬取');
     return;
   }
+  if (built.degraded) {
+    ElMessage.warning('当前后端未返回逐页内容，本次按 1 份合并资料编译（升级后端后可逐页编译）');
+  }
+
   submitting.value = true;
   try {
-    store.prepareCompile({ type: 'text', content: finalMarkdown });
+    store.prepareBatchCompile({ pages: built.pages });
     emit('start');
   } finally {
     setTimeout(() => { submitting.value = false; }, 100);
@@ -1141,10 +1152,10 @@ function handleUrlInputChange() {
               <div class="url-action-row">
                 <IconActionButton
                   name="开始编译"
-                  :desc="`将勾选的 ${selectedPageCount}/${urlCrawlResult.pages.length} 个页面与附件编译为知识库页面`"
+                  :desc="`逐页编译勾选的 ${selectedPageCount}/${urlCrawlResult.pages.length} 个页面（每页一次 AI 编译）`"
                   :icon="VideoPlay"
                   variant="primary"
-                  :disabled="!urlCombinedMarkdown || store.isCompiling || submitting || selectedPageCount === 0"
+                  :disabled="store.isCompiling || submitting || selectedPageCount === 0"
                   :loading="store.isCompiling"
                   @click="startUrlCompile"
                 />
@@ -1155,19 +1166,26 @@ function handleUrlInputChange() {
                   @click="resetUrlFlow"
                 />
               </div>
+              <!-- T05721：逐页编译会触发 N 次 AI 调用，成本与耗时必须提前告知；
+                   同时说明进度页的成功率口径，避免把「爬取完成 100%」误读成「编译 100% 成功」 -->
+              <p class="url-proxy-hint">
+                勾选的 {{ selectedPageCount }} 个页面会各自独立编译（共 {{ selectedPageCount }} 次 AI 编译，页数越多耗时越长）；
+                编译进度与成功率在进度页按「成功页数 / 总页数」显示。
+              </p>
             </div>
 
             <!-- 实时进度消息 -->
             <div v-if="urlProgress && urlStage !== 'idle'" class="url-progress">
               <div class="qq-progress-head">
                 <span class="progress-dot" :class="urlStage"></span>
-                <span class="progress-text">{{ urlProgress }}</span>
+                <!-- T05721：明确标注这是「爬取」进度，避免被误读成编译成功率 -->
+                <span class="progress-text">[爬取进度] {{ urlProgress }}</span>
               </div>
               <el-progress
                 :percentage="urlStage === 'crawled' ? 100 : 0"
                 :indeterminate="urlStage === 'crawling'"
                 :stroke-width="5"
-                :status="urlStage === 'crawled' ? 'success' : urlStage === 'error' ? 'exception' : ''"
+                :status="urlStage === 'crawled' ? (urlCrawlResult?.errorCount ? 'warning' : 'success') : urlStage === 'error' ? 'exception' : ''"
                 :striped="urlStage === 'crawling'"
                 :striped-flow="urlStage === 'crawling'"
                 class="qq-progress-bar"

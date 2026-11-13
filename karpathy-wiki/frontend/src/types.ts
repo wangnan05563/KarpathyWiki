@@ -96,7 +96,17 @@ export interface TimelineItem {
 }
 
 // 投递载荷：文件用 FormData，URL/文本走 JSON
-export type IngestPayload = FormData | { type: 'url' | 'text'; content: string };
+// T05721：URL 爬取结果的逐页编译载荷。每项对应一个解析出的源页面，是独立编译单元；
+// name 由前端生成且全局唯一（序号前缀），markdown 与 combinedMarkdown 中该页片段同源。
+export interface UrlPageCompileItem {
+  name: string;
+  markdown: string;
+}
+export interface UrlPageCompilePayload {
+  pages: UrlPageCompileItem[];
+}
+
+export type IngestPayload = FormData | { type: 'url' | 'text'; content: string } | UrlPageCompilePayload;
 
 // 批量编译相关类型
 

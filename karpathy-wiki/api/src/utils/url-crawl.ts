@@ -115,6 +115,11 @@ interface RequiredUrlCrawlConfig extends UrlCrawlConfig {
 
 
 
+// URL 爬取页数的硬上限：请求级 maxPages 与「逐页编译」端点共用同一口径，
+// 避免「允许爬 500 页、却只允许编译 50 页」的静默截断（T05721）。
+// 前端 Ingest.vue 的 el-input-number :max 与之对齐，改动需同步两处。
+export const URL_MAX_PAGES_HARD_LIMIT = 500;
+
 export const DEFAULT_CRAWL_CONFIG: RequiredUrlCrawlConfig = {
 
   // timeoutMs 30s：shcpe 等外网站点首次响应常 >10s（DNS/服务器延迟），
@@ -838,7 +843,16 @@ export async function* crawlUrl(entryUrl: string, options: UrlCrawlConfig): Asyn
     yield { type: 'done', step: 'done', message: 'Crawl complete: ' + allPages.length + ' pages',
       data: {
         pagesCrawled: allPages.length, totalAttachmentCount: allAttachments.length,
-        pages: allPages.map((p) => ({ url: p.url, title: p.title, depth: p.depth, contentLength: p.content.length, attachmentCount: p.attachments.length })),
+        // T05721：每页回带独立 markdown，前端据此把「勾选的每一页」作为独立编译单元入队。
+        // 旧实现只有摘要字段，Ingest.vue 的逐页循环恒空转 → 回退整份 combinedMarkdown →
+        // 60 页被压成 1 次 text 编译，且勾选/取消勾选完全无效。
+        // 与 combinedMarkdown 同源（都走 renderCrawledPage），保证「全量编译」与「勾选编译」
+        // 逐字一致；代价是 done 帧体积约翻倍，换取逐页可追踪性与成功率分母的真实性。
+        pages: allPages.map((p) => ({
+          url: p.url, title: p.title, depth: p.depth,
+          contentLength: p.content.length, attachmentCount: p.attachments.length,
+          markdown: renderCrawledPage(p),
+        })),
         attachments: allAttachments, combinedMarkdown, elapsedMs: elapsed, pagesSkipped,
         errorCount: crawlErrors.length,
         errors: crawlErrors.slice(0, 20),
@@ -855,27 +869,37 @@ export async function* crawlUrl(entryUrl: string, options: UrlCrawlConfig): Asyn
   }
 }
 
+// T05721：单页 Markdown 渲染。
+// 为什么必须抽成共享函数：done 事件要给「每一页」单独返回 markdown 供前端逐页编译/勾选，
+// 而合并文档也要用完全相同的片段拼装。若两处各写一份，逐页内容与合并内容会随时间漂移
+// （例如新增来源行/附件块只改了一边），导致「勾选后再编译」与「全量编译」结果不一致。
+// 本函数不含总标题、页间分隔线与版权尾——这些属于「整份文档」语义，由 combinePagesToMarkdown 负责。
+export function renderCrawledPage(page: UrlCrawlPage): string {
+  const headingLevel = Math.min(page.depth + 1, 3);
+  let md = '#'.repeat(headingLevel) + ' ' + (page.title || page.url) + '\n\n';
+  md += '_Source: [' + page.url + '](' + page.url + ')_\n\n';
+  md += page.content + '\n\n';
+  if (page.attachments.length > 0) {
+    md += '### Attachments\n\n';
+    for (const att of page.attachments) {
+      // 为什么用 Record 类型断言：att.type 是联合类型，直接索引会报 TS7053
+      const icons: Record<UrlCrawlAttachment['type'], string> = { document: '[D]', image: '[I]', audio: '[A]', video: '[V]', other: '[F]' };
+      md += '- ' + (icons[att.type] || '[F]') + ' [' + att.url + '](' + att.url + ')\n';
+    }
+    md += '\n';
+  }
+  return md;
+}
+
 export function combinePagesToMarkdown(pages: UrlCrawlPage[], copyrightNotice: string) {
   if (pages.length === 0) return '# Combined Crawl\n\n*No pages were crawled.*\n\n';
   let md = '# Combined Crawl\n\n';
   md += '> Crawled ' + pages.length + ' page(s).\n\n';
   md += '---\n\n';
   for (let i = 0; i < pages.length; i++) {
-    const page = pages[i];
     if (i > 0) md += '\n\n---\n\n';
-    const headingLevel = Math.min(page.depth + 1, 3);
-    md += '#'.repeat(headingLevel) + ' ' + (page.title || page.url) + '\n\n';
-    md += '_Source: [' + page.url + '](' + page.url + ')_\n\n';
-    md += page.content + '\n\n';
-    if (page.attachments.length > 0) {
-      md += '### Attachments\n\n';
-      for (const att of page.attachments) {
-        // 为什么用 Record 类型断言：att.type 是联合类型，直接索引会报 TS7053
-        const icons: Record<UrlCrawlAttachment['type'], string> = { document: '[D]', image: '[I]', audio: '[A]', video: '[V]', other: '[F]' };
-        md += '- ' + (icons[att.type] || '[F]') + ' [' + att.url + '](' + att.url + ')\n';
-      }
-      md += '\n';
-    }
+    // 复用单页渲染，保证逐页 markdown 与合并文档逐字同源
+    md += renderCrawledPage(pages[i]);
   }
   if (copyrightNotice) md += '---\n\n> ' + copyrightNotice + '\n';
   return md;

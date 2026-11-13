@@ -19,6 +19,7 @@ import {
   rawPathKey,
 } from '../compile-idempotency.js';
 import { isRetryableLlmError } from '../utils/llm-error.js';
+import { URL_MAX_PAGES_HARD_LIMIT } from '../utils/url-crawl.js';
 import type { UploadStore } from '../uploads/upload-store.js';
 
 // 默认批量编译配置，当 index.ts 未传 config.batch 时回退使用。
@@ -561,6 +562,135 @@ export function registerCompileRoute(
         }
       }
       return { status: batchHasError ? 'failed' : 'done' };
+    };
+    startJobOnConnection(request, reply, sender, 'batch', runner);
+  });
+
+  // ==========================================================================
+  // T05721：URL 爬取结果逐页编译  POST /api/compile/url-pages
+  // 入参 JSON：{ pages: [{ name: string; markdown: string }] }
+  // 出参 SSE：与 /api/compile/batch 同构（batch_start → file_start → progress/page →
+  //   file_done|file_error → file_complete → batch_done），前端复用 isBatchMode 与
+  //   BatchProgressBar 的分组统计，无需新增事件类型。
+  //
+  // 为什么不复用 multipart batch 端点：
+  //   ① config.batch.maxBatchSize 默认 50，而 URL 爬取允许到 500 页 —— 60 页会被拒；
+  //   ② multipart 单文件 10MB 上限会剔除超长页面，使「入队页数 < 解析页数」，
+  //      成功率分母失真；
+  //   ③ 爬取内容不是用户主动上传的原始文档，不应进「已投递原始文档」留存列表。
+  // 为什么按页独立编译：验收口径「成功率 = 成功编译数 / 总解析页面数」要求每页是
+  //   独立编译单元；合并成一份 text 时分子恒为 1，成功率恒为 1/N，指标无意义。
+  // 为什么与 batch 端点各写一份 runner：T02818 源码序守护按文本顺序判定
+  //   「adapter.compile 消费发生在 withCompileLock 内」，抽取公共 runner 会打散该
+  //   文本序；两份 runner 保持同构，任一处改动需同步另一处。
+  // 体积：Fastify 全局 bodyLimit=50MB（index.ts），覆盖 500 页 × 4M 字符封顶后的典型值。
+  // ==========================================================================
+  app.post('/api/compile/url-pages', {
+    // 单请求触发 N 次 LLM 编译，与批量端点同额度
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = (request.body ?? {}) as { pages?: unknown };
+    const rawPages = body.pages;
+    if (!Array.isArray(rawPages) || rawPages.length === 0) {
+      return void reply.code(400).send({ error: '缺少 pages 字段或页面为空' });
+    }
+    if (rawPages.length > URL_MAX_PAGES_HARD_LIMIT) {
+      return void reply.code(400).send({
+        error: `URL 页面数 ${rawPages.length} 超过上限 ${URL_MAX_PAGES_HARD_LIMIT}`,
+      });
+    }
+
+    // 逐项结构校验。为什么不复用 validateBatchFiles：它会按 maxFileSizeMb 静默剔除
+    //   超长页面，导致「入队页数 < 解析页数」；URL 正文已被 extractHtmlContent 在
+    //   4M 字符处封顶，这里只做类型与路径穿越防护，保证分母恒等于解析页数。
+    const validFiles: ValidatedFile[] = [];
+    for (const raw of rawPages) {
+      const p = raw as { name?: unknown; markdown?: unknown } | null;
+      if (!p || typeof p.name !== 'string' || typeof p.markdown !== 'string' || !p.markdown.trim()) {
+        return void reply.code(400).send({ error: 'pages 每项须含非空 name 与 markdown 字符串' });
+      }
+      // name 只作临时文件名与前端分组标题：禁止目录分隔符与上跳，避免路径穿越
+      if (!/^[^/\\]+\.md$/.test(p.name)) {
+        return void reply.code(400).send({ error: `页面文件名非法: ${p.name}` });
+      }
+      validFiles.push({
+        name: path.basename(p.name).replaceAll(/[^\p{L}\p{N}._-]/gu, '_'),
+        displayName: p.name,
+        buffer: Buffer.from(p.markdown, 'utf8'),
+        mimeType: 'text/markdown',
+      });
+    }
+
+    const fileCount = validFiles.length;
+    const rejected: Array<{ name: string; reason: string }> = [];
+    const batchKey = batchContentKey(validFiles.map((f) => fileContentKey(f.buffer)));
+
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    const sender = createSSESender(reply, request, { heartbeatMs: SSE_HEARTBEAT_MS });
+
+    const begun = idempotency.begin(batchKey);
+    if (begun.kind === 'running') {
+      sender.send('batch_deduped', {
+        step: 'batch_done',
+        status: 'running',
+        message: '相同页面集合正在逐页编译中，已复用该任务的进度',
+        data: { ...begun.snapshot, fileCount },
+      });
+      sender.safeEnd();
+      return;
+    }
+    const idempotencyToken = begun.token;
+    // URL 页面不调 retainOriginal：原件留存列表只收录用户主动上传的文件
+
+    const runner: CompileJobRunner = async (ctx) => {
+      const tmpPaths: string[] = [];
+      const batchCtx: BatchFileContext = {
+        adapter, appConfig, idempotency, batchKey, fileCount,
+        emit: ctx.emit, cancelled: ctx.cancelled, log: request.log,
+      };
+      ctx.emit('batch_start', {
+        step: 'batch_start',
+        status: 'running',
+        message: `开始逐页编译 ${fileCount} 个页面`,
+        data: { fileCount, rejected },
+      });
+
+      let hasError = false;
+      try {
+        await withCompileLock(async () => {
+          hasError = await runBatchFiles(batchCtx, validFiles, tmpPaths);
+        });
+        ctx.emit('batch_done', {
+          step: 'done',
+          status: hasError ? 'error' : 'done',
+          message: hasError
+            ? `逐页编译结束：${fileCount} 个页面中有失败项，请查看成功率与失败详情`
+            : `逐页编译完成，共处理 ${fileCount} 个页面`,
+          data: { fileCount, hasError },
+        });
+      } catch (err: unknown) {
+        request.log.error({ err }, 'url-pages compile SSE stream error');
+        hasError = true;
+        ctx.emit('error', {
+          step: 'finalize',
+          status: 'error',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        idempotency.finish(batchKey, idempotencyToken, {
+          status: ctx.cancelled() || hasError ? 'failed' : 'done',
+          message: hasError ? '部分页面失败' : undefined,
+        });
+        for (const tmp of tmpPaths) {
+          await fs.unlink(tmp).catch(() => {});
+        }
+      }
+      return { status: hasError ? 'failed' : 'done' };
     };
     startJobOnConnection(request, reply, sender, 'batch', runner);
   });

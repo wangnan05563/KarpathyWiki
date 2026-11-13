@@ -45,10 +45,34 @@ const pendingCount = computed(() =>
 );
 
 // 百分比：totalCount 为 0 时返回 0，避免 NaN
+// 注意这是「处理完成度」——done 与 error 都算已结束，59 失败 1 成功时它同样是 100%，
+// 绝不能被当作成功率展示（T05721 的「100% 成功」误报正来自把两者混为一谈）。
 const progressPercentage = computed(() => {
   if (totalCount.value === 0) return 0;
   return Math.round((completedCount.value / totalCount.value) * 100);
 });
+
+// T05721：成功率 = 成功编译数 / 总解析页面数 × 100。
+// 分母恒为入队总页数，分子只数真正成功的分组，与 progressPercentage 刻意分开。
+const successRate = computed(() => {
+  if (totalCount.value === 0) return 0;
+  return Math.round((successCount.value / totalCount.value) * 100);
+});
+
+// 「所有入队页面都已落定」：此时即便后端把部分失败收成整体 error 态，也该展示真实成功率，
+// 而不是继续把「处理完成度 100%」摆在最显眼的位置。
+const successVisible = computed(() =>
+  !store.isCompiling && totalCount.value > 0 && completedCount.value === totalCount.value,
+);
+
+// 头部数字：处理中给完成度，全部落定后给真实成功率
+const displayPercentage = computed(() =>
+  successVisible.value ? successRate.value : progressPercentage.value,
+);
+
+const percentageLabel = computed(() => successVisible.value
+  ? `成功率 = 成功 ${successCount.value} / 总 ${totalCount.value} × 100`
+  : `处理进度 = 已结束 ${completedCount.value} / 总 ${totalCount.value} × 100`);
 
 // 进度条状态：派生自 store 的 isCompiling/isDone/errorMessage
 // 'idle'：尚未开始（batchGroups 为空）
@@ -129,10 +153,13 @@ const statusSubtitle = computed(() => {
       return `成功 ${successCount.value} · 失败 ${errorCount.value} · 进行中 ${runningCount.value} · 待处理 ${pendingCount.value}`;
     case 'done':
       return errorCount.value > 0
-        ? `共 ${totalCount.value} 篇 · 成功 ${successCount.value} · 失败 ${errorCount.value}`
-        : `共 ${totalCount.value} 个页面全部编译成功`;
+        ? `共 ${totalCount.value} 个页面 · 成功 ${successCount.value} · 失败 ${errorCount.value} · 成功率 ${successRate.value}%`
+        : `共 ${totalCount.value} 个页面全部编译成功 · 成功率 100%`;
     case 'error':
-      return store.errorMessage || '未知错误';
+      // T05721：部分页面失败时后端收成整体 error 态，统计仍要如实给出
+      return successVisible.value
+        ? `共 ${totalCount.value} 个页面 · 成功 ${successCount.value} · 失败 ${errorCount.value} · 成功率 ${successRate.value}%｜${store.errorMessage || '编译过程出错'}`
+        : (store.errorMessage || '未知错误');
     case 'cancelled':
       return `已保留 ${completedCount.value}/${totalCount.value} 篇编译成果`;
     case 'interrupted':
@@ -193,7 +220,7 @@ function handleCancel() {
         <span class="progress-status-dot" :class="currentStatus"></span>
         <span class="progress-title">{{ statusTitle }}</span>
         <!-- T03438：上传/校验阶段没有可计量的编译进度，显示 0% 会被误读成「卡死在 0%」 -->
-        <span v-if="!awaitingStart" class="progress-percentage">{{ progressPercentage }}%</span>
+        <span v-if="!awaitingStart" class="progress-percentage" :title="percentageLabel">{{ displayPercentage }}%</span>
       </div>
       <el-button
         v-if="canCancel"
@@ -246,21 +273,27 @@ function handleCancel() {
 
     <!-- 状态切换 banner：用 Transition 包裹实现淡入 + 上滑动画 -->
     <Transition name="banner-fade" mode="out-in">
-      <!-- 完成态提示 banner -->
+      <!-- 完成态提示 banner（T05721：部分失败不得再无条件写「全部编译完成」） -->
       <div v-if="currentStatus === 'done'" key="done" class="progress-banner success-banner">
         <el-icon class="banner-icon"><Check /></el-icon>
         <span class="banner-text">
-          全部 {{ totalCount }} 个页面编译完成
           <template v-if="errorCount > 0">
-            （{{ successCount }} 成功 · {{ errorCount }} 失败）
+            {{ totalCount }} 个页面中 {{ successCount }} 个编译成功（成功率 {{ successRate }}%），{{ errorCount }} 个失败
+          </template>
+          <template v-else>
+            全部 {{ totalCount }} 个页面编译成功（成功率 100%）
           </template>
         </span>
       </div>
 
-      <!-- 错误态提示 banner -->
+      <!-- 错误态提示 banner：批量部分失败时同样给出真实统计 -->
       <div v-else-if="currentStatus === 'error'" key="error" class="progress-banner error-banner">
         <el-icon class="banner-icon"><Close /></el-icon>
-        <span class="banner-text">{{ store.errorMessage || '编译过程出错' }}</span>
+        <span class="banner-text">
+          <template v-if="successVisible">
+            共 {{ totalCount }} 个页面 · 成功 {{ successCount }} · 失败 {{ errorCount }} · 成功率 {{ successRate }}%｜
+          </template>{{ store.errorMessage || '编译过程出错' }}
+        </span>
       </div>
 
       <!-- 取消态提示 banner -->

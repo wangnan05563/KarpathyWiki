@@ -33,12 +33,14 @@ interface Point {
 
 /** 本批 64 个可包裹消费点（状态点另计，见文件头第 2 条）；选族结论来自 tmp-b-matrix 逐主题实算 */
 const POINTS: Point[] = [
-  { f: 'BatchProgressBar.vue', ln: 405, sel: '.progress-percentage', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
-  { f: 'BatchProgressBar.vue', ln: 450, sel: '.awaiting-spinner border-top', face: CARD, fg: 'var(--pink-readable)', bare: 'var(--neon-pink)', kind: 'ui' },
-  { f: 'BatchProgressBar.vue', ln: 458, sel: '.awaiting-elapsed', face: CARD, fg: 'var(--pink-readable)', bare: 'var(--neon-pink)', kind: 'text' },
-  { f: 'BatchProgressBar.vue', ln: 488, sel: '.success-banner', face: 'var(--accent-cyan-a08)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
-  { f: 'BatchProgressBar.vue', ln: 497, sel: '.error-banner', face: 'var(--accent-pink-a08)', fg: 'var(--pink-readable)', bare: 'var(--neon-magenta)', kind: 'text' },
-  { f: 'BatchProgressBar.vue', ln: 506, sel: '.cancelled-banner', face: 'var(--accent-pink-a08)', fg: 'var(--pink-readable)', bare: 'var(--neon-pink)', kind: 'text' },
+  // T05721：BatchProgressBar 增加成功率计算与完成/失败文案后，CSS 块整体下移 33 行。
+  // 下面 6 个 ln 按当前源码的 color/background 声明行刷新（审计锚点：行号漂移即红）。
+  { f: 'BatchProgressBar.vue', ln: 438, sel: '.progress-percentage', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
+  { f: 'BatchProgressBar.vue', ln: 483, sel: '.awaiting-spinner border-top', face: CARD, fg: 'var(--pink-readable)', bare: 'var(--neon-pink)', kind: 'ui' },
+  { f: 'BatchProgressBar.vue', ln: 491, sel: '.awaiting-elapsed', face: CARD, fg: 'var(--pink-readable)', bare: 'var(--neon-pink)', kind: 'text' },
+  { f: 'BatchProgressBar.vue', ln: 521, sel: '.success-banner', face: 'var(--accent-cyan-a08)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
+  { f: 'BatchProgressBar.vue', ln: 530, sel: '.error-banner', face: 'var(--accent-pink-a08)', fg: 'var(--pink-readable)', bare: 'var(--neon-magenta)', kind: 'text' },
+  { f: 'BatchProgressBar.vue', ln: 539, sel: '.cancelled-banner', face: 'var(--accent-pink-a08)', fg: 'var(--pink-readable)', bare: 'var(--neon-pink)', kind: 'text' },
   { f: 'SingleFileProgressBar.vue', ln: 349, sel: '.progress-percentage', face: CARD, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'SingleFileProgressBar.vue', ln: 417, sel: '.success-banner', face: 'var(--accent-cyan-a08)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'SingleFileProgressBar.vue', ln: 426, sel: '.error-banner', face: 'var(--accent-pink-a08)', fg: 'var(--pink-readable)', bare: 'var(--neon-magenta)', kind: 'text' },

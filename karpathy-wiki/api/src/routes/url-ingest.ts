@@ -1,8 +1,10 @@
 // URL 爬取子系统路由
 // 注册 2 个端点：crawl（爬取 SSE）/ config（GET/PUT 配置）
 // 设计要点：
-// 1. 两段式工作流：crawl 爬取 → 调用方（前端或外部）使用返回的 combinedMarkdown
-//    作为 compile 路由的 text 输入，避免在此端点内复用 adapter.compile 引入耦合
+// 1. 两段式工作流：crawl 爬取 → 调用方把 done.pages[].markdown 逐页提交给
+//    /api/compile/url-pages 编译（T05721）。combinedMarkdown 仍保留给外部调用方兼容，
+//    但前端不再拿它做整份 text 编译：那样 60 个解析页只会触发 1 次编译。
+//    本端点依旧不调用 adapter.compile，保持职责单一
 // 2. SSE 事件：progress/page_start/page_done/page_error/attachment/done/error
 // 3. 路径穿越防护：crawl 端点不写盘，combineMarkdown 通过 done 事件返回内存数据
 // 4. 错误容错：单页抓取失败不阻断整体爬取，通过 page_error 事件反馈
@@ -11,7 +13,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { EngineAdapter, AppConfig, UrlCrawlConfig } from '../types.js';
 import type { VaultService } from '../vault/vault-service.js';
 import { createSSESender } from '../utils/sse.js';
-import { crawlUrl, DEFAULT_CRAWL_CONFIG, validateProxyUrl, probeProxyEgress, type ProxyProbeResult } from '../utils/url-crawl.js';
+import { crawlUrl, DEFAULT_CRAWL_CONFIG, URL_MAX_PAGES_HARD_LIMIT, validateProxyUrl, probeProxyEgress, type ProxyProbeResult } from '../utils/url-crawl.js';
 import { saveUrlCrawlConfig } from '../config.js';
 import { type IsolationGuards, createIsolationGuards } from '../middleware/auth.js';
 
@@ -29,7 +31,8 @@ function buildCrawlConfig(
   // 继承 config.urlCrawl（含其中已配置的 egressProxyUrl 默认值），再叠加请求级覆盖
   const crawlConfig: Partial<UrlCrawlConfig> = { ...(config.urlCrawl ?? {}) };
   if (typeof body.maxPages === 'number' && body.maxPages > 0) {
-    crawlConfig.maxPages = Math.min(Math.floor(body.maxPages), 500);
+    // T05721：与「逐页编译」端点共用同一硬上限，能爬多少页就能编译多少页
+    crawlConfig.maxPages = Math.min(Math.floor(body.maxPages), URL_MAX_PAGES_HARD_LIMIT);
   }
   if (typeof body.maxHops === 'number' && body.maxHops > 0) {
     crawlConfig.maxHops = Math.min(Math.floor(body.maxHops), 10);
@@ -98,8 +101,9 @@ export function registerUrlIngestRoute(
   //   - 5.1.4 maxPages/maxHops 可在请求级覆盖 config，让用户按站点规模调整
   //   - 覆盖优先级：请求 body > config.urlCrawl > DEFAULT_CRAWL_CONFIG
   // 响应：SSE 流，事件类型见 UrlCrawlEvent.type
-  // 设计决策：本端点仅爬取并合并 Markdown，不调用 adapter.compile，
-  //   前端拿到 combinedMarkdown 后用 /api/compile 的 text 模式编译，保持职责单一
+  // 设计决策：本端点仅爬取并产出逐页 Markdown，不调用 adapter.compile。
+  //   done 事件的 pages[] 每项带 markdown（与 combinedMarkdown 同源），前端按勾选
+  //   组装 /api/compile/url-pages 的 pages 载荷逐页编译，成功率才有真实分母
   // ==========================================================================
   app.post('/api/url-ingest/crawl', {
     preHandler: guards.requireAdmin,

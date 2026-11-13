@@ -12,7 +12,8 @@ import type {
   RunSummary,
   RunLogEntry,
   BatchFileGroup,
-  DraftBatchItem
+  DraftBatchItem,
+  UrlPageCompilePayload
 } from '../types';
 
 // §优化方案3：编译状态持久化 localStorage key
@@ -108,8 +109,9 @@ export const useCompileStore = defineStore('compile', () => {
   const loadingLog = ref(false);
   // 批量编译模式：true 时 Progress.vue 调用 /api/compile/batch
   const isBatchMode = ref(false);
-  // 批量编译的待发 FormData（与单文件 pendingPayload 分离，避免类型混淆）
-  const pendingBatchPayload = ref<FormData | null>(null);
+  // 批量编译的待发载荷：文件夹上传是 FormData，T05721 的 URL 逐页编译是 JSON 对象。
+  // 与单文件 pendingPayload 分离，避免类型混淆
+  const pendingBatchPayload = ref<FormData | UrlPageCompilePayload | null>(null);
   // 本次提交的文件数：在 prepareBatchCompile 时从 FormData 数一次存下来。
   // 为什么不在组件里现数：Pinia 会把 ref 里的对象包成响应式代理，FormData 走代理后
   // 内部私有字段不可读（happy-dom 下直接抛错），组件侧只读这个标量最稳。
@@ -787,7 +789,12 @@ export const useCompileStore = defineStore('compile', () => {
     streamAbortController = controller;
     streamActive.value = true;
     const isFormData = payload instanceof FormData;
-    const endpoint = isBatchMode.value ? `${API_BASE}/compile/batch` : `${API_BASE}/compile`;
+    // T05721：URL 逐页编译走专用 JSON 端点，与文件夹上传的 multipart 端点分开。
+    // 两者 SSE 事件同构，isBatchMode / BatchProgressBar 的统计逻辑无需分支。
+    const isUrlPages = !isFormData && 'pages' in payload;
+    const endpoint = isBatchMode.value
+      ? (isUrlPages ? `${API_BASE}/compile/url-pages` : `${API_BASE}/compile/batch`)
+      : `${API_BASE}/compile`;
     let fatal: string | null = null;
     try {
       // 必须走 apiFetch：T03611 原件留存按登录用户归属，裸 fetch 不带 Bearer 时
@@ -950,14 +957,16 @@ export const useCompileStore = defineStore('compile', () => {
     return true;
   }
 
-  // 批量编译预存：FormData 包含多个 files 字段
+  // 批量编译预存：FormData 含多个 files 字段；URL 逐页编译则为 { pages } JSON 对象。
   // 为什么独立 action：批量模式需要切换 isBatchMode 并初始化分组容器
-  function prepareBatchCompile(payload: FormData) {
+  function prepareBatchCompile(payload: FormData | UrlPageCompilePayload) {
     reset();
     pendingBatchPayload.value = payload;
-    // 此刻 payload 还是调用方的原始 FormData（未被响应式代理），能安全数出文件数
+    // 此刻 payload 还是调用方的原始对象（未被响应式代理），能安全数出条目数
     try {
-      pendingBatchFileCount.value = payload.getAll('files').length;
+      pendingBatchFileCount.value = payload instanceof FormData
+        ? payload.getAll('files').length
+        : payload.pages.length;
     } catch {
       pendingBatchFileCount.value = 0;
     }
