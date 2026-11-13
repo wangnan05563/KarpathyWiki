@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@wiki/harness':
-        specifier: file:../wiki-harness
+        specifier: file:D:/code/otherProjects/KarpathyWiki/karpathy-wiki/../wiki-harness
         version: file:../wiki-harness
     devDependencies:
       '@yao-pkg/pkg':
