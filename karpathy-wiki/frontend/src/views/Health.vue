@@ -672,7 +672,7 @@ onMounted(() => {
           <button type="button" class="fm-error-path" @click="openFrontmatterError(item.path)">
             {{ item.path }}
           </button>
-          <span class="fm-error-reason">{{ item.reason }}</span>
+          <span class="fm-error-reason" :data-tip="item.reason">{{ item.reason }}</span>
         </li>
       </ul>
 
@@ -784,7 +784,7 @@ onMounted(() => {
           <div class="failed-title">可重试项（{{ retrySplit.retryable.length }}）</div>
           <div v-for="f in retrySplit.retryable" :key="f.issueKey" class="failed-item">
             <code>{{ f.issueKey }}</code>
-            <span class="failed-msg">{{ f.message }}</span>
+            <span class="failed-msg" :data-tip="f.message">{{ f.message }}</span>
             <span v-if="f.category" class="failure-category">{{ failureCategoryLabel(f.category) }}</span>
           </div>
         </div>
@@ -793,7 +793,7 @@ onMounted(() => {
           <div class="failed-title">需人工处理（{{ retrySplit.manual.length }}）</div>
           <div v-for="f in retrySplit.manual" :key="f.issueKey" class="failed-item">
             <code>{{ f.issueKey }}</code>
-            <span class="failed-msg">{{ f.message }}</span>
+            <span class="failed-msg" :data-tip="f.message">{{ f.message }}</span>
             <span class="failure-manual">
               {{ failureCategoryLabel(f.category) || '不可自动重试' }} · 需人工处理
             </span>
@@ -1270,11 +1270,16 @@ onMounted(() => {
   text-decoration: underline;
 }
 
+/* T05731：错误信息强制单行 + 省略号，悬浮经 data-tip 看全量；避免长 reason 撑成多行破坏布局 */
 .fm-error-reason {
+  flex: 1 1 100%;
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-soft);
-  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ===== 列表工具条 / 选中汇总条 ===== */
@@ -1448,8 +1453,14 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
+/* T05731：失败消息强制单行 + 省略号，悬浮经 data-tip 看全量；min-width:0 让 flex 子项可收缩截断 */
 .failed-msg {
   color: var(--text-soft);
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .failed-title {
