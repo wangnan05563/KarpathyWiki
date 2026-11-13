@@ -304,13 +304,23 @@ describe('编译流归属的源码约束 (T04508)', () => {
     return fs.readFileSync(path.resolve(__dirname, '../src/stores/compile.ts'), 'utf8');
   }
 
-  it('Progress.vue 不再持有 AbortController、也不再在卸载钩里中止编译', () => {
+  it('Progress.vue 不再持有 AbortController、卸载也不中止编译 (T04508)；T05723 允许的 onBeforeUnmount 仅解除滚动监听', () => {
     const src = progressSource();
-    // 锁的是「用法」而不是这个词：注释里还会提到旧实现，不能把说明文字也判成回归
-    expect(src).not.toMatch(/onBeforeUnmount\s*\(/);
-    expect(src).not.toMatch(/import\s*\{[^}]*\bonBeforeUnmount\b[^}]*\}\s*from\s*'vue'/);
+    // 锁的是「用法」而不是这个词：注释里还会提到旧实现，不能把说明文字也判成回归。
+    // T04508 真意：卸载组件绝不 abort 编译流（流归 store 持有，切页/刷新都不再打断）。
+    // T05723 本页新增的 onBeforeUnmount 仅做 window 滚动监听的 removeEventListener，
+    // 不调用 abort/reset/cancel，故放行，但仍严禁以下回归：
     expect(src).not.toMatch(/abortController/);
     expect(src).not.toContain('store.abortCompile()');
+    if (/onBeforeUnmount\s*\(/.test(src)) {
+      // 只取卸载钩语句本体（到第一个「});」），避免把文件后段的旧实现说明注释误判进来
+      const startIdx = src.indexOf('onBeforeUnmount(');
+      const closeIdx = src.indexOf('});', startIdx);
+      const hook = src.slice(startIdx, closeIdx + 3);
+      // 卸载钩内部只能清理滚动监听，不得出现 abort / reset / cancel 等中断编译语义
+      expect(hook).not.toMatch(/abort/i);
+      expect(hook).not.toMatch(/store\.(reset|cancelCompile|clearBatchSnapshot|abortCompile)/);
+    }
   });
 
   it('流句柄与逐事件落盘都在 store，卸载组件不再影响落盘', () => {

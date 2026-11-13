@@ -179,7 +179,7 @@ const siteKey = (s: StrokeSite) => `${s.file} :: ${s.sel} :: ${s.prop} :: ${s.fg
 
 const { tint: TINT, readable: READABLE } = collect();
 /** 整改后 readable 描边实测落点数（钉死：只降不升、改名/删规则也会红，防锁空转） */
-const READABLE_SITES = 430; // T04462：RefsList .ref-item.web 描边接入 purple-readable（+1）；T04554(bf37a8f)：Browse .fm-error-alert / Health / Skill 新增 3 处 pink-readable 描边（+3）
+const READABLE_SITES = 432; // T04462：RefsList .ref-item.web 描边接入 purple-readable（+1）；T04554(bf37a8f)：Browse .fm-error-alert / Health / Skill 新增 3 处 pink-readable 描边（+3）；T05723：Progress .back-to-top border + hover border-color 两处 accent-readable 描边（+2）
 const { failures: FAILS, unparsable: UNPARSABLE } = audit(READABLE);
 
 describe('T04468 · 全站 border 族描边：tint 归零 + readable 逐主题 ≥3:1', () => {

@@ -1,8 +1,21 @@
 <script setup lang="ts">
 import { API_BASE, apiFetch } from '../utils/apiBase';
-import { onMounted, computed, ref } from 'vue';
+import { onMounted, onBeforeUnmount, computed, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Loading, Check, Close, Minus, Lightning, Refresh } from '@element-plus/icons-vue';
+import {
+  Loading,
+  Check,
+  Close,
+  Minus,
+  Lightning,
+  Refresh,
+  RefreshRight,
+  Document,
+  Plus,
+  Upload,
+  List,
+  Top,
+} from '@element-plus/icons-vue';
 // T01628：图标化操作按钮（仅图标 + 悬浮提示「名称 - 说明」，点击事件逻辑不变）
 import IconActionButton from '../components/IconActionButton.vue';
 // T01629：统一弹窗（居中对话框 / 遮罩 / 动效规格全站一致）
@@ -153,6 +166,43 @@ async function backToRuns() {
   await store.loadRuns();
 }
 
+// T05726：批量恢复——收集历史列表中所有 failed 记录，逐个用既有 resume 通道重新触发。
+// 顺序执行（await）避免多条 resume 流同时抢占编译锁、状态互相覆盖；单条失败不阻断其余，
+// 最后按成功/失败条数汇总反馈并刷新列表。无失败记录时按钮禁用，不发起请求。
+const batchResuming = ref(false);
+const hasFailedRuns = computed(() => store.runs.some((r) => r.status === 'failed'));
+async function batchResumeFailed() {
+  const failedRuns = store.runs.filter((r) => r.status === 'failed');
+  if (failedRuns.length === 0 || batchResuming.value) return;
+  batchResuming.value = true;
+  let okCount = 0;
+  let failCount = 0;
+  try {
+    for (const run of failedRuns) {
+      const fatal = await store.runResumeStream(run.runId);
+      if (fatal) failCount++;
+      else okCount++;
+    }
+    if (failCount === 0) ElMessage.success(`已提交 ${okCount} 条失败任务重试`);
+    else ElMessage.warning(`${okCount} 条已提交，${failCount} 条重试失败`);
+    await store.loadRuns();
+  } catch (err) {
+    ElMessage.error('批量恢复失败：' + (err as Error).message);
+  } finally {
+    batchResuming.value = false;
+  }
+}
+
+// T05723：返回顶部悬浮按钮——滚动超过阈值后出现，点击平滑回顶（长列表/复杂内容场景）
+const showBackToTop = ref(false);
+function onPageScroll(): void {
+  const y = window.scrollY || document.documentElement.scrollTop || 0;
+  showBackToTop.value = y > 240;
+}
+function scrollToTop(): void {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 // 用户主动取消编译（批量模式）：store.cancelCompile 负责中止在途流并落取消态
 // 为什么不再由本页持有 AbortController：T04508 后流归 store，组件卸载都不中止，
 //   取消是用户显式动作，句柄只有 store 拿得到
@@ -229,6 +279,13 @@ onMounted(() => {
   } else {
     store.loadRuns();
   }
+  // T05723：返回顶部悬浮按钮的滚动监听
+  window.addEventListener('scroll', onPageScroll, { passive: true });
+  onPageScroll();
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onPageScroll);
 });
 
 async function openLogDialog(run: RunSummary) {
@@ -311,24 +368,25 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
             <template v-else>{{ store.errorMessage }}</template>
           </p>
           <div v-if="store.errorMessage || store.lastErrorRetryable" class="head-error-actions">
-            <el-button
+            <IconActionButton
               v-if="store.currentRunId"
+              name="查看日志"
+              desc="查看本次编译的运行日志"
+              :icon="Document"
               size="small"
-              text
-              type="primary"
-              data-tip="查看本次编译的运行日志"
               @click="viewErrorLog"
-            >查看日志</el-button>
+            />
             <!-- T03591：可重试的失败（限流/超时/服务不可用）提供一键重试，无需回投递页重传 -->
-            <el-button
+            <IconActionButton
               v-if="!store.isBatchMode && store.lastErrorRetryable && store.pendingPayload"
+              name="重试"
+              desc="使用上次投递的内容重新编译（无需重新上传）"
+              :icon="RefreshRight"
               size="small"
-              type="primary"
               :loading="store.isCompiling"
               :disabled="store.isCompiling"
-              data-tip="使用上次投递的内容重新编译（无需重新上传）"
               @click="retrySingle"
-            >重试</el-button>
+            />
           </div>
         </div>
         <!-- T00356：页面右上角常驻显示当前使用模型（编译走服务端共享 AI，即 GET /api/ai/config 返回的 model）。
@@ -336,6 +394,18 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
         <div class="head-model" data-tip="编译当前使用的模型">
           <span class="head-model-label">当前模型：</span>
           <code>{{ currentModel || '未加载' }}</code>
+        </div>
+        <!-- T05723：顶部常驻「返回历史编译任务」入口（编译进行中禁用，避免误重置在途任务） -->
+        <div class="head-actions">
+          <IconActionButton
+            name="返回历史编译任务"
+            desc="回到历史编译任务列表"
+            :icon="List"
+            size="small"
+            :disabled="store.isCompiling"
+            data-testid="back-to-runs"
+            @click="backToRuns"
+          />
         </div>
       </div>
 
@@ -375,17 +445,16 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
                 <span>{{ batchInterrupted && group.status === 'running' ? '已中断' : stepStatusLabel(group.status) }}</span>
               </span>
               <!-- T03591：失败可重试时从 raw/ 存档重编，无需重新上传；重试期间禁用所有分组按钮 -->
-              <el-button
+              <IconActionButton
                 v-if="group.status === 'error' && group.retryable && group.rawPath"
-                class="batch-group-retry"
+                name="重试"
+                desc="从已存档的原始资料重新编译（无需重新上传）"
+                :icon="RefreshRight"
                 size="small"
-                type="primary"
-                text
                 :loading="store.retryingIndexes.includes(group.fileIndex)"
                 :disabled="store.retryingIndexes.length > 0"
-                data-tip="从已存档的原始资料重新编译（无需重新上传）"
                 @click="retryGroup(group.fileIndex)"
-              >重试</el-button>
+              />
               <span v-if="group.attempts" class="batch-group-attempts" data-tip="该文件已重试的次数">已重试 {{ group.attempts }} 次</span>
             </div>
             <!-- 分组内时间线（折叠态：仅显示最近一条；展开态：完整列表） -->
@@ -467,34 +536,41 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
           </div>
         </div>
       <div class="restart-bar">
-          <el-button type="primary" size="large" data-tip="返回投递页，开始编译下一篇文章" @click="handleRestart">
-            再投一篇
-          </el-button>
-          <!-- T04094：恢复成功后回到历史列表，核对本次运行的状态已更新为完成 -->
-          <el-button size="large" data-tip="回到历史编译任务，查看本次恢复后的运行状态" @click="backToRuns">
-            返回历史编译任务
-          </el-button>
+          <IconActionButton
+            name="再投一篇"
+            desc="返回投递页，开始编译下一篇文章"
+            :icon="Plus"
+            variant="primary"
+            size="large"
+            @click="handleRestart"
+          />
         </div>
       </div>
       <!-- 批量编译完成区块：进度条组件已显示统计，这里仅保留操作按钮 -->
       <div v-else-if="store.isBatchMode && store.isDone" class="done-section">
         <div v-if="store.doneMessage" class="done-message">{{ store.doneMessage }}</div>
         <div class="restart-bar">
-          <el-button type="primary" size="large" data-tip="返回投递页，开始编译下一批内容" @click="handleRestart">
-            再投一批
-          </el-button>
-          <!-- T04094：与单文件成功态一致，提供回历史列表的闭环入口 -->
-          <el-button size="large" data-tip="回到历史编译任务，查看本次恢复后的运行状态" @click="backToRuns">
-            返回历史编译任务
-          </el-button>
+          <IconActionButton
+            name="再投一批"
+            desc="返回投递页，开始编译下一批内容"
+            :icon="Plus"
+            variant="primary"
+            size="large"
+            @click="handleRestart"
+          />
         </div>
       </div>
       <!-- 批量编译取消态：提供"再投一批"按钮让用户重新开始 -->
       <div v-else-if="store.isBatchMode && store.isCancelled" class="done-section">
         <div class="restart-bar">
-          <el-button type="primary" size="large" data-tip="重新开始批量编译任务" @click="handleRestart">
-            再投一批
-          </el-button>
+          <IconActionButton
+            name="再投一批"
+            desc="重新开始批量编译任务"
+            :icon="Plus"
+            variant="primary"
+            size="large"
+            @click="handleRestart"
+          />
         </div>
       </div>
       <div v-else-if="store.errorMessage" class="restart-bar">
@@ -503,9 +579,14 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
           <span>当前模型：</span>
           <code>{{ currentModel || '未知' }}</code>
         </div>
-          <el-button type="primary" size="large" data-tip="重新开始投递失败的内容" @click="handleRestart">
-            重新投递
-          </el-button>
+          <IconActionButton
+            name="重新投递"
+            desc="重新开始投递失败的内容"
+            :icon="Plus"
+            variant="primary"
+            size="large"
+            @click="handleRestart"
+          />
         <!-- T00329：快捷切换模型改为统一下拉条选择，切换后触发既有 provider 切换逻辑 -->
         <div v-if="llmPresets.length > 0" class="quick-switch-provider">
           <span class="quick-switch-label">切换模型：</span>
@@ -533,6 +614,16 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
           <h3 class="runs-title">
             <span class="title-bracket">[</span> 历史编译任务 <span class="title-bracket">]</span>
           </h3>
+          <!-- T05726：批量恢复——在刷新前，重新触发所有失败状态的编译任务 -->
+          <IconActionButton
+            name="批量恢复"
+            desc="重新触发所有失败状态的编译任务"
+            :icon="RefreshRight"
+            size="small"
+            :loading="batchResuming"
+            :disabled="!hasFailedRuns || batchResuming"
+            @click="batchResumeFailed"
+          />
           <IconActionButton
             name="刷新"
             desc="刷新历史编译任务列表"
@@ -561,7 +652,13 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
         empty-desc="投递资料并触发编译后，这里会列出每一次运行"
       >
         <template #action>
-          <el-button class="neon-btn" size="small" @click="gotoView('ingest')">去投递资料</el-button>
+          <IconActionButton
+            name="去投递资料"
+            desc="返回投递页，开始编译新内容"
+            :icon="Upload"
+            size="small"
+            @click="gotoView('ingest')"
+          />
         </template>
       </StateBlock>
       <div v-else class="runs-list">
@@ -573,15 +670,14 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
             </div>
       <div class="run-actions">
               <span class="run-time">{{ formatTime(run.startedAt) }}</span>
-              <el-button
+              <IconActionButton
                 v-if="run.status === 'failed'"
+                name="恢复"
+                desc="从失败步骤继续执行该编译任务"
+                :icon="RefreshRight"
                 size="small"
-                type="primary"
-                data-tip="从失败步骤继续执行该编译任务"
                 @click.stop="startResumeFlow(run.runId)"
-              >
-                恢复
-              </el-button>
+              />
             </div>
           </div>
         <p v-if="store.runsUpdatedAt" class="runs-foot">数据截至 {{ formatTime(store.runsUpdatedAt) }}</p>
@@ -610,6 +706,22 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
         </div>
       </div>
     </AppModal>
+
+    <!-- T05723：返回顶部悬浮按钮，滚动超过阈值后出现，点击平滑回顶 -->
+    <Teleport to="body">
+      <transition name="fade-up">
+        <button
+          v-if="showBackToTop"
+          type="button"
+          class="back-to-top"
+          aria-label="返回顶部"
+          data-tip="返回顶部"
+          @click="scrollToTop"
+        >
+          <el-icon :size="20"><Top /></el-icon>
+        </button>
+      </transition>
+    </Teleport>
   </div>
 </template>
 
@@ -734,6 +846,14 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   font-size: 12px;
   font-family: var(--font-mono);
   color: var(--accent-readable, var(--neon-cyan));
+}
+
+/* T05723：顶部操作区（常驻「返回历史编译任务」入口），与模型徽章对齐 */
+.head-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .timeline {
@@ -1327,5 +1447,50 @@ function dotTypeOf(item: TimelineItem): 'primary' | 'success' | 'danger' | 'info
   font-size: 11px;
   font-family: var(--font-mono);
   color: var(--accent-readable, var(--neon-cyan));
+}
+
+/* ===== T05723：返回顶部悬浮按钮（FAB） ===== */
+/* 固定右下角，长列表/复杂内容场景一键回顶；主题圆角/边框/光晕与图标按钮一致 */
+.back-to-top {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--accent-readable, var(--neon-cyan, #00f5ff));
+  background: var(--bg-glass, rgba(20, 22, 40, 0.72));
+  color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--glow-cyan, 0 0 16px rgba(0, 245, 255, 0.4));
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.back-to-top:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 0 22px var(--accent-cyan-a40, rgba(0, 245, 255, 0.5));
+  border-color: var(--accent-readable, var(--neon-cyan, #00f5ff));
+}
+
+.back-to-top:active {
+  transform: translateY(0) scale(0.94);
+}
+
+/* T05723：返回顶部按钮的淡入/淡出 + 上滑过渡（<transition name="fade-up"> 作用于该按钮本身） */
+.fade-up-enter-active,
+.fade-up-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.fade-up-enter-from,
+.fade-up-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 </style>

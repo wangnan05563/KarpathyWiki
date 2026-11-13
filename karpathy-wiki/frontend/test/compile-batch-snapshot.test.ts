@@ -220,8 +220,19 @@ describe('Progress 切走/重置的快照生命周期 (T04095)', () => {
   it('切页不再靠卸载钩落盘：进度归 store 逐事件持久化 (T04508)', () => {
     // 旧口径是「onBeforeUnmount 先落盘再标记中断」；T04508 后切页根本不中止流，
     // 落盘时机提前到每条事件，卸载钩里再补一次反而会把在途状态误标成中断。
-    // 锁的是「用法」而不是这个词：Progress.vue 的注释里还要解释旧实现为什么被删掉
-    expect(progressSource()).not.toMatch(/onBeforeUnmount\s*\(/);
+    // 锁的是「用法」而不是这个词：Progress.vue 的注释里还要解释旧实现为什么被删掉。
+    // T05723：本页新增的 onBeforeUnmount 仅用于解除「返回顶部」悬浮按钮的 window 滚动监听，
+    //   不触碰编译流；故放行 onBeforeUnmount，但仍严禁卸载即中止/重置编译的反模式。
+    const src = progressSource();
+    if (/onBeforeUnmount\s*\(/.test(src)) {
+      // 只取卸载钩语句本体（到第一个「});」），避免把文件后段的旧实现说明注释误判进来
+      const startIdx = src.indexOf('onBeforeUnmount(');
+      const closeIdx = src.indexOf('});', startIdx);
+      const hook = src.slice(startIdx, closeIdx + 3);
+      // 仅允许纯清理（removeEventListener），不得出现 abort / reset / cancel 等中断编译语义
+      expect(hook).not.toMatch(/abort/i);
+      expect(hook).not.toMatch(/store\.(reset|cancelCompile|clearBatchSnapshot|abortCompile)/);
+    }
     const body = sliceFn(storeSource(), 'async function runCompileStream(');
     expect(body).toContain('consumeSSE(response, handleStreamEvent');
     expect(storeSource()).toMatch(/function handleStreamEvent\([\s\S]*?persistProgress\(\);/);

@@ -419,10 +419,13 @@ describe('T04529 · A 普查归宿锁', () => {
   //   box-shadow: var(--accent-purple-a10) 三处消费点，同时保留 hover border-color
   //   审计锚点（var(--accent-readable) / var(--neon-cyan)）并新增 focus-visible
   //   outline（同一对 token）；净减 1 条消费点，是预期内的简化，不是扫描口径退化。
-  //   FAMILIES=192 / gap=36 未变：被移除的 token 在别处仍有消费，族面未缩小。
-  it('A1 · 规模锁：192 族 / 2675 条消费点 / 36 个 gap 族（少一个族说明扫描口径退化，不是「更干净」）', () => {
+  // T05723 后基线：2675 → 2679。Progress.vue 新增 .back-to-top 悬浮按钮：
+  //   border / color / hover border-color 三处 var(--accent-readable) +
+  //   hover box-shadow 一处 var(--accent-cyan-a40)，净增 4 条消费点。
+  //   FAMILIES / gap 未变：新增 token 均为既有族，族面未扩大。
+  it('A1 · 规模锁：192 族 / 2679 条消费点 / 36 个 gap 族（少一个族说明扫描口径退化，不是「更干净」）', () => {
     expect(FAMILIES.size).toBe(192);
-    expect(CENSUS_ROWS.length).toBe(2675);
+    expect(CENSUS_ROWS.length).toBe(2679);
     expect([...FAMILIES.values()].filter((f) => !declaredEverywhere(f.token)).length).toBe(36);
   });
 

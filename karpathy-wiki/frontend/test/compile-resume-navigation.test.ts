@@ -78,12 +78,14 @@ describe('compile 恢复成功后的列表闭环 (T04094)', () => {
     expect(refreshIdx).toBeGreaterThan(doneIdx);
   });
 
-  it('单文件与批量两种成功态都提供回列表入口', () => {
+  it('顶部常驻「返回历史编译任务」入口，提供唯一的回列表入口（T05723 图标化后由两处成功态收敛到顶部）', () => {
     const src = progressSource();
+    // T05723：原两处成功态的「返回历史编译任务」文本按钮收敛为顶部常驻图标按钮。
+    // 锁「用法」而非词：注释/样式说明里也会提到该文案，故锚定 name 属性与 click 绑定各 1 次。
     const clicks = src.match(/@click="backToRuns"/g) ?? [];
-    expect(clicks).toHaveLength(2);
-    const labels = src.match(/返回历史编译任务/g) ?? [];
-    expect(labels).toHaveLength(2);
+    expect(clicks).toHaveLength(1);
+    const labels = src.match(/name="返回历史编译任务"/g) ?? [];
+    expect(labels).toHaveLength(1);
   });
 
   it('组件级：成功态点「返回历史编译任务」→ 回到列表且状态已刷新', async () => {
@@ -123,14 +125,16 @@ describe('compile 恢复成功后的列表闭环 (T04094)', () => {
     });
     await flushPromises();
 
-    const back = wrapper.findAll('button').find((b) => b.text().includes('返回历史编译任务'));
-    expect(back).toBeTruthy();
-    await back!.trigger('click');
+    // T05723：图标化后「返回历史编译任务」改为仅图标按钮（data-testid 稳定钩子），
+    // 不再以可见文字存在；点击仍应回到列表并刷新 runs。
+    const back = wrapper.find('[data-testid="back-to-runs"]');
+    expect(back.exists()).toBe(true);
+    await back.trigger('click');
     await flushPromises();
 
     expect(store.isDone).toBe(false);
     expect(mockedFetch.mock.calls.some(([url]) => String(url).includes('/compile/runs'))).toBe(true);
-    // 回到列表视图：标题在、运行条目在、成功态入口已消失
+    // 回到列表视图：标题在、运行条目在、「返回历史编译任务」文案不再作为可见文字出现
     expect(wrapper.text()).toContain('历史编译任务');
     expect(wrapper.text()).toContain('abcd1234');
     expect(wrapper.text()).not.toContain('返回历史编译任务');

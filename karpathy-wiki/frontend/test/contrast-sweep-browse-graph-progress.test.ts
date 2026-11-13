@@ -163,7 +163,8 @@ const AUDIT: AuditRow[] = [
 // T04468 起 readable 计数含描边账（三页 83 处 tint 描边接入 readable）；Graph 余 1 处非描边 tint 前景。
 const EXPECTED: Record<string, { n: number; readable: number; fam: Record<string, number>; tint: number }> = {
   'src/views/Browse.vue': { n: 52, readable: 88, fam: { accent: 46, pink: 17, purple: 25 }, tint: 0 }, // T04554(bf37a8f)：+.fm-error-alert 描边/strong 两处 pink-readable（+2 readable +2 pink）
-  'src/views/Progress.vue': { n: 31, readable: 48, fam: { accent: 19, pink: 15, purple: 14 }, tint: 0 },
+  // T05723：+.back-to-top 悬浮按钮 border / color / hover border-color 三处 accent-readable（+3 readable +3 accent）
+  'src/views/Progress.vue': { n: 31, readable: 51, fam: { accent: 22, pink: 15, purple: 14 }, tint: 0 },
   'src/views/Graph.vue': { n: 36, readable: 66, fam: { accent: 35, pink: 14, purple: 17 }, tint: 1 },
 };
 
