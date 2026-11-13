@@ -22,6 +22,12 @@ export default defineConfig({
     // 包含 test 目录下所有 .test.ts 文件（RBAC 单元测试 + 集成测试）
     // 同时包含 src 下的 .test.ts（项目原有测试）
     include: ['test/**/*.test.ts', 'src/**/*.test.ts'],
+    // T04910 门禁事故防线：singleFork 下所有文件共用同一个子进程，globalThis.fetch
+    // 等 stubGlobal 写入是进程级状态、跨文件不回滚——文件级泄漏会杀死后续用真实
+    // fetch 的文件（2026-11-13 index-status-rechunk 全量必红、单跑绿的根因）。
+    // unstubGlobals 让每个用例结束后自动还原全部全局桩，杜绝这一整类泄漏；
+    // 需要"跨用例持续桩"的文件改为 beforeEach 重装（about-version-update 即此改法）。
+    unstubGlobals: true,
     // 为什么单线程：Windows 上 vitest 多线程模式启动慢，
     // 单线程模式更稳定且本项目测试用例少，无需并行
     pool: 'forks',

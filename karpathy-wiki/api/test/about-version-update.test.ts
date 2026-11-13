@@ -10,6 +10,11 @@
 //      newer/older/带 v 前缀三种版本关系分别判定；HTTP 失败回退 local-fallback 不草率报更新。
 // 手法与 routes-tunnel.test.ts 一致：Fastify + inject，不 listen；fetch 全局桩；
 //   每个用例 vi.resetModules() 重新 import，隔离 about.ts 的模块级 5 分钟缓存。
+// T04910 门禁事故：vitest 配置为 pool:forks + singleFork（全部测试文件共用同一个子进程），
+//   globalThis.fetch 是进程级状态、跨文件不回滚——文件顶层 stubGlobal 又只在 afterEach 解除
+//   的话，会泄漏给同进程后续用真实 fetch 的文件（index-status-rechunk 的本机 stub embedding
+//   被打回 mock 上，两条 indexed 断言全量跑必红、单跑绿，即 2026-11-13 打包门禁报错根因）。
+//   纪律：stub 进 beforeEach、unstub 进 afterEach（与 qq-extract-workflow.test.ts 同款）。
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,7 +29,6 @@ vi.mock('node:child_process', async (importOriginal) => {
 });
 
 const fetchMock = vi.fn();
-vi.stubGlobal('fetch', fetchMock);
 
 const GITHUB_REPO = 'wangnan05563/KarpathyWiki';
 const GITHUB_LATEST_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
@@ -93,11 +97,13 @@ async function checkUpdate(instance: FastifyInstance): Promise<Record<string, un
 }
 
 beforeEach(() => {
+  vi.stubGlobal('fetch', fetchMock); // 每个用例装桩，afterEach 解除：防 singleFork 下跨文件泄漏（见文件头 T04910 事故注）
   fetchMock.mockReset();
   execSyncMock.mockClear();
 });
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   if (app) {
     await app.close();
     app = undefined;
