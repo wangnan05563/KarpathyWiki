@@ -17,6 +17,7 @@ import CitationModal from '../components/CitationModal.vue';
 import ThinkingBlock from '../components/ThinkingBlock.vue';
 // T05743 P1：豆包同款消息气泡（四类块 + 流光 + 打字机），仅用于流式中的 assistant 轮
 import MessageBubble from '../components/message/MessageBubble.vue';
+import { readBubbleMode, type BubbleMode } from '../utils/bubbleMode';
 // 意图澄清卡片：问题有歧义时后端中断提问，列出解读选项供用户确认后继续
 import ClarifyCard from '../components/ClarifyCard.vue';
 // §X-1 步骤级追踪面板：渲染每步耗时分解，定位长耗时瓶颈
@@ -236,19 +237,7 @@ const inputQuestion = ref('');
 const chatBodyRef = ref<HTMLDivElement | null>(null);
 // T05743 P1：气泡模式开关。默认 v2（旧后端也能看到新气泡）；
 // localStorage 置 legacy 或 URL ?bubble=legacy 可一键回滚到旧渲染，便于线上排障。
-type BubbleMode = 'v2' | 'legacy';
-function readBubbleMode(): BubbleMode {
-  try {
-    // 兼容任务口径的裸键 bubbleMode 与仓库前缀键 kw:bubbleMode
-    const stored = localStorage.getItem(STORAGE_KEYS.BUBBLE_MODE) ?? localStorage.getItem('bubbleMode');
-    if (stored === 'v2' || stored === 'legacy') return stored;
-    const fromUrl = new URLSearchParams(window.location.search).get('bubble');
-    if (fromUrl === 'v2' || fromUrl === 'legacy') return fromUrl;
-  } catch {
-    // localStorage / URL 不可用时按默认 v2，不影响问答
-  }
-  return 'v2';
-}
+// T05745 P3：解析逻辑抽到 utils/bubbleMode.ts，与 FloatingChat/MobileQuery 共用。
 const bubbleMode = ref<BubbleMode>(readBubbleMode());
 // done 后 currentTurn 保留 700ms；同一 id 的消息先隐藏，避免「淡出气泡 + 已落库气泡」双份渲染
 function isFadingMessage(msg: ChatMessage): boolean {
@@ -1618,7 +1607,7 @@ onBeforeUnmount(() => {
         >
           <MessageBubble :turn="store.currentTurn" />
         </div>
-        <div v-else-if="store.streamingAnswer || store.isLoading" class="msg-row assistant">
+        <div v-else-if="store.streamingAnswer || store.isLoading || store.currentClarification" class="msg-row assistant">
           <div class="msg-bubble assistant" :class="{ streaming: !!store.streamingAnswer, loading: store.isLoading && !store.streamingAnswer }">
             <!-- 意图澄清：问题存在歧义时后端中断回答，渲染解读选项卡片等待用户确认（替代加载态） -->
             <ClarifyCard

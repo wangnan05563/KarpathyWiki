@@ -24,6 +24,12 @@ const props = withDefaults(
     charsPerSecond?: number;
     /** 用户消息是否显示头像（移动端紧凑布局可关闭） */
     showAvatar?: boolean;
+    /**
+     * T05745 P3：当前气泡是否处于可见活动态。
+     * 并行会话里切走的会话、切后台的标签页、滚出视口的容器传 false，
+     * 流光停止扫描（CSS animation-play-state: paused），回到可见后恢复。
+     */
+    active?: boolean;
   }>(),
   {
     defaultThinkExpanded: false,
@@ -31,6 +37,7 @@ const props = withDefaults(
     shimmer: true,
     charsPerSecond: 90,
     showAvatar: true,
+    active: true,
   },
 );
 
@@ -54,7 +61,7 @@ const statusClass = computed(() => ({
 </script>
 
 <template>
-  <div class="kw-msg">
+  <div class="kw-msg" :class="{ 'is-paused': !active }">
     <!-- 用户气泡：右侧、无流光、无打字机（用户输入不是流式产出） -->
     <div v-if="isUser" class="kw-row kw-row--user">
       <div class="kw-bubble--user">
@@ -77,7 +84,7 @@ const statusClass = computed(() => ({
             v-else
             :block="block"
             :typewriter="typewriter"
-            :shimmer="shimmer"
+            :shimmer="shimmer && active"
             :chars-per-second="charsPerSecond"
             :tone="turn.outcome"
           />

@@ -343,6 +343,7 @@
 .kw-answer {
   position: relative;
   isolation: isolate;
+  min-width: 0;
   padding: 10px 12px;
   border-radius: 14px;
   border-top-left-radius: 4px;
@@ -351,6 +352,7 @@
   color: var(--text-base, #c9d1d9);
   font-size: 13.5px;
   line-height: 1.55;
+  overflow-wrap: anywhere;
   backdrop-filter: var(--blur, blur(16px));
 }
 
@@ -580,6 +582,51 @@
   100% {
     opacity: 0;
   }
+}
+
+/* ---------- T05745 P3：窄屏（移动端/悬浮窗）适配 ---------- */
+
+@media (max-width: 640px) {
+  .kw-row {
+    gap: 8px;
+    margin: 10px 0;
+  }
+
+  .kw-bubble--user {
+    max-width: 92%;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  .kw-answer {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  .kw-tool {
+    padding: 8px 10px;
+  }
+
+  /* 工具卡参数（命令/JSON/路径）在 375px 下必须折行，不能撑出横向滚动 */
+  .kw-tool__title,
+  .kw-tool__detail,
+  .kw-tool__error {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}
+
+/* ---------- T05745 P3：不可见会话暂停光带/思考扫描 ---------- */
+
+.kw-msg.is-paused .kw-shimmer__band,
+.kw-msg.is-paused .kw-shimmer__edge,
+.kw-msg.is-paused .kw-text-shimmer,
+.kw-msg.is-paused .kw-caret,
+.kw-msg.is-paused .kw-think__icon,
+.kw-msg.is-paused .kw-think__scan,
+.kw-msg.is-paused .kw-tool__dot {
+  animation-play-state: paused !important;
 }
 
 /* ---------- 可访问性：无动画偏好 ---------- */

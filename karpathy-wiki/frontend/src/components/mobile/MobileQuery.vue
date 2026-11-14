@@ -51,6 +51,10 @@ import FollowupsChips from '../FollowupsChips.vue';
 import SessionStatusIcon from '../SessionStatusIcon.vue';
 // 意图澄清卡片：问题有歧义时后端中断提问，列出解读选项供用户确认后继续（复用桌面组件）
 import ClarifyCard from '../ClarifyCard.vue';
+// T05745 P3：移动端流式 assistant 复用统一气泡组件（历史消息仍走旧渲染）
+import MessageBubble from '../message/MessageBubble.vue';
+import { readBubbleMode, type BubbleMode } from '../../utils/bubbleMode';
+import { useBubbleActivity } from '../../composables/useBubbleActivity';
 // T04453：上下文占用徽章（含「压缩上下文」入口）——复用桌面同一组件，
 // 其浮层已改为 click 触发，触屏点按可用；移动端此前完全没有占用与压缩入口
 import ContextUsageBadge from '../ContextUsageBadge.vue';
@@ -83,6 +87,18 @@ const activeId = ref<string | null>(null);
 // 模式：list=历史会话列表（有历史首屏进入）；chat=问答聊天
 const mode = ref<'list' | 'chat'>('chat');
 const hasHistory = computed(() => conversationsStore.conversations.length > 0);
+
+// T05745 P3：气泡开关与可见性。移动端只在 chat 模式渲染当前 active 会话的 currentTurn，
+// 后台并行会话不挂载气泡；列表模式/切后台/滚出视口时 active=false 暂停流光。
+const bubbleMode = ref<BubbleMode>(readBubbleMode());
+const { active: bubbleActive } = useBubbleActivity(
+  chatBodyRef,
+  computed(() => mode.value === 'chat'),
+);
+// done 后 currentTurn 保留 700ms；同一 id 的已落库消息先隐藏，避免双份气泡。
+function isFadingMessage(msg: ChatMessage): boolean {
+  return bubbleMode.value === 'v2' && !!store.currentTurn && msg.id === store.currentTurn.id;
+}
 
 // 列表筛选：【全部任务】下拉
 type FilterKey = 'all' | 'pinned' | 'streaming';
@@ -272,7 +288,7 @@ function formatDateTime(iso?: string): string {
 const { scrollToBottom } = useChatAutoScroll(chatBodyRef, () => store.isLoading);
 watch(() => store.messages.length, () => scrollToBottom(true));
 watch(
-  () => [store.streamingAnswer, store.currentThinking.length] as const,
+  () => [store.streamingAnswer, store.currentThinking.length, store.currentTurn?.updatedAt ?? 0] as const,
   () => scrollToBottom(),
 );
 
@@ -916,7 +932,12 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-else class="mq-list">
-          <div v-for="(msg, idx) in store.messages" :key="msg.id || idx" class="mq-row" :class="msg.role">
+          <template v-for="(msg, idx) in store.messages" :key="msg.id || idx">
+          <div
+            v-if="!isFadingMessage(msg)"
+            class="mq-row"
+            :class="msg.role"
+          >
             <div class="mq-bubble" :class="[msg.role, msg.status === 'interrupted' ? 'status-interrupted' : '', msg.status === 'error' ? 'status-error' : '']">
               <ThinkingBlock v-if="msg.thinking && msg.thinking.length > 0" :steps="msg.thinking" />
               <!-- FR-23 折叠面板（历史消息）：无思考时零渲染 -->
@@ -950,9 +971,20 @@ onBeforeUnmount(() => {
               <div v-if="msg.createdAt" class="mq-time">{{ formatTime(msg.createdAt) }}</div>
             </div>
           </div>
+          </template>
 
-          <!-- 流式输出中的 assistant 消息 -->
-          <div v-if="store.isLoading || store.streamingAnswer" class="mq-row assistant">
+          <!-- 流式输出中的 assistant 消息（T05745 P3：v2 复用 MessageBubble，legacy 保留旧渲染） -->
+          <div
+            v-if="bubbleMode === 'v2' && store.currentTurn && !store.currentClarification"
+            class="mq-row assistant mq-row--bubble"
+          >
+            <MessageBubble
+              :turn="store.currentTurn"
+              :active="bubbleActive"
+              :show-avatar="false"
+            />
+          </div>
+          <div v-else-if="store.isLoading || store.streamingAnswer || store.currentClarification" class="mq-row assistant">
             <div class="mq-bubble assistant" :class="{ streaming: !!store.streamingAnswer }">
               <!-- 意图澄清：问题存在歧义时后端中断回答，渲染解读选项卡片等待用户确认（替代加载态） -->
               <ClarifyCard
@@ -1503,6 +1535,11 @@ onBeforeUnmount(() => {
 .mq-list { display: flex; flex-direction: column; gap: 14px; }
 .mq-row { display: flex; justify-content: flex-start; }
 .mq-row.user { justify-content: flex-end; }
+/* T05745 P3：MessageBubble 自带 .kw-row 的 margin/flex；外层 .mq-row 只负责整行对齐，
+   气泡子项撑满宽度并消掉双层间距，避免 375px 下横向溢出。 */
+.mq-row--bubble { width: 100%; }
+.mq-row--bubble :deep(.kw-msg) { width: 100%; }
+.mq-row--bubble :deep(.kw-row) { margin: 0; }
 .mq-bubble {
   max-width: 86%;
   padding: 10px 13px;

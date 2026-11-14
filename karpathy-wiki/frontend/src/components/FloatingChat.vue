@@ -13,6 +13,8 @@ import ClarifyCard from './ClarifyCard.vue';
 import QueryTracePanel from './QueryTracePanel.vue';
 import MessageToolbar from './MessageToolbar.vue';
 import RefsList from './RefsList.vue';
+// T05745 P3：悬浮窗流式 assistant 复用与主问答页一致的气泡组件
+import MessageBubble from './message/MessageBubble.vue';
 // FR-21 引用溯源：悬浮聊天正文同样支持 [n] 角标 + 引用浮层
 import CitationText from './CitationText.vue';
 import CitationModal from './CitationModal.vue';
@@ -25,6 +27,8 @@ import { loadAiUserConfigForPreset, loadSearchUserConfig, loadToolsUserConfig, t
 import { AUTO_MODEL, resolveAutoPresetForUser } from '../utils/autoModel';
 import { FOLLOWUP_LABEL } from '../utils/labels';
 import { useChatAutoScroll } from '../composables/useChatAutoScroll';
+import { useBubbleActivity } from '../composables/useBubbleActivity';
+import { readBubbleMode, type BubbleMode } from '../utils/bubbleMode';
 import { apiErrorMessage } from '../utils/apiError';
 import { renderMarkdown } from '../utils/markdown';
 import { consumeQuerySSEResumable } from '../utils/sse';
@@ -55,6 +59,14 @@ function markGuideSeen() {
 }
 const inputQuestion = ref('');
 const chatBodyRef = ref<HTMLDivElement | null>(null);
+// T05745 P3：与 Query/Mobile 共用开关；默认 v2，legacy 回旧渲染。
+const bubbleMode = ref<BubbleMode>(readBubbleMode());
+// 面板关闭/切后台/滚出视口时暂停流光；面板本身 v-if 卸载时容器不可见即为 false。
+const { active: bubbleActive } = useBubbleActivity(chatBodyRef, computed(() => isOpen.value));
+// done 后 currentTurn 保留 700ms；同一 id 的已落库消息先隐藏，避免双份气泡。
+function isFadingMessage(msg: ChatMessage): boolean {
+  return bubbleMode.value === 'v2' && !!store.currentTurn && msg.id === store.currentTurn.id;
+}
 let abortController: AbortController | null = null;
 // 超时机制（与主问答页 Query.vue 一致）：LLM 长时间无响应自动中断，避免用户卡在"正在思考"。
 // 滑动窗口：请求发起时启动，每次收到 SSE 数据（onActivity）重置；连续 QUESTION_TIMEOUT_MS
@@ -165,7 +177,7 @@ function formatTime(iso?: string): string {
 const { scrollToBottom } = useChatAutoScroll(chatBodyRef, () => store.isLoading);
 watch(() => store.messages.length, () => scrollToBottom(true));
 watch(
-  () => [store.streamingAnswer, store.currentThinking.length],
+  () => [store.streamingAnswer, store.currentThinking.length, store.currentTurn?.updatedAt ?? 0],
   () => scrollToBottom(),
 );
 
@@ -589,9 +601,9 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div v-else class="messages-list">
+          <template v-for="(msg, idx) in store.messages" :key="msg.id || idx">
           <div
-            v-for="(msg, idx) in store.messages"
-            :key="msg.id || idx"
+            v-if="!isFadingMessage(msg)"
             class="msg-row"
             :class="msg.role"
           >
@@ -664,8 +676,24 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </div>
-          <!-- 流式输出中的 assistant 消息 -->
-          <div v-if="store.isLoading || store.streamingAnswer" class="msg-row assistant">
+          </template>
+          <!-- 流式输出中的 assistant 消息（T05745 P3：v2 复用 MessageBubble，legacy 保留旧渲染） -->
+          <div
+            v-if="bubbleMode === 'v2' && store.currentTurn && !store.currentClarification"
+            class="msg-row assistant msg-row--bubble"
+          >
+            <div class="msg-avatar">
+              <RobotAvatar :size="32" :floating="true" />
+            </div>
+            <div class="msg-bubble-body">
+              <MessageBubble
+                :turn="store.currentTurn"
+                :active="bubbleActive"
+                :show-avatar="false"
+              />
+            </div>
+          </div>
+          <div v-else-if="store.isLoading || store.streamingAnswer || store.currentClarification" class="msg-row assistant">
             <div class="msg-avatar">
               <RobotAvatar :size="32" :floating="true" />
             </div>
@@ -961,6 +989,19 @@ onBeforeUnmount(() => {
 
 .msg-avatar {
   flex-shrink: 0;
+}
+
+/* T05745 P3：MessageBubble 自带 .kw-row（margin 14px / flex），
+   嵌进已有 .msg-row 后必须由子项撑满剩余宽度并消掉双层间距。 */
+.msg-row--bubble :deep(.kw-msg) {
+  width: 100%;
+}
+.msg-row--bubble :deep(.kw-row) {
+  margin: 0;
+}
+.msg-bubble-body {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* 内容包装器：气泡 + 工具栏垂直排列，让工具栏显示在气泡外部下方

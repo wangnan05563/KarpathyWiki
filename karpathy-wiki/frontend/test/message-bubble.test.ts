@@ -54,4 +54,15 @@ describe('MessageBubble 流光生命周期', () => {
     expect(wrapper.find('.kw-shimmer').exists()).toBe(false);
     vi.useRealTimers();
   });
+
+  it('active=false 时根节点暂停态生效且不渲染流光（不可见会话/后台页签）', () => {
+    const turn = reactive<ChatTurnVM>(makeTurn());
+    const wrapper = mount(MessageBubble, {
+      props: { turn, typewriter: false, active: false },
+      global: { stubs: { MarkdownRenderer: MarkdownRendererStub } },
+    });
+
+    expect(wrapper.find('.kw-msg').classes()).toContain('is-paused');
+    expect(wrapper.find('.kw-shimmer').exists()).toBe(false);
+  });
 });
