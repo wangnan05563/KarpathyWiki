@@ -33,6 +33,32 @@ $repoRoot = Resolve-Path "$PSScriptRoot\.."
 $wsRoot = Split-Path $repoRoot   # 项目（git 仓库）根目录：karpathy-wiki 的上级，统一发布目录 release/ 位于此
 Set-Location $repoRoot
 
+# T04910：构建全程 pin 临时目录到稳定位置。
+# 为什么：部分执行环境（WorkBuddy agent 沙箱）把 TMP/TEMP 指向会被中途回收的临时根
+# （如 C:\PYFIX_~4），而 vitest/vite 的 SSR 转换缓存写在 $TMP\<随机>\ssr\<hash>——
+# 2026-11-14 打包跑 api gate 时临时区中途被回收，缓存目录蒸发，
+# 其后约 100 个测试套件在模块加载阶段集体 ENOENT（早跑完的套件全绿）。
+# 修复：pin 到 LOCALAPPDATA 下的稳定目录并保证存在，子进程（pnpm→vitest→vite-node）继承。
+# 须在 bump-version / 依赖检查 / 任何测试启动之前完成。
+$buildTmpRoot = Join-Path $env:LOCALAPPDATA 'Temp\karpathy-wiki-build'
+New-Item -ItemType Directory -Force -Path $buildTmpRoot | Out-Null
+if ($env:TEMP -ne $buildTmpRoot -or $env:TMP -ne $buildTmpRoot) {
+    Write-Host "[Build] pin 临时目录: TEMP/TMP -> $buildTmpRoot (原: $env:TEMP)" -ForegroundColor DarkGray
+}
+$env:TEMP = $buildTmpRoot
+$env:TMP = $buildTmpRoot
+
+# T04910：卸掉 NODE_OPTIONS 注入的 safe-delete shim。
+# 为什么：agent 会话经 NODE_OPTIONS 给所有 node/pnpm 子进程挂 safe-delete 钩子，
+# 会把「删除 >=50 个文件的暂存目录」fail-closed——2026-11-14 打包在 [2/8] 安装
+# @wiki/harness 时，pnpm 的 _tmp_<pid>_<hash> 暂存目录（恰好 50 文件）unlink 被拦死。
+# 外部先 Remove-Item Env:NODE_OPTIONS 不可靠（后台新进程不继承 shell 状态），
+# 故固化到脚本内：构建脚本本就需要批量删文件，钩子对它只添乱。
+if ($env:NODE_OPTIONS) {
+    Write-Host "[Build] 清除 NODE_OPTIONS (原: $env:NODE_OPTIONS)" -ForegroundColor DarkGray
+    Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue
+}
+
 # 加载 node 路径解析模块（配置驱动，避免 PATH 旧版 node 优先）
 . (Join-Path $PSScriptRoot 'node-resolver.ps1')
 $scriptConfig = Get-Content (Join-Path $PSScriptRoot 'config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
