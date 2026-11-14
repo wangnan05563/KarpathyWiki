@@ -1,0 +1,619 @@
+/* 消息气泡交互样式 —— 豆包同款流式观感（T05740）
+ *
+ * 命名空间 kw-：
+ *   Query.vue / FloatingChat.vue 现有 .msg-bubble 是 scoped 样式，新组件若复用同名类，
+ *   在未改造旧页面时可依赖关系会变得隐晦；统一前缀让「新组件自带样式、旧页面零影响」。
+ *
+ * 颜色全部消费仓库主题 token（NFR-2 配对硬规则），不写死前景/背景；
+ * 深浅主题、8 套 data-theme 自动适配，避免出现 T04447 那类「白字压浅色渐变」的对比度事故。
+ */
+
+.kw-msg {
+  /* 流光主体色：低饱和青，running 时只提亮表面、不吞正文 */
+  --kw-shimmer-color: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
+  --kw-shimmer-fade-ms: 600ms;
+  --kw-ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* ---------- 行布局 ---------- */
+
+.kw-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 14px 0;
+  animation: kw-bubble-in 220ms var(--kw-ease-out) both;
+}
+
+.kw-row--user {
+  justify-content: flex-end;
+}
+
+.kw-row--assistant {
+  justify-content: flex-start;
+}
+
+.kw-ai-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.kw-avatar {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--on-fire-bg, var(--bubble-user-bg));
+  color: var(--on-fire-fg, var(--bubble-user-fg));
+  text-shadow: var(--bubble-user-text-shadow);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  box-shadow: var(--glow-magenta, 0 0 12px rgba(255, 0, 110, 0.4));
+}
+
+/* ---------- 用户气泡 ---------- */
+
+.kw-bubble--user {
+  position: relative;
+  max-width: 75%;
+  padding: 8px 12px;
+  border-radius: 14px;
+  border-top-right-radius: 4px;
+  background: var(--bubble-user-bg);
+  color: var(--bubble-user-fg);
+  text-shadow: var(--bubble-user-text-shadow);
+  font-size: 13.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  box-shadow: 0 4px 20px var(--accent-pink-a30, rgba(255, 0, 110, 0.3));
+}
+
+/* 用户气泡内的 Markdown 前景必须跟随气泡 token（MarkdownRenderer 自带 color: --text-base）
+   提高前缀到 .kw-msg，避免与 MarkdownRenderer 的 scoped 选择器特异性打平后被源码顺序影响 */
+.kw-msg .kw-bubble--user .md-body,
+.kw-msg .kw-bubble--user .md-body p,
+.kw-msg .kw-bubble--user .md-body li,
+.kw-msg .kw-bubble--user .md-body strong,
+.kw-msg .kw-bubble--user .md-body em {
+  color: var(--bubble-user-fg);
+  text-shadow: var(--bubble-user-text-shadow);
+}
+
+.kw-msg .kw-bubble--user .md-body a {
+  color: var(--bubble-user-fg);
+  text-decoration: underline;
+}
+
+/* ---------- 思考气泡（低饱和底色，与回答气泡隔离） ---------- */
+
+.kw-think {
+  position: relative;
+  padding: 6px 10px;
+  background: var(--accent-purple-a04, rgba(176, 38, 255, 0.04));
+  border-left: 2px solid var(--purple-readable, var(--neon-purple, #b226ff));
+  border-radius: 0 8px 8px 0;
+  overflow: hidden;
+  transition: background-color 240ms var(--kw-ease-out);
+}
+
+.kw-think.is-running {
+  background: var(--accent-purple-a08, rgba(176, 38, 255, 0.08));
+}
+
+.kw-think__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-dim, #8b949e);
+  font-size: 11.5px;
+  line-height: 1.6;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+
+.kw-think__head:hover .kw-think__title {
+  color: var(--text-soft, #9aa4b2);
+}
+
+.kw-think__icon {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--purple-readable, #c258ff);
+}
+
+.kw-think.is-running .kw-think__icon {
+  animation: kw-dot-pulse 1.4s ease-in-out infinite;
+}
+
+.kw-think__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kw-think__meta {
+  flex: 0 0 auto;
+  color: var(--text-dim, #8b949e);
+  font-size: 10px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.kw-think__chevron {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 14px;
+  text-align: center;
+  color: var(--text-dim, #8b949e);
+  transform: rotate(0deg);
+  transition: transform 200ms var(--kw-ease-out);
+}
+
+.kw-think__chevron.is-open {
+  transform: rotate(90deg);
+}
+
+/* 折叠高度过渡：grid-template-rows 0fr → 1fr，适配任意内容高度（优于 max-height 的固定上限） */
+.kw-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  margin-top: 0;
+  transition:
+    grid-template-rows 240ms var(--kw-ease-out),
+    opacity 180ms var(--kw-ease-out),
+    margin-top 240ms var(--kw-ease-out);
+}
+
+.kw-collapse.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  margin-top: 6px;
+}
+
+.kw-collapse__inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 不支持 0fr 网格动画的旧内核（Electron 低版本）降级为 max-height */
+@supports not (grid-template-rows: 0fr) {
+  .kw-collapse {
+    display: block;
+    max-height: 0;
+    overflow: hidden;
+  }
+  .kw-collapse.is-open {
+    max-height: 260px;
+  }
+}
+
+.kw-think__body {
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+.kw-think__line {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--text-soft, #9aa4b2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.kw-think__line + .kw-think__line {
+  margin-top: 4px;
+}
+
+/* 思考态扫描线：running 时沿气泡上沿往复，done 后随容器重渲染自然移除 */
+.kw-think__scan {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 36%;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--purple-readable, #c258ff), transparent);
+  animation: kw-edge-sweep 2.4s linear infinite;
+}
+
+/* ---------- 工具调用气泡 ---------- */
+
+.kw-tool {
+  position: relative;
+  padding: 6px 10px;
+  background: var(--accent-cyan-a06, rgba(0, 245, 255, 0.06));
+  border-left: 2px solid var(--accent-readable, #4d8dff);
+  border-radius: 0 8px 8px 0;
+  font-size: 11.5px;
+  overflow: hidden;
+}
+
+.kw-tool.is-running {
+  background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
+}
+
+.kw-tool.is-error {
+  border-left-color: var(--danger, #f85149);
+}
+
+.kw-tool__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.kw-tool__dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-readable, #4d8dff);
+}
+
+.kw-tool.is-running .kw-tool__dot {
+  animation: kw-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.kw-tool.is-error .kw-tool__dot {
+  background: var(--danger, #f85149);
+}
+
+.kw-tool__name {
+  flex: 0 0 auto;
+  color: var(--accent-readable, #4d8dff);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.kw-tool__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-soft, #9aa4b2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kw-tool__meta {
+  flex: 0 0 auto;
+  color: var(--text-dim, #8b949e);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+}
+
+.kw-tool__detail {
+  margin-top: 4px;
+  color: var(--text-dim, #8b949e);
+  font-size: 10.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.kw-tool__error {
+  margin-top: 4px;
+  color: var(--danger, #f85149);
+  font-size: 10.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- 首帧占位：turn_start 已到、内容尚未开始的极短窗口 ---------- */
+
+.kw-pending {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--accent-cyan-a06, rgba(0, 245, 255, 0.06));
+  border-left: 2px solid var(--accent-readable, #4d8dff);
+  border-radius: 0 8px 8px 0;
+  font-size: 11.5px;
+  color: var(--text-soft, #9aa4b2);
+}
+
+.kw-pending__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-readable, #4d8dff);
+  animation: kw-dot-pulse 1.2s ease-in-out infinite;
+}
+
+/* ---------- 回答气泡（主气泡） ---------- */
+
+.kw-answer {
+  position: relative;
+  isolation: isolate;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border-top-left-radius: 4px;
+  border: 1px solid var(--accent-readable, #4d8dff);
+  background: var(--accent-cyan-a06, rgba(0, 245, 255, 0.06));
+  color: var(--text-base, #c9d1d9);
+  font-size: 13.5px;
+  line-height: 1.55;
+  backdrop-filter: var(--blur, blur(16px));
+}
+
+.kw-answer.is-running {
+  box-shadow: 0 0 0 1px var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
+}
+
+/* 流结束后状态色左边条：与 Query.vue 现有 interrupted/error 视觉语言一致 */
+.kw-answer.is-interrupted {
+  border-left: 3px solid var(--warning, #d29922);
+}
+
+.kw-answer.is-error {
+  border-left: 3px solid var(--danger, #f85149);
+}
+
+/* ---------- 流光扫描（核心动效） ---------- */
+
+/* 为什么用「绝对定位覆盖层 + 子元素 transform」而不是动 background-position：
+ *   background-position 每帧触发重绘（大面积渐变尤其昂贵），transform 走合成层；
+ *   长回答滚动时前者会和滚动合成互相拖累，后者稳定 60fps。 */
+.kw-shimmer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
+
+.kw-shimmer.is-running {
+  opacity: 1;
+}
+
+/* done 之后不是移除节点，而是把覆盖层整体淡出（600ms）；
+ * 期间动画暂停（paused）保留最后一帧光带，随透明度一起消失，避免「闪一下没了」。 */
+.kw-shimmer.is-fading {
+  opacity: 0;
+  transition: opacity var(--kw-shimmer-fade-ms, 600ms) cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.kw-shimmer.is-fading .kw-shimmer__band,
+.kw-shimmer.is-fading .kw-shimmer__edge {
+  animation-play-state: paused;
+}
+
+.kw-shimmer__band {
+  position: absolute;
+  top: -30%;
+  bottom: -30%;
+  left: 0;
+  width: 44%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    var(--kw-shimmer-color, rgba(0, 245, 255, 0.1)) 48%,
+    transparent 100%
+  );
+  transform: translate3d(-160%, 0, 0) skewX(-14deg);
+  animation: kw-shimmer-sweep 1.7s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+  will-change: transform;
+}
+
+/* 上沿细光带：强化「扫描」方向感，alpha 更低，不盖正文 */
+.kw-shimmer__edge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 38%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--tk-accent, #4d8dff), transparent);
+  transform: translateX(-100%);
+  animation: kw-edge-sweep 2.8s linear infinite;
+  will-change: transform;
+}
+
+/* 思考标题的文字流光（仅 running） */
+.kw-text-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--text-dim, #8b949e) 0%,
+    var(--purple-readable, #c258ff) 45%,
+    var(--text-dim, #8b949e) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: kw-text-sweep 2s linear infinite;
+}
+
+/* 打字机光标：挂在最后一段可读元素的行尾（MarkdownRenderer 的 div 无法在模板里插入内联光标，
+ * 用 ::after 附着到最后一个段落/列表项，视觉上跟随最后一行文字） */
+.kw-answer.is-typing .md-body > :is(p, li, h1, h2, h3, h4, h5, h6):last-child::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.12em;
+  background: var(--tk-accent, #4d8dff);
+  animation: kw-caret-blink 1s steps(2, start) infinite;
+}
+
+/* 打字机光标（独立元素保留，供非 Markdown 场景复用） */
+.kw-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.12em;
+  background: var(--tk-accent, #4d8dff);
+  animation: kw-caret-blink 1s steps(2, start) infinite;
+}
+
+/* ---------- 终态提示 / 重试 ---------- */
+
+.kw-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  padding-left: 2px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim, #8b949e);
+}
+
+.kw-status.is-error {
+  color: var(--danger, #f85149);
+}
+
+.kw-status.is-interrupted {
+  color: var(--warning, #d29922);
+}
+
+.kw-retry {
+  padding: 2px 8px;
+  border: 1px solid var(--accent-readable, #4d8dff);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent-readable, #4d8dff);
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.kw-retry:hover {
+  background: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
+}
+
+.kw-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- 关键帧 ---------- */
+
+@keyframes kw-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.996);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes kw-shimmer-sweep {
+  from {
+    transform: translate3d(-160%, 0, 0) skewX(-14deg);
+  }
+  to {
+    transform: translate3d(360%, 0, 0) skewX(-14deg);
+  }
+}
+
+@keyframes kw-edge-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(360%);
+  }
+}
+
+@keyframes kw-text-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes kw-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.86);
+    box-shadow: 0 0 0 0 var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 6px 1px var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
+  }
+}
+
+@keyframes kw-caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ---------- 可访问性：无动画偏好 ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .kw-row,
+  .kw-shimmer__band,
+  .kw-shimmer__edge,
+  .kw-text-shimmer,
+  .kw-caret,
+  .kw-think__icon,
+  .kw-think__scan,
+  .kw-tool__dot {
+    animation: none !important;
+  }
+
+  .kw-shimmer {
+    display: none;
+  }
+
+  .kw-text-shimmer {
+    background: none;
+    color: var(--purple-readable, #c258ff);
+    -webkit-text-fill-color: currentColor;
+  }
+
+  .kw-collapse,
+  .kw-think,
+  .kw-think__chevron {
+    transition: none;
+  }
+
+  .kw-caret {
+    opacity: 1;
+  }
+}
