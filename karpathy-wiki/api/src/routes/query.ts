@@ -7,6 +7,8 @@ import { createSSESender, SSE_HEADERS } from '../utils/sse.js';
 // X-2 可恢复流式：流式运行管理器（detached run + 缓冲 + 订阅重连）
 import { streamRunManager } from '../workflows/stream-run-manager.js';
 import type { RunSink } from '../workflows/stream-run-manager.js';
+// SSE v2 气泡协议：事件帧日志 + afterSeq 回放（与 manager 的 chunk 缓冲解耦）
+import { v2StreamRegistry } from '../workflows/v2-stream-registry.js';
 import { withCompileLock } from '../compile-queue.js';
 import { ThreadMemoryStore } from '../engine/thread-memory-store.js';
 import type { HistoryMessage } from '../engine/thread-memory-store.js';
@@ -96,6 +98,16 @@ function normalizeChoiceIndex(value: unknown): number | undefined {
   return typeof value === 'number' ? value : undefined;
 }
 
+// afterSeq：只接受有限非负数；非法值按 0 处理（从头回放，重复帧由前端 seq 去重）。
+function normalizeAfterSeq(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return Math.max(0, Math.floor(parsed));
+  }
+  return 0;
+}
+
 // 注册 POST /api/query 路由。
 // §5.2 改造：请求体扩展 mode/webSearch/attachments/model；SSE 事件扩展 thinking/progress/followups
 // 本地持久化改造：问答会话与记忆通过 ThreadMemoryStore 落盘到 data/threads/{threadId}/，
@@ -124,6 +136,9 @@ export function registerQueryRoute(
       return reply.code(400).send({ error: '请求体须含合法 runId' });
     }
     const stopped = streamRunManager.cancel(runId);
+    // v2 run 的客户端连接由 registry 持有，cancel 后需要同步收口 turn_end(interrupted)，
+    // 否则只 abort producer，页面会停在半截气泡等不到终态。
+    if (stopped) v2StreamRegistry.stop(runId, '已由用户停止');
     request.log.info({ reqId: request.id, runId, stopped, phase: 'user-stop' }, 'query-pipeline');
     return { stopped };
   });
@@ -172,6 +187,10 @@ export function registerQueryRoute(
       embedding?: { baseUrl: string; apiKey: string; model: string };
       // X-2 可恢复流式：断线重连时携带首连拿到的 runId，后端据此订阅进行中的 run（不触发新问答）
       resume?: string;
+      // P2 气泡协议：'v2' 走 turn/think/tool/answer 事件；缺省 legacy 保持旧事件不变
+      protocol?: 'legacy' | 'v2';
+      // P2 断线续传：v2 重连只回放 seq > afterSeq 的帧，避免重复追加
+      afterSeq?: number;
       // ── 意图澄清续答字段 ──
       // 首轮不携带；收到 clarify 中断事件后，前端带同一 clarifyId + choiceIndex 重发本问题。
       clarifyId?: string;
@@ -180,8 +199,20 @@ export function registerQueryRoute(
     // ── X-2 可恢复流式：断线重连分支 ──
     // 客户端刷新/断网后，凭首连拿到的 runId 重新订阅进行中的 run，先回放已缓冲块再继续直播。
     // 必须在 BYOK 校验之前短路：重连请求不携带 llmConfig，且 question 可能缺失（run 已存在）。
-    const resumeRunId = typeof body.resume === 'string' ? body.resume : undefined;
+    const protocol: 'legacy' | 'v2' = body?.protocol === 'v2' ? 'v2' : 'legacy';
+    const afterSeq = normalizeAfterSeq(body?.afterSeq);
+    if (protocol === 'v2' && !enableResumableStream) {
+      return void reply.code(400).send({
+        error: 'SSE v2 依赖可恢复流式运行（enableResumableStream=true），当前服务端未开启。',
+        code: 'V2_DISABLED',
+      });
+    }
+    const resumeRunId = typeof body?.resume === 'string' ? body.resume : undefined;
     if (enableResumableStream && resumeRunId && UUID_RE.test(resumeRunId)) {
+      if (protocol === 'v2') {
+        await handleV2Resume(resumeRunId, afterSeq, reply, request);
+        return;
+      }
       return await handleResumeRun(resumeRunId, reply, request);
     }
 
@@ -285,6 +316,19 @@ export function registerQueryRoute(
     // 把 harness 运行交给 StreamRunManager 解耦管理：首帧发 open 事件携带 runId（供前端断线重连），
     // 后续块由管理器缓冲并扇出给订阅者。关闭时（enableResumableStream=false）完全不走此分支。
     if (enableResumableStream) {
+      if (protocol === 'v2') {
+        await handleV2Start({
+          input,
+          threadId,
+          governorStats,
+          adapter,
+          store,
+          request,
+          reply,
+          governorConfig,
+        });
+        return;
+      }
       await handleResumableStart({
         input,
         threadId,
@@ -465,6 +509,99 @@ function dispatchStreamChunk(chunk: AnswerChunk, send: (event: string, data: unk
     // 非 done 时收到 refs 也下发（兼容 v1 行为）
     send('refs', { refs: chunk.refs, webRefs: chunk.webRefs ?? [] });
   }
+}
+
+// P2 SSE v2 首连：协议编码在 registry 内持续进行，连接只是订阅者。
+// 与 handleResumableStart 的差异：
+//  - 首帧 open 仍保留（前端拿 managerRunId 用于重连）；
+//  - 之后不再发 legacy answer/thinking，而是 turn_start/think/tool/answer 帧；
+//  - 客户端断开只 detach 订阅，编码器继续收 chunk，重连按 afterSeq 回放。
+async function handleV2Start(ctx: {
+  input: QueryInput;
+  threadId: string;
+  governorStats: GovernorStats | null;
+  adapter: EngineAdapter;
+  store: ThreadMemoryStore;
+  request: FastifyRequest;
+  reply: FastifyReply;
+  governorConfig: ContextGovernorConfig;
+}): Promise<void> {
+  const { input, threadId, governorStats, adapter, store, request, reply, governorConfig } = ctx;
+  reply.raw.writeHead(200, SSE_HEADERS);
+  const { send, safeEnd } = createSSESender(reply, request, { heartbeatMs: 15_000 });
+
+  const managerRunId = randomUUID();
+  const run = v2StreamRegistry.create(managerRunId);
+  // open 不进 seq 日志：它只承载重连 ID，重连时会重新下发
+  send('open', { runId: managerRunId, turnId: managerRunId, protocol: 'v2' });
+  const detach = run.attach(send, 0, safeEnd);
+  reply.raw.on('close', detach);
+
+  // run 级停止信号：客户端断开不 abort，用户点「停止」才 abort（与可恢复流式同语义）
+  const runStopController = new AbortController();
+  input.signal = runStopController.signal;
+
+  // observer 不绑定连接：从 run 第一个 chunk 起持续编码，断线期间事件也不会丢
+  const observer: RunSink = {
+    onChunk: (chunk) => run.recordChunk(chunk),
+    onDone: (payload) => run.recordDone(payload, governorConfig.maxTokens),
+    onError: (message) => run.recordError(message),
+    isAborted: () => false,
+    end: () => run.recordEnd(),
+  };
+
+  streamRunManager.start(managerRunId, {
+    producer: () => adapter.query(input),
+    lockKey: input.question,
+    governor: governorStats,
+    cancelSignal: runStopController,
+    observer,
+    onDone: async ({ chunk, answer }) => {
+      const refs = (chunk.refs ?? []).map((r) => (typeof r === 'string' ? r : r.path));
+      const now = new Date().toISOString();
+      const { messageIndex } = await store.appendSessionMessage(threadId, {
+        question: input.question,
+        answer,
+        refs,
+        ts: now,
+      });
+      await store.appendMemory(threadId, [
+        { role: 'user', content: input.question, ts: now },
+        { role: 'assistant', content: answer, ts: now },
+      ]);
+      return { threadId, sessionId: threadId, messageIndex };
+    },
+  });
+}
+
+// P2 SSE v2 重连：只回放 seq > afterSeq 的帧，再挂为直播订阅者。
+// run 已完成后仍可回放（TTL 5 分钟），回放完 end；不存在则下发 turn_error(RESUME_NOT_FOUND)。
+async function handleV2Resume(
+  runId: string,
+  afterSeq: number,
+  reply: FastifyReply,
+  request: FastifyRequest,
+): Promise<void> {
+  reply.raw.writeHead(200, SSE_HEADERS);
+  const { send, safeEnd } = createSSESender(reply, request, { heartbeatMs: 15_000 });
+
+  const run = v2StreamRegistry.get(runId);
+  if (!run) {
+    send('open', { runId, turnId: runId, protocol: 'v2', resumed: true });
+    send('turn_error', {
+      turnId: runId,
+      seq: afterSeq + 1,
+      message: '找不到可恢复的运行（可能已完成过久或被回收），请重新发起提问。',
+      retryable: false,
+      code: 'RESUME_NOT_FOUND',
+    });
+    safeEnd();
+    return;
+  }
+
+  send('open', { runId, turnId: runId, protocol: 'v2', resumed: true });
+  const detach = run.attach(send, afterSeq, safeEnd);
+  reply.raw.on('close', detach);
 }
 
 // 首次启动：把 harness 运行交给 StreamRunManager 解耦管理。

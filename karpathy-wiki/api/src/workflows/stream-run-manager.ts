@@ -67,6 +67,10 @@ export interface StartOptions {
   // FR-22 用户停止：run 对应的请求级 AbortController（producer 工厂闭包内 input.signal 即其 signal）。
   // cancel(runId) 时 abort → adapter.query 内部逐级终止上游 LLM 连接。
   cancelSignal?: AbortController;
+  // 记录型订阅者：在 run 起跑前登记，不依赖任何客户端连接。
+  // 为什么不用 subscribe()：subscribe 会回放历史缓冲，快速完成的 run 会把 chunk 二次喂给
+  // v2 编码器造成重复 seq；observer 从第一个 chunk 起只收直播。
+  observer?: RunSink;
 }
 
 interface RunEntry {
@@ -112,6 +116,8 @@ class StreamRunManager {
       // 与 compile-queue.ts 同口径：只有已开始触碰文件的任务才算活跃。
     };
     this.runs.set(runId, entry);
+    // v2 记录型订阅者必须在 producer 起跑前入列，否则首块可能漏记
+    if (opts.observer) entry.subscribers.add(opts.observer);
 
     const iterate = async (): Promise<void> => {
       for await (const chunk of opts.producer()) {
