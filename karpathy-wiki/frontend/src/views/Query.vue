@@ -15,6 +15,8 @@ import ThinkFoldPanel from '../components/ThinkFoldPanel.vue';
 import CitationText from '../components/CitationText.vue';
 import CitationModal from '../components/CitationModal.vue';
 import ThinkingBlock from '../components/ThinkingBlock.vue';
+// T05743 P1：豆包同款消息气泡（四类块 + 流光 + 打字机），仅用于流式中的 assistant 轮
+import MessageBubble from '../components/message/MessageBubble.vue';
 // 意图澄清卡片：问题有歧义时后端中断提问，列出解读选项供用户确认后继续
 import ClarifyCard from '../components/ClarifyCard.vue';
 // §X-1 步骤级追踪面板：渲染每步耗时分解，定位长耗时瓶颈
@@ -56,7 +58,7 @@ import { FOLLOWUP_LABEL } from '../utils/labels';
 import { consumeQuerySSEResumable } from '../utils/sse';
 import { decideEnqueue, takeQueued, type ChatQueue } from '../utils/chatQueue';
 import { useChatAutoScroll } from '../composables/useChatAutoScroll';
-import type { Attachment, Reference, LlmPreset } from '../types';
+import type { Attachment, Reference, LlmPreset, ChatMessage } from '../types';
 import { STORAGE_KEYS } from '../constants/storageKeys';
 
 // F-3.2 图片点击放大预览：v-html 内容不经过 Vue 编译，无法绑定 Vue 事件，需事件委托
@@ -232,6 +234,26 @@ const searchProgressLabel = computed(() => {
 
 const inputQuestion = ref('');
 const chatBodyRef = ref<HTMLDivElement | null>(null);
+// T05743 P1：气泡模式开关。默认 v2（旧后端也能看到新气泡）；
+// localStorage 置 legacy 或 URL ?bubble=legacy 可一键回滚到旧渲染，便于线上排障。
+type BubbleMode = 'v2' | 'legacy';
+function readBubbleMode(): BubbleMode {
+  try {
+    // 兼容任务口径的裸键 bubbleMode 与仓库前缀键 kw:bubbleMode
+    const stored = localStorage.getItem(STORAGE_KEYS.BUBBLE_MODE) ?? localStorage.getItem('bubbleMode');
+    if (stored === 'v2' || stored === 'legacy') return stored;
+    const fromUrl = new URLSearchParams(window.location.search).get('bubble');
+    if (fromUrl === 'v2' || fromUrl === 'legacy') return fromUrl;
+  } catch {
+    // localStorage / URL 不可用时按默认 v2，不影响问答
+  }
+  return 'v2';
+}
+const bubbleMode = ref<BubbleMode>(readBubbleMode());
+// done 后 currentTurn 保留 700ms；同一 id 的消息先隐藏，避免「淡出气泡 + 已落库气泡」双份渲染
+function isFadingMessage(msg: ChatMessage): boolean {
+  return bubbleMode.value === 'v2' && !!store.currentTurn && msg.id === store.currentTurn.id;
+}
 let abortController: AbortController | null = null;
 // 编辑重发：正在编辑的消息索引与其草稿文本；editingIdx===idx 时该 user 气泡渲染为可编辑态
 const editingIdx = ref<number | null>(null);
@@ -553,7 +575,7 @@ function handleRemoveAttachment(id: string) {
 const { scrollToBottom } = useChatAutoScroll(chatBodyRef, () => store.isLoading);
 watch(() => store.messages.length, () => scrollToBottom(true));
 watch(
-  () => [store.streamingAnswer, store.currentThinking.length],
+  () => [store.streamingAnswer, store.currentThinking.length, store.currentTurn?.updatedAt ?? 0],
   () => scrollToBottom(),
 );
 
@@ -1466,7 +1488,7 @@ onBeforeUnmount(() => {
         </div>
 
         <template v-for="(msg, idx) in store.messages" :key="msg.id || idx">
-          <div class="msg-row" :class="msg.role">
+          <div v-if="!isFadingMessage(msg)" class="msg-row" :class="msg.role">
             <!-- 仅 user 消息保留"ME"头像；assistant 消息靠左对齐已足够区分双方，去除图标保持简洁 -->
             <div v-if="msg.role === 'user'" class="msg-avatar">
               <div class="user-avatar">ME</div>
@@ -1589,8 +1611,14 @@ onBeforeUnmount(() => {
           </div>
         </template>
 
-        <!-- 流式输出中的 assistant 答案 -->
-        <div v-if="store.streamingAnswer || store.isLoading" class="msg-row assistant">
+        <!-- 流式输出中的 assistant 答案（T05743 P1：v2 走新气泡，legacy 保留旧渲染） -->
+        <div
+          v-if="bubbleMode === 'v2' && store.currentTurn && !store.currentClarification"
+          class="msg-row assistant"
+        >
+          <MessageBubble :turn="store.currentTurn" />
+        </div>
+        <div v-else-if="store.streamingAnswer || store.isLoading" class="msg-row assistant">
           <div class="msg-bubble assistant" :class="{ streaming: !!store.streamingAnswer, loading: store.isLoading && !store.streamingAnswer }">
             <!-- 意图澄清：问题存在歧义时后端中断回答，渲染解读选项卡片等待用户确认（替代加载态） -->
             <ClarifyCard

@@ -8,7 +8,7 @@
 //      放在一起才能保证重连后不重复追加。
 //
 // 用法（消费方）：
-//   const { turn, status, start, stop } = useBubbleStream({ resume: (turnId, seq) => fetch(...) })
+//   const { turn, status, start, stop } = useBubbleStream({ resume: (turnId, seq) => resumeFetch(runId, threadId) })
 //   void start(response, turnId)
 
 import { computed, onBeforeUnmount, ref, type ComputedRef, type Ref } from 'vue';

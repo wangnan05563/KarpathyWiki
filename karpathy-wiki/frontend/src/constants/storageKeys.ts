@@ -36,6 +36,8 @@ export const STORAGE_KEYS = {
   ACTIVE_SKILL: 'activeSkill',
   /** FR-RM-09 断点续答：上次活跃的会话 id，跨刷新保留，重载后据此自动恢复并续答 */
   LAST_ACTIVE_CONVERSATION: 'lastActiveConversation',
+  /** T05743 气泡模式：v2（新气泡）/ legacy（旧渲染），出问题可一键回滚 */
+  BUBBLE_MODE: 'bubbleMode',
 } as const;
 
 /** 按预设派生 localStorage 完整键名（如 llmPresetConfig:openai） */

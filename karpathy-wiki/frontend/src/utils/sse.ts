@@ -4,6 +4,135 @@
 
 import { ElMessage } from 'element-plus';
 import type { ThinkingStep, MultimodalOutput, ChatMessage, Reference, Clarification } from '../types';
+import { createThinkStreamParser } from './think-parser';
+import {
+  applyBubbleEvent,
+  createChatTurn,
+  type BubbleOutcome,
+  type BubbleStreamEvent,
+  type ChatTurnVM,
+} from '../types/chatBubble';
+
+// legacy SSE → 气泡协议适配器（T05743 P1）
+// 旧后端只有 answer / thinking / progress / done / error 这类高层事件，没有块级 seq。
+// 该适配器把高层事件翻译成 think/tool/answer 块，供 Query.vue 的 MessageBubble 消费；
+// P2 后端切到 v2 协议后可直接停用，不影响组件与状态机。
+type DistributiveOmit<T, K extends keyof any> = T extends unknown ? Omit<T, K> : never;
+type LegacyBubbleEvent = DistributiveOmit<BubbleStreamEvent, 'turnId' | 'seq'>;
+
+export interface LegacyBubbleAdapter {
+  readonly snapshot: ChatTurnVM;
+  begin(): ChatTurnVM;
+  answer(text: string): ChatTurnVM;
+  thinking(step: ThinkingStep): ChatTurnVM;
+  progress(step: string, count?: number): ChatTurnVM;
+  flush(): ChatTurnVM;
+  finish(outcome: BubbleOutcome, errorMessage?: string): ChatTurnVM;
+}
+
+export function createLegacyBubbleAdapter(turnId: string, now: number = Date.now()): LegacyBubbleAdapter {
+  let turn = createChatTurn(turnId, 'assistant', now);
+  let seq = 0;
+  let toolSeq = 0;
+  let searchCallId: string | undefined;
+  const parser = createThinkStreamParser();
+
+  function emit(event: LegacyBubbleEvent): ChatTurnVM {
+    seq += 1;
+    turn = applyBubbleEvent(turn, { ...event, turnId, seq } as BubbleStreamEvent, Date.now());
+    return turn;
+  }
+
+  function closeRunningTools(status: 'done' | 'error', errorMessage?: string): void {
+    const running = turn.blocks
+      .filter((b) => b.kind === 'tool' && b.call.status === 'running')
+      .map((b) => (b.kind === 'tool' ? b.call.callId : ''));
+    for (const callId of running) {
+      emit({ type: 'tool_end', callId, status, errorMessage });
+    }
+  }
+
+  function feed(text: string, flushOnly = false): ChatTurnVM {
+    const result = flushOnly ? parser.flush() : parser.feed(text);
+    if (result.thinking) emit({ type: 'think_delta', text: result.thinking });
+    if (result.answer) {
+      closeRunningTools('done');
+      emit({ type: 'answer_delta', text: result.answer });
+    }
+    return turn;
+  }
+
+  return {
+    get snapshot() {
+      return turn;
+    },
+    begin() {
+      emit({ type: 'turn_start', role: 'assistant' });
+      return turn;
+    },
+    answer(text: string) {
+      return feed(text);
+    },
+    thinking(step: ThinkingStep) {
+      if (step.phase === 'thinking') {
+        // harness 的分析步骤也进思考块；若模型 <think> 正在流，则按到达顺序续写同一块
+        if (step.message) emit({ type: 'think_delta', text: step.message });
+      } else if (step.phase === 'tool_call') {
+        closeRunningTools('done');
+        toolSeq += 1;
+        const args = step.args ? JSON.stringify(step.args).slice(0, 160) : undefined;
+        emit({
+          type: 'tool_start',
+          call: {
+            callId: `legacy-tool-${toolSeq}`,
+            name: step.tool || 'tool',
+            title: step.message || step.tool || '工具调用',
+            argsPreview: args,
+            status: 'running',
+          },
+        });
+      } else if (step.phase === 'composing') {
+        // composing 表示模型开始写答案：收口工具卡，避免它一直转圈
+        closeRunningTools('done');
+      }
+      return turn;
+    },
+    progress(step: string, count?: number) {
+      searchCallId ??= 'legacy-search';
+      emit({
+        type: 'tool_start',
+        blockId: `${turnId}:tool:${searchCallId}`,
+        call: {
+          callId: searchCallId,
+          name: 'search_pages',
+          title: '检索知识库',
+          status: 'running',
+        },
+      });
+      emit({
+        type: 'tool_progress',
+        callId: searchCallId,
+        message: count ? `${step}（${count} 条）` : step,
+      });
+      return turn;
+    },
+    flush() {
+      return feed('', true);
+    },
+    finish(outcome: BubbleOutcome, errorMessage?: string) {
+      feed('', true);
+      closeRunningTools(outcome === 'ok' ? 'done' : 'error', errorMessage);
+      if (outcome === 'error') {
+        // 任务口径：旧 error 事件映射为 turn_error（带 retryable），而非普通 turn_end(error)
+        emit({ type: 'turn_error', message: errorMessage || '回答失败', retryable: true });
+      } else {
+        emit({ type: 'answer_end' });
+        emit({ type: 'turn_end', outcome, errorMessage });
+      }
+      return turn;
+    },
+  };
+}
 
 // §按会话隔离（v4）：SSE 写入目标抽象为 SSEWriter，由调用方决定路由到哪个会话缓冲。
 // 桌面端传入 store.getSessionWriter()（默认 active 缓冲）；移动端传入

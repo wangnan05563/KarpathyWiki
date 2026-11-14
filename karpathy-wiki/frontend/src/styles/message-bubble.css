@@ -9,8 +9,7 @@
  */
 
 .kw-msg {
-  /* 流光主体色：低饱和青，running 时只提亮表面、不吞正文 */
-  --kw-shimmer-color: var(--accent-cyan-a10, rgba(0, 245, 255, 0.1));
+  /* 流光时长与缓动是组件内部节奏，不新增颜色 token（颜色一律直接消费主题既有 token） */
   --kw-shimmer-fade-ms: 600ms;
   --kw-ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
@@ -409,7 +408,7 @@
   background: linear-gradient(
     100deg,
     transparent 0%,
-    var(--kw-shimmer-color, rgba(0, 245, 255, 0.1)) 48%,
+    var(--accent-cyan-a10, rgba(0, 245, 255, 0.1)) 48%,
     transparent 100%
   );
   transform: translate3d(-160%, 0, 0) skewX(-14deg);
@@ -424,7 +423,7 @@
   left: 0;
   width: 38%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--tk-accent, #4d8dff), transparent);
+  background: linear-gradient(90deg, transparent, var(--accent-cyan-a35, rgba(0, 245, 255, 0.35)), transparent);
   transform: translateX(-100%);
   animation: kw-edge-sweep 2.8s linear infinite;
   will-change: transform;
@@ -455,7 +454,7 @@
   height: 1em;
   margin-left: 2px;
   vertical-align: -0.12em;
-  background: var(--tk-accent, #4d8dff);
+  background: var(--accent-cyan-a35, rgba(0, 245, 255, 0.35));
   animation: kw-caret-blink 1s steps(2, start) infinite;
 }
 
@@ -466,7 +465,7 @@
   height: 1em;
   margin-left: 2px;
   vertical-align: -0.12em;
-  background: var(--tk-accent, #4d8dff);
+  background: var(--accent-cyan-a35, rgba(0, 245, 255, 0.35));
   animation: kw-caret-blink 1s steps(2, start) infinite;
 }
 

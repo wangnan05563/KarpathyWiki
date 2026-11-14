@@ -4,6 +4,9 @@ import type { ChatMessage, Reference, ThinkingStep, MultimodalOutput, Clarificat
 import { STORAGE_KEYS } from '../constants/storageKeys';
 // FR-23 思考过程折叠：模型 <think> 标签流式解析器（增量、半开标签扣留）
 import { createThinkStreamParser, type ThinkStreamParser } from '../utils/think-parser';
+// T05743 P1：旧 SSE 事件 → 气泡块协议适配器（供 Query.vue 的 MessageBubble 消费）
+import { createLegacyBubbleAdapter, type LegacyBubbleAdapter } from '../utils/sse';
+import type { ChatTurnVM } from '../types/chatBubble';
 
 // v2: 多输出模式多选类型，与后端 outputModes 对齐
 // 4 个独立模式：思考过程 / 工具调用请求返回 / 主答案 / 多模态结构
@@ -84,6 +87,12 @@ export interface SessionBuffer {
   // FR-23 流式解析器状态机：跨 chunk 维护 inThink/半开标签扣留，随轮次重置。
   // 非序列化对象，仅进程内使用；null 表示尚未开始消费 answer（惰性创建）。
   thinkParser: ThinkStreamParser | null;
+  // T05743 P1：当前轮的气泡视图模型。legacy 事件经适配器翻译后写入，
+  // done 后保留 700ms 供流光淡出（MessageBubble 的 600ms 过渡 + 余量），随后置 null。
+  currentTurn: ChatTurnVM | null;
+  // legacy 适配器与淡出定时器：非序列化，仅进程内使用。
+  bubble: LegacyBubbleAdapter | null;
+  turnTimer: ReturnType<typeof setTimeout> | null;
 }
 
 function createEmptyBuffer(): SessionBuffer {
@@ -108,6 +117,9 @@ function createEmptyBuffer(): SessionBuffer {
     contextMaxTokens: 0,
     modelThinking: '',
     thinkParser: null,
+    currentTurn: null,
+    bubble: null,
+    turnTimer: null,
   };
 }
 
@@ -178,6 +190,43 @@ function loadMiddlewares(): Middleware[] {
 // ===== 缓冲级（buffer-scoped）纯函数：所有写操作都作用在传入的 SessionBuffer 上 =====
 // 为什么独立且 buf 前缀：消费方（UI/桌面）默认作用 active 缓冲；SSE writer 按 conversationId
 // 路由到特定缓冲。buf 前缀避免与 store 内同名对外方法发生作用域遮蔽。
+// T05743 P1：气泡轮的创建 / 同步 / 淡出收口。
+// 为什么单独维护 currentTurn 而不是让组件直接读 streamingAnswer：
+//   1. done 后 streamingAnswer 会被清空，若组件只读它，气泡会在同一 tick 消失，
+//      来不及播放 600ms 淡出；currentTurn 保留 700ms 专门承载这段过渡。
+//   2. currentTurn 的 id 同时作为最终消息 id，组件可按 id 隐藏「已落库但仍在淡出」的消息，避免双份渲染。
+function bufClearTurnTimer(b: SessionBuffer) {
+  if (b.turnTimer) {
+    clearTimeout(b.turnTimer);
+    b.turnTimer = null;
+  }
+}
+
+function bufResetTurn(b: SessionBuffer) {
+  bufClearTurnTimer(b);
+  b.currentTurn = null;
+  b.bubble = null;
+}
+
+function bufBeginBubbleTurn(b: SessionBuffer) {
+  bufResetTurn(b);
+  b.bubble = createLegacyBubbleAdapter(crypto.randomUUID());
+  b.currentTurn = b.bubble.begin();
+}
+
+function bufSyncTurn(b: SessionBuffer) {
+  if (b.bubble) b.currentTurn = b.bubble.snapshot;
+}
+
+function bufScheduleTurnClear(b: SessionBuffer) {
+  bufClearTurnTimer(b);
+  // 600ms 是 CSS 淡出时长，700ms 留 100ms 余量，确保过渡真正跑完才卸载
+  b.turnTimer = setTimeout(() => {
+    b.currentTurn = null;
+    b.turnTimer = null;
+  }, 700);
+}
+
 function bufClearCurrentRound(b: SessionBuffer) {
   b.streamingAnswer = '';
   b.currentRefs = [];
@@ -198,6 +247,8 @@ function bufClearCurrentRound(b: SessionBuffer) {
   // 上一轮的 inThink 状态会污染下一轮正文分区）；modelThinking 已随消息持久化，此处清零
   b.modelThinking = '';
   b.thinkParser = null;
+  // 适配器随本轮结束停用；currentTurn 保留给 UI 播放淡出（由 bufScheduleTurnClear 清理）
+  b.bubble = null;
 }
 
 // X-2 断线重连：清掉"已收到但未 finalize"的部分内容，等待后端回放完整响应。
@@ -217,6 +268,10 @@ function bufResetForResume(b: SessionBuffer) {
   // 否则残留的 inThink/扣留缓冲会让回放内容分区错位
   b.modelThinking = '';
   b.thinkParser = null;
+  // 重连回放会重新产生 answer/thinking 事件，气泡轮也要从空块重建（保留原 turnId 以便组件不换 key）
+  bufClearTurnTimer(b);
+  b.bubble = createLegacyBubbleAdapter(b.currentTurn?.id ?? crypto.randomUUID());
+  b.currentTurn = b.bubble.begin();
 }
 
 // FR-23：终态（完成/停止/出错）前调用——flush 解析器，把半开扣留内容归位：
@@ -240,10 +295,13 @@ function bufFinalizeAnswer(
   // 记录本轮问答归属的线程（与 sessionId 同源，1 线程 1 会话），供后续续接记忆与归档
   if (threadId) b.currentThreadId = threadId;
   bufFlushThinkParser(b);
+  // T05743：先让气泡轮收口（answer_end + turn_end），再落消息；
+  // 消息 id 复用 currentTurn.id，UI 才能在淡出期间按 id 隐藏这条已落库消息，避免双份气泡。
+  if (b.bubble) b.currentTurn = b.bubble.finish('ok');
   if (b.streamingAnswer) {
     const finalFollowups = followups?.length ? followups : b.currentFollowups;
     b.messages.push({
-      id: crypto.randomUUID(),
+      id: b.currentTurn?.id ?? crypto.randomUUID(),
       role: 'assistant',
       content: b.streamingAnswer,
       refs: b.currentRefs.length ? [...b.currentRefs] : undefined,
@@ -272,17 +330,24 @@ function bufFinalizeAnswer(
   b.currentClarification = null;
   bufClearCurrentRound(b);
   b.isLoading = false;
+  // 保留 currentTurn 700ms：MessageBubble 的流光需要 600ms 淡出，不能在同一 tick 卸载
+  bufScheduleTurnClear(b);
 }
 
 function bufHandleError(b: SessionBuffer, message: string) {
   b.errorMessage = message;
   bufFlushThinkParser(b);
-  if (b.streamingAnswer || b.modelThinking) {
+  if (b.bubble) b.currentTurn = b.bubble.finish('error', message);
+  // 仅有思考/工具块、尚无正文时也要落一条错误消息，否则气泡淡出后用户看不到失败原因与重试入口
+  const hasLiveBubble = !!b.currentTurn && b.currentTurn.blocks.length > 0;
+  if (b.streamingAnswer || b.modelThinking || hasLiveBubble) {
     b.messages.push({
-      id: crypto.randomUUID(),
+      id: b.currentTurn?.id ?? crypto.randomUUID(),
       role: 'assistant',
       content: b.streamingAnswer ? `${b.streamingAnswer}\n\n[出错: ${message}]` : `[出错: ${message}]`,
       refs: b.currentRefs.length ? [...b.currentRefs] : undefined,
+      // 工具调用链在旧渲染里走 ThinkingBlock，失败后保留现场便于排查
+      thinking: b.currentThinking.length ? [...b.currentThinking] : undefined,
       createdAt: new Date().toISOString(),
       // FR-RM-09：生成出错 → error，重载后不自动续答
       status: 'error',
@@ -294,6 +359,7 @@ function bufHandleError(b: SessionBuffer, message: string) {
   b.currentClarification = null;
   bufClearCurrentRound(b);
   b.isLoading = false;
+  bufScheduleTurnClear(b);
 }
 
 // 用户主动停止或超时停止：保留已收到的部分答案，不显示错误样式
@@ -305,15 +371,19 @@ function bufStopLoading(b: SessionBuffer, reason: 'user' | 'timeout' | 'edit') {
   // 停止即放弃当前流程：澄清等待态一并解除（卡片失效，用户可重新提问）
   b.currentClarification = null;
   if (reason === 'edit') {
+    // 编辑重发会丢弃本轮，不保留气泡淡出，直接清轮避免残留
+    bufResetTurn(b);
     bufClearCurrentRound(b);
     b.isLoading = false;
     return;
   }
   const suffix = reason === 'user' ? '[已停止]' : '[已超时]';
   bufFlushThinkParser(b);
-  if (b.streamingAnswer || b.modelThinking) {
+  if (b.bubble) b.currentTurn = b.bubble.finish('interrupted');
+  const hasLiveBubble = !!b.currentTurn && b.currentTurn.blocks.length > 0;
+  if (b.streamingAnswer || b.modelThinking || hasLiveBubble) {
     b.messages.push({
-      id: crypto.randomUUID(),
+      id: b.currentTurn?.id ?? crypto.randomUUID(),
       role: 'assistant',
       content: b.streamingAnswer ? `${b.streamingAnswer}\n\n${suffix}` : suffix,
       refs: b.currentRefs.length ? [...b.currentRefs] : undefined,
@@ -332,7 +402,7 @@ function bufStopLoading(b: SessionBuffer, reason: 'user' | 'timeout' | 'edit') {
     // 否则纯挂死场景下用户只看到超时 toast、原问题无答案且无重发入口。
     // 注意：仅 timeout 落占位；user 主动停止且零字节时不生成（避免凭空出现重发入口）。
     b.messages.push({
-      id: crypto.randomUUID(),
+      id: b.currentTurn?.id ?? crypto.randomUUID(),
       role: 'assistant',
       content: `${suffix} 请求超时，未收到任何响应，请检查网络或模型配置后点击下方按钮重发。`,
       createdAt: new Date().toISOString(),
@@ -342,10 +412,16 @@ function bufStopLoading(b: SessionBuffer, reason: 'user' | 'timeout' | 'edit') {
   }
   bufClearCurrentRound(b);
   b.isLoading = false;
+  bufScheduleTurnClear(b);
 }
 
 function bufBeginStreaming(b: SessionBuffer) {
-  bufClearCurrentRound(b);
+  // handleSubmit 会先 submitQuestion（内部已 beginStreaming）再 sendQuestion（再次调用），
+  // 若已处于本轮流式则复用现有气泡轮，避免同一问题被重建两次、turnId 漂移。
+  if (!(b.isLoading && b.currentTurn)) {
+    bufClearCurrentRound(b);
+    bufBeginBubbleTurn(b);
+  }
   b.errorMessage = '';
   b.isLoading = true;
 }
@@ -368,6 +444,8 @@ function bufAppendAnswer(b: SessionBuffer, text: string) {
   const { thinking, answer } = b.thinkParser.feed(text);
   if (thinking) b.modelThinking += thinking;
   b.streamingAnswer += answer;
+  // T05743：适配器用自己的 parser 产出 think/answer 块；若 P2 切 v2 协议可设 bubble=null 停用
+  if (b.bubble) b.currentTurn = b.bubble.answer(text);
 }
 
 function bufSetMultimodal(b: SessionBuffer, payload: MultimodalOutput) {
@@ -431,10 +509,12 @@ function bufSetFollowups(b: SessionBuffer, followups: string[]) {
 
 function bufAppendThinking(b: SessionBuffer, step: ThinkingStep) {
   b.currentThinking.push(step);
+  if (b.bubble) b.currentTurn = b.bubble.thinking(step);
 }
 
 function bufSetProgress(b: SessionBuffer, step: string, count?: number) {
   b.searchProgress = { step, count };
+  if (b.bubble) b.currentTurn = b.bubble.progress(step, count);
 }
 
 // 意图澄清：后端 SSE clarify 事件写入澄清卡片（覆盖旧卡）。
@@ -442,11 +522,15 @@ function bufSetProgress(b: SessionBuffer, step: string, count?: number) {
 // 「等待用户选择」态（卡片处于可交互状态），同时阻止新提问/重新生成（与流式中一致）。
 function bufSetClarification(b: SessionBuffer, payload: Clarification) {
   b.currentClarification = payload;
+  // 澄清是中断提问：本轮不会有 answer/done，直接清掉气泡轮，避免流光空转
+  if (b.bubble) b.currentTurn = b.bubble.finish('interrupted', '等待用户澄清');
+  bufResetTurn(b);
 }
 
 // 用户放弃澄清（换个问法）：清卡片并解除 isLoading，允许重新输入/提问。
 function bufClearClarification(b: SessionBuffer) {
   b.currentClarification = null;
+  bufResetTurn(b);
   b.isLoading = false;
 }
 
@@ -470,6 +554,7 @@ function bufSetErrorMessage(b: SessionBuffer, message: string) {
 
 function bufLoadMessages(b: SessionBuffer, loadedMessages: ChatMessage[]) {
   b.messages = loadedMessages;
+  bufResetTurn(b);
   bufClearCurrentRound(b);
   b.errorMessage = '';
   b.isLoading = false;
@@ -579,6 +664,8 @@ export const useQueryStore = defineStore('query', () => {
   const currentPpt = computed(() => sessions.value.get(activeId.value)?.currentPpt ?? null);
   const currentThreadId = computed(() => sessions.value.get(activeId.value)?.currentThreadId ?? null);
   const currentClarification = computed(() => sessions.value.get(activeId.value)?.currentClarification ?? null);
+  // T05743 P1：当前轮气泡视图（done 后仍保留 700ms，供流光淡出）
+  const currentTurn = computed(() => sessions.value.get(activeId.value)?.currentTurn ?? null);
 
   // T00265：上下文占用统计（读 active buffer）——必须用 computed 而非对象 getter，
   // 否则 Pinia setup store 会把普通 getter 快照为初始值，导致徽章读不到动态数据
@@ -598,6 +685,7 @@ export const useQueryStore = defineStore('query', () => {
     const buf = sessions.value.get(id)!;
     if (opts?.messages && !buf.isLoading) {
       buf.messages = opts.messages;
+      bufResetTurn(buf);
       bufClearCurrentRound(buf);
       buf.errorMessage = '';
       buf.isLoading = false;
@@ -797,6 +885,7 @@ export const useQueryStore = defineStore('query', () => {
     currentPpt,
     currentThreadId,
     currentClarification,
+    currentTurn,
     // 多会话路由
     activeId,
     getSessionBuffer,

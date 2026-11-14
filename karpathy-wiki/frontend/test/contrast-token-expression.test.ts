@@ -423,9 +423,12 @@ describe('T04529 · A 普查归宿锁', () => {
   //   border / color / hover border-color 三处 var(--accent-readable) +
   //   hover box-shadow 一处 var(--accent-cyan-a40)，净增 4 条消费点。
   //   FAMILIES / gap 未变：新增 token 均为既有族，族面未扩大。
-  it('A1 · 规模锁：192 族 / 2679 条消费点 / 36 个 gap 族（少一个族说明扫描口径退化，不是「更干净」）', () => {
-    expect(FAMILIES.size).toBe(192);
-    expect(CENSUS_ROWS.length).toBe(2679);
+  // T05743 后基线：FAMILIES 192 → 193、消费点 2679 → 2729。消息气泡组件（T05740 新增
+  //   message-bubble.css，T05743 接入）带来 50 条颜色 token 消费点；其中新增族 --accent-cyan-a35
+  //   用于流光上沿细光带 / 打字机光标（装饰层，不承载正文对比度），该族 9 主题全声明，gap 族仍 36。
+  it('A1 · 规模锁：193 族 / 2729 条消费点 / 36 个 gap 族（少一个族说明扫描口径退化，不是「更干净」）', () => {
+    expect(FAMILIES.size).toBe(193);
+    expect(CENSUS_ROWS.length).toBe(2729);
     expect([...FAMILIES.values()].filter((f) => !declaredEverywhere(f.token)).length).toBe(36);
   });
 

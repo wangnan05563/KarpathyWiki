@@ -16,6 +16,7 @@ import {
   type BubbleStreamEvent,
   type ChatTurnVM,
 } from '../src/types/chatBubble';
+import { createLegacyBubbleAdapter } from '../src/utils/sse';
 
 function run(events: BubbleStreamEvent[], turnId = 't1'): ChatTurnVM {
   let turn = createChatTurn(turnId, 'assistant');
@@ -129,6 +130,72 @@ describe('parseBubbleEvent 防御', () => {
     expect(event?.type).toBe('tool_start');
     if (event?.type !== 'tool_start') throw new Error('解析类型错误');
     expect(event.call.name).toBe('search_pages');
+  });
+});
+
+describe('legacy SSE 适配器（T05743 P1）', () => {
+  it('answer 里的 <think> 内容分流为 think 块，正文进 answer 块', () => {
+    const adapter = createLegacyBubbleAdapter('t1');
+    adapter.begin();
+    adapter.answer('<think>先检索知识库');
+    adapter.answer('再回答</think>最终答案');
+    const turn = adapter.snapshot;
+
+    expect(turn.blocks.map((b) => b.kind)).toEqual(['think', 'answer']);
+    const think = turn.blocks[0];
+    if (think?.kind !== 'think') throw new Error('第一个块应为 think');
+    expect(think.text).toContain('先检索知识库');
+    const answer = turn.blocks[1];
+    if (answer?.kind !== 'answer') throw new Error('第二个块应为 answer');
+    expect(answer.text).toBe('最终答案');
+    expect(turn.phase).toBe('running');
+  });
+
+  it('tool_call / composing 事件驱动工具卡起止，finish 收口整轮', () => {
+    const adapter = createLegacyBubbleAdapter('t2');
+    adapter.begin();
+    adapter.thinking({
+      phase: 'thinking',
+      message: '分析问题',
+      ts: '2026-11-14T00:00:00.000Z',
+    });
+    adapter.thinking({
+      phase: 'tool_call',
+      message: '在知识库中检索',
+      tool: 'search_pages',
+      ts: '2026-11-14T00:00:00.000Z',
+    });
+    let turn = adapter.snapshot;
+    expect(turn.blocks[0]?.kind).toBe('think');
+    const tool = turn.blocks.find((b) => b.kind === 'tool');
+    if (tool?.kind !== 'tool') throw new Error('缺少 tool 块');
+    expect(tool.call.status).toBe('running');
+    expect(tool.call.name).toBe('search_pages');
+
+    adapter.thinking({
+      phase: 'composing',
+      message: '整理答案',
+      ts: '2026-11-14T00:00:01.000Z',
+    });
+    adapter.answer('答案');
+    turn = adapter.finish('ok');
+    expect(turn.phase).toBe('done');
+    expect(turn.outcome).toBe('ok');
+    const finishedTool = turn.blocks.find((b) => b.kind === 'tool');
+    if (finishedTool?.kind !== 'tool') throw new Error('缺少 tool 块');
+    expect(finishedTool.call.status).toBe('done');
+  });
+
+  it('finish(error) 把未完成工具标 error 并保留错误文案', () => {
+    const adapter = createLegacyBubbleAdapter('t3');
+    adapter.begin();
+    adapter.thinking({ phase: 'tool_call', message: '联网搜索', tool: 'web_search', ts: '2026-11-14T00:00:00.000Z' });
+    const turn = adapter.finish('error', '上游 402');
+    expect(turn.outcome).toBe('error');
+    expect(turn.errorMessage).toBe('上游 402');
+    const tool = turn.blocks.find((b) => b.kind === 'tool');
+    if (tool?.kind !== 'tool') throw new Error('缺少 tool 块');
+    expect(tool.call.status).toBe('error');
   });
 });
 
