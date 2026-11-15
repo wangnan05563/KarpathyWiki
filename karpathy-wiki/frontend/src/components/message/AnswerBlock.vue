@@ -18,17 +18,16 @@ const props = withDefaults(
     typewriter?: boolean;
     /** 是否启用流光（用户可在设置中整体关闭） */
     shimmer?: boolean;
+    /** done 后覆盖层淡出时长（ms）；由 MessageBubble 从气泡配置注入，默认与 CSS 600ms 对齐 */
+    shimmerFadeMs?: number;
     charsPerSecond?: number;
     /** Markdown 重渲染节流窗口（ms）：打字机 60fps，Markdown 约 10fps */
     renderIntervalMs?: number;
     /** 终态色调：由外层按 turn.outcome 传入，用于左侧状态条 */
     tone?: 'ok' | 'error' | 'interrupted';
   }>(),
-  { typewriter: true, shimmer: true, charsPerSecond: 90, renderIntervalMs: 100, tone: 'ok' },
+  { typewriter: true, shimmer: true, charsPerSecond: 90, renderIntervalMs: 100, shimmerFadeMs: 600, tone: 'ok' },
 );
-
-/** 与 message-bubble.css 的 --kw-shimmer-fade-ms 保持一致，改一处必须同步另一处 */
-const SHIMMER_FADE_MS = 600;
 
 const running = computed(() => props.block.phase === 'running');
 const enabled = computed(() => props.typewriter);
@@ -72,7 +71,7 @@ watch(
       fadeTimer = setTimeout(() => {
         shimmerPhase.value = 'off';
         fadeTimer = null;
-      }, SHIMMER_FADE_MS);
+      }, props.shimmerFadeMs);
       return;
     }
     shimmerPhase.value = 'off';
@@ -130,9 +129,18 @@ onBeforeUnmount(() => {
   >
     <MarkdownRenderer :content="renderText" />
 
+    <!-- 关闭流光后的活动指示兜底：running 且没有打字光标时，至少保留一个可见光标，
+         避免「没有覆盖层 + 没有打字动画」的静态气泡让人误以为卡死。 -->
+    <span
+      v-if="running && !shimmer && !isTyping"
+      class="kw-caret kw-caret--fallback"
+      aria-hidden="true"
+    ></span>
+
     <div
       v-if="shimmerVisible"
       class="kw-shimmer"
+      :style="{ '--kw-shimmer-fade-ms': `${shimmerFadeMs}ms` }"
       :class="{ 'is-running': shimmerPhase === 'running', 'is-fading': shimmerPhase === 'fading' }"
       aria-hidden="true"
     >

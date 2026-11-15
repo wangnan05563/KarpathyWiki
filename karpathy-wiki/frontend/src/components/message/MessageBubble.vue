@@ -10,17 +10,14 @@ import ThinkBlock from './ThinkBlock.vue';
 import ToolCallBlock from './ToolCallBlock.vue';
 import AnswerBlock from './AnswerBlock.vue';
 import type { ChatTurnVM } from '../../types/chatBubble';
+import { useBubbleSettings } from '../../composables/useBubbleSettings';
 import '../../styles/message-bubble.css';
 
 const props = withDefaults(
   defineProps<{
     turn: ChatTurnVM;
-    /** done 后思考块是否默认展开；默认折叠 */
-    defaultThinkExpanded?: boolean;
-    /** 是否启用打字机 */
-    typewriter?: boolean;
-    /** 是否启用流光扫描 */
-    shimmer?: boolean;
+    /** done 后流光淡出时长（ms）；不传时读全局气泡配置 */
+    shimmerFadeMs?: number;
     charsPerSecond?: number;
     /** 用户消息是否显示头像（移动端紧凑布局可关闭） */
     showAvatar?: boolean;
@@ -32,14 +29,23 @@ const props = withDefaults(
     active?: boolean;
   }>(),
   {
-    defaultThinkExpanded: false,
-    typewriter: true,
-    shimmer: true,
     charsPerSecond: 90,
     showAvatar: true,
     active: true,
   },
 );
+
+const { settings: bubbleSettings } = useBubbleSettings();
+
+// T05746：外观参数统一来自配置页的全局单例。
+// 注意：这里刻意不把 typewriter / shimmer / thinkExpanded 做成组件 prop——
+// Vue 对未传的 Boolean prop 会隐式转成 false，`props.x ?? settings.x` 永远回落不到
+// 全局配置（T05746 UI 单测首跑即因此失败）。若后续确实需要单点覆盖，应传对象型
+// `appearance` 而不是裸布尔，避免再次踩 Boolean casting。
+const effectiveThinkExpanded = computed(() => bubbleSettings.thinkExpanded);
+const effectiveTypewriter = computed(() => bubbleSettings.typewriter);
+const effectiveShimmer = computed(() => bubbleSettings.shimmer);
+const effectiveShimmerFadeMs = computed(() => props.shimmerFadeMs ?? bubbleSettings.shimmerFadeMs);
 
 defineEmits<{ (e: 'retry'): void }>();
 
@@ -77,14 +83,15 @@ const statusClass = computed(() => ({
           <ThinkBlock
             v-if="block.kind === 'think'"
             :block="block"
-            :default-expanded="defaultThinkExpanded"
+            :default-expanded="effectiveThinkExpanded"
           />
           <ToolCallBlock v-else-if="block.kind === 'tool'" :call="block.call" />
           <AnswerBlock
             v-else
             :block="block"
-            :typewriter="typewriter"
-            :shimmer="shimmer && active"
+            :typewriter="effectiveTypewriter"
+            :shimmer="effectiveShimmer && active"
+            :shimmer-fade-ms="effectiveShimmerFadeMs"
             :chars-per-second="charsPerSecond"
             :tone="turn.outcome"
           />

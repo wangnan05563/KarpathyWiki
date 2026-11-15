@@ -38,6 +38,16 @@ export const STORAGE_KEYS = {
   LAST_ACTIVE_CONVERSATION: 'lastActiveConversation',
   /** T05743 气泡模式：v2（新气泡）/ legacy（旧渲染），出问题可一键回滚 */
   BUBBLE_MODE: 'bubbleMode',
+  /** T05746 气泡打字机开关：关闭后回答一次性全量展示 */
+  BUBBLE_TYPEWRITER: 'bubbleTypewriter',
+  /** T05746 气泡流光扫描开关：关闭后 running 态不渲染覆盖层，但保留打字光标/骨架 */
+  BUBBLE_SHIMMER: 'bubbleShimmer',
+  /** T05746 流光速度倍率（0.5~2.0，默认 1.0；CSS 时长 = 1.7s / speed） */
+  BUBBLE_SHIMMER_SPEED: 'bubbleShimmerSpeed',
+  /** T05746 done 后流光淡出时长（ms，默认 600；需与 --kw-shimmer-fade-ms 同步） */
+  BUBBLE_SHIMMER_FADE_MS: 'bubbleShimmerFadeMs',
+  /** T05746 done 后思考块默认展开（默认 false；running 期间仍自动展开） */
+  BUBBLE_THINK_EXPANDED: 'bubbleThinkExpanded',
 } as const;
 
 /** 按预设派生 localStorage 完整键名（如 llmPresetConfig:openai） */

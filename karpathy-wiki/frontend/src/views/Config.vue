@@ -10,6 +10,7 @@ import {
 import IconActionButton from '../components/IconActionButton.vue';
 import StateBlock from '../components/StateBlock.vue';
 import ThemeSwitcher from '../components/ThemeSwitcher.vue';
+import BubbleSettingsPanel from '../components/BubbleSettingsPanel.vue';
 import MarkdownRenderer from '../components/MarkdownRenderer.vue';
 import type { ConfigData, ConfigPathWarning, SchemaContent, ReloadResult, SchemaCommit, DiffLine, AiConfig, LlmPreset, AiTestResult, ToolsConfig, McpServerEntry, QqConfigData, PromptFile, PromptTestRunEvent } from '../types';
 import { apiErrorMessage } from '../utils/apiError';
@@ -4975,6 +4976,7 @@ async function importConfig() {
             </div>
             <ThemeSwitcher embedded />
           </section>
+          <BubbleSettingsPanel />
         </section>
 
         <!-- T02482（PRD D4x）：数据备份——原帮助文档「本地数据保护」表单的新家。

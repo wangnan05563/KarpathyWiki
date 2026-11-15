@@ -426,9 +426,11 @@ describe('T04529 · A 普查归宿锁', () => {
   // T05743 后基线：FAMILIES 192 → 193、消费点 2679 → 2729。消息气泡组件（T05740 新增
   //   message-bubble.css，T05743 接入）带来 50 条颜色 token 消费点；其中新增族 --accent-cyan-a35
   //   用于流光上沿细光带 / 打字机光标（装饰层，不承载正文对比度），该族 9 主题全声明，gap 族仍 36。
-  it('A1 · 规模锁：193 族 / 2729 条消费点 / 36 个 gap 族（少一个族说明扫描口径退化，不是「更干净」）', () => {
+  // T05746 后基线：2729 → 2740。BubbleSettingsPanel（气泡参数配置 UI）新增 11 条颜色 token
+  //   消费点（说明文字 / 滑杆数值 / 分隔线 / 恢复默认按钮），全部取自既有族，FAMILIES 与 gap 族未变。
+  it('A1 · 规模锁：193 族 / 2740 条消费点 / 36 个 gap 族（少一个族说明扫描口径退化，不是「更干净」）', () => {
     expect(FAMILIES.size).toBe(193);
-    expect(CENSUS_ROWS.length).toBe(2729);
+    expect(CENSUS_ROWS.length).toBe(2740);
     expect([...FAMILIES.values()].filter((f) => !declaredEverywhere(f.token)).length).toBe(36);
   });
 

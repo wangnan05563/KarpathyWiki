@@ -8,9 +8,15 @@
  * 深浅主题、8 套 data-theme 自动适配，避免出现 T04447 那类「白字压浅色渐变」的对比度事故。
  */
 
+:root {
+  /* T05746：气泡流光默认节奏。useBubbleSettings 会在 documentElement 上按配置覆盖这两个变量；
+     这里保留与设计稿一致的兜底值，保证样式文件被单独引用/测试时也有确定表现。 */
+  --kw-shimmer-duration: 1.7s;
+  --kw-shimmer-fade-ms: 600ms;
+}
+
 .kw-msg {
   /* 流光时长与缓动是组件内部节奏，不新增颜色 token（颜色一律直接消费主题既有 token） */
-  --kw-shimmer-fade-ms: 600ms;
   --kw-ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
@@ -414,7 +420,7 @@
     transparent 100%
   );
   transform: translate3d(-160%, 0, 0) skewX(-14deg);
-  animation: kw-shimmer-sweep 1.7s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+  animation: kw-shimmer-sweep var(--kw-shimmer-duration, 1.7s) cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
   will-change: transform;
 }
 
@@ -469,6 +475,12 @@
   vertical-align: -0.12em;
   background: var(--accent-cyan-a35, rgba(0, 245, 255, 0.35));
   animation: kw-caret-blink 1s steps(2, start) infinite;
+}
+
+/* 关闭流光且没有打字光标时的活动兜底；与打字机行尾光标同源，避免两套视觉 */
+.kw-caret--fallback {
+  margin-left: 1px;
+  opacity: 0.72;
 }
 
 /* ---------- 终态提示 / 重试 ---------- */
