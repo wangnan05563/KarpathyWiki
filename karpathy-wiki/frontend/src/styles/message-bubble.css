@@ -586,7 +586,8 @@
 
 /* ---------- T05745 P3：窄屏（移动端/悬浮窗）适配 ---------- */
 
-@media (max-width: 640px) {
+/* T02916 断点单一来源：窄屏适配必须落在 portable=768 档，不得引入 640 第五档。 */
+@media (max-width: 768px) {
   .kw-row {
     gap: 8px;
     margin: 10px 0;

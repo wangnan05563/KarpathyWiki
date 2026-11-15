@@ -168,15 +168,16 @@ describe('B/C · 只有语义路才付同步成本', () => {
 });
 
 describe('D · 同步失败不阻断问答', () => {
-  it('ensureIndexSynced 抛错时仍按现有索引召回语义命中，且不向调用方抛错', async () => {
-    const m = await loadFresh();
+  // 全量 gate 并行跑 141 个文件时，两次 vi.resetModules() + 动态 import 会超过默认 5s；
+  // 本用例只验证「ensureIndexSynced 抛错仍能召回」，一次装载即可，另留 20s 兜底慢盘/CI 抖动。
+  it('ensureIndexSynced 抛错时仍按现有索引召回语义命中，且不向调用方抛错', { timeout: 20_000 }, async () => {
+    const m = await loadFresh('throw');
     await m.indexPage(dataDir, vault, 'concepts/remote-work.md', EMB);
     m.closeIndexDb();
 
-    const broken = await loadFresh('throw');
-    const hits = await broken.retrieveForQuery(vault, 'telecommuting productivity', undefined, { embedding: EMB, dataDir });
+    const hits = await m.retrieveForQuery(vault, 'telecommuting productivity', undefined, { embedding: EMB, dataDir });
     expect(hits.map((h) => h.path)).toContain('concepts/remote-work.md');
-    broken.closeIndexDb();
+    m.closeIndexDb();
   });
 });
 

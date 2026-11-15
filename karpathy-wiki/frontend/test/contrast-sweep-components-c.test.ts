@@ -47,8 +47,10 @@ const POINTS: Point[] = [
   // :hover 块，border-color 声明平移到 L123。声明原文、落点面（无自带淡底）、前景族均未变，
   // 同样只刷新行号指针；本条仍是 CARD_OVER_PAGE 口径的 ui 点。
   { f: 'ContextUsageBadge.vue', ln: 123, sel: '.ctx-badge-inner:hover', face: CARD_OVER_PAGE, fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
-  { f: 'FloatingChat.vue', ln: 941, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a12)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'ui' },
-  { f: 'FloatingChat.vue', ln: 942, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a12)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'text' },
+  // T05745 P3 在 FloatingChat 样式区插入气泡/窄屏规则，原 L941/942 整体平移到 L969/970；
+  // 选择器、落点面 a12、前景 readable 族均未变，只刷新行号指针。
+  { f: 'FloatingChat.vue', ln: 969, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a12)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'ui' },
+  { f: 'FloatingChat.vue', ln: 970, sel: '.suggestion-chip:hover', face: 'var(--accent-purple-a12)', fg: 'var(--purple-readable)', bare: 'var(--neon-purple)', kind: 'text' },
   { f: 'FollowupsChips.vue', ln: 70, sel: '.followup-chip:hover:not(:disabled)', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'ui' },
   { f: 'FollowupsChips.vue', ln: 71, sel: '.followup-chip:hover:not(:disabled)', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
   { f: 'GuideButton.vue', ln: 58, sel: '.guide-entry-btn:hover', face: 'var(--accent-cyan-a12)', fg: 'var(--accent-readable)', bare: 'var(--neon-cyan)', kind: 'text' },
@@ -93,8 +95,8 @@ const ratioOf = (fg: string, p: Point, t: (typeof THEMES)[number]) => worstRatio
 
 /** 接入前口径：两处 hover 在 T04482 降档前用的是 a25 面，基线数不能跟着新面漂移 */
 const PRE_FACE: Record<string, string> = {
-  'FloatingChat.vue:L941': 'var(--accent-purple-a25)',
-  'FloatingChat.vue:L942': 'var(--accent-purple-a25)',
+  'FloatingChat.vue:L969': 'var(--accent-purple-a25)',
+  'FloatingChat.vue:L970': 'var(--accent-purple-a25)',
   'MessageToolbar.vue:L587': 'var(--accent-pink-a25)',
 };
 const preFaceOf = (p: Point) => PRE_FACE[`${p.f}:L${p.ln}`] ?? p.face;
@@ -317,7 +319,7 @@ describe('T04470 批次 C：13 个组件 21 面逐主题实算', () => {
     // T04482 在 a25 面上实测三族全不达标（3.47~4.42）；降档到 a12 后三族全部 ≥4.64。
     // 这条同时锁住「不改 readable 取值」的结论：族取值一旦被调浅，先红的会是原来的配对族，
     // 但只要某个 alt 族掉线也说明面/取值口径变了，残差需要重评。
-    for (const key of ['FloatingChat.vue:L942', 'MessageToolbar.vue:L587']) {
+    for (const key of ['FloatingChat.vue:L970', 'MessageToolbar.vue:L587']) {
       const p = POINTS.find((x) => `${x.f}:L${x.ln}` === key)!;
       for (const fam of ['var(--accent-readable)', 'var(--pink-readable)', 'var(--purple-readable)']) {
         const fails = THEMES.filter((t) => ratioOf(fam, p, t) < THRESHOLD.text).map((t) => t.name);

@@ -15,6 +15,16 @@ export default defineConfig({
     environment: 'happy-dom',
     globals: true,
     include: ['test/**/*.test.ts'],
+    // T05745 构建复验：默认不限 worker 的线程池在 141+ API 测试后跑 web 全量门禁时
+    // 曾以 0xC0000005（Windows access violation）整体崩溃。限制为 1~4 个线程，
+    // 保留 happy-dom 的同进程启动速度，同时避免 Windows 上 worker 过多导致进程级崩溃。
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        minThreads: 1,
+        maxThreads: 4,
+      },
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
