@@ -255,8 +255,14 @@ if (Test-Path (Join-Path $harnessPath "package.json")) {
     
     # 安装本地 harness 到 karpathy-wiki 的 node_modules（pkg 打包时需要）
     Write-Step "安装 @wiki/harness 到本地..."
-    & $pkgCmd add "file:$harnessPath" -w
+    # 2026-11-16：file: 会把 wiki-harness 打包复制到 .pnpm，复制过程不跟随 dist junction，
+    # 导致 api tsc 找不到 @wiki/harness 的 dist/index.d.ts；改用 link: 直接软链源码目录。
+    & $pkgCmd add "link:$harnessPath" -w
     if ($LASTEXITCODE -ne 0) { throw "@wiki/harness 安装失败" }
+    # pnpm 在 Windows 上可能写出多一级 `..` 的相对软链；强制重建为绝对 junction，
+    # 保证 api tsc 能从 wiki-harness/dist -> release/harness 解析类型声明。
+    & $NodeExe (Join-Path $PSScriptRoot "link-harness.mjs")
+    if ($LASTEXITCODE -ne 0) { throw "@wiki/harness 链接修复失败" }
     Write-Ok "@wiki/harness 安装完成"
 } else {
     Write-Warn "未找到本地 wiki-harness 目录，跳过（若已发布到 npm 可忽略）"
@@ -273,7 +279,10 @@ if ($SkipGate) {
     if (-not $UsePnpm) {
         throw "发布门禁依赖 pnpm --filter 过滤 workspace 包；当前未使用 pnpm（T04910）"
     }
-    Write-Step "api gate：tsc --noEmit + typecheck:test + vitest"
+    # api gate 内 vitest 分两段：先全量（排除 vector-recall-bench），再让性能用例独占进程。
+    # 原因：singleFork 连续跑完 140 个测试文件后 RSS/GC 压力显著上升，10400 条向量热查询
+    # 的 P95 会从 ~24ms 抖到 270ms+，造成 T04069 假红；单独进程实测稳定通过。
+    Write-Step "api gate：tsc --noEmit + typecheck:test + vitest（性能用例独占）"
     & $pkgCmd --filter @karpathy-wiki/api run gate
     if ($LASTEXITCODE -ne 0) { throw "api gate 未通过，发布中止（T04910）" }
     Write-Ok "api gate 通过"
