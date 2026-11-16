@@ -23,7 +23,8 @@ const PAGES = 2600; // × 4 = 10400 条向量（「万级 chunk」口径）
 const DIM = 256;
 const MODEL = 'bench-model';
 const TOP_K = 10; // 验收口径的重合率比较长度
-const SAMPLES = 60;
+const SAMPLES = 120; // P95 需要足够样本吸收偶发 GC/OS 尖峰：60 次时 3 个慢样本就会顶穿门槛
+const WARMUP = 10; // 预热不计入采样，避开 JIT/首次缓存填充
 const BENCH_TIMEOUT_MS = 300_000;
 
 const createdDirs: string[] = [];
@@ -129,6 +130,9 @@ async function runTier(dim: number, label: string, latencyGateMs = 100): Promise
   const cold = performance.now() - tCold;
 
   const warmLatencies: number[] = [];
+  for (let i = 0; i < WARMUP; i++) {
+    vectorRecall(dataDir, queries[i % queries.length], 20, MODEL);
+  }
   for (let round = 0; round < SAMPLES; round++) {
     const q = queries[round % queries.length];
     const t0 = performance.now();
