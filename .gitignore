@@ -20,6 +20,9 @@ build/
 **/builds/
 # 统一发布目录（所有编译/打包产物集中于此：spa/app/installer/harness/builds，不入仓）
 release/
+# wiki-harness/dist 现在是指向 release/harness 的目录链接（junction/symlink）；
+# 上面的 `dist/` 只匹配真实目录，不匹配链接本身，故显式补一条防止其变成未跟踪项
+wiki-harness/dist
 # TypeScript 增量编译信息
 *.tsbuildinfo
 
