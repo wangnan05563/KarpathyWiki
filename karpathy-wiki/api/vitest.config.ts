@@ -28,6 +28,11 @@ export default defineConfig({
     // unstubGlobals 让每个用例结束后自动还原全部全局桩，杜绝这一整类泄漏；
     // 需要"跨用例持续桩"的文件改为 beforeEach 重装（about-version-update 即此改法）。
     unstubGlobals: true,
+    // T04910 门禁事故防线（2026-11-16）：默认 5s 超时在 Windows + 杀软/磁盘扫描下会误杀
+    // 真子进程 kill（coordination-prune 实测 3.5s，全量并发时 >5s）与全库源码扫描
+    // （link-parser 全量时 5.4s）。放宽到 15s 只容忍机器慢，不改变任何断言。
+    testTimeout: 15000,
+    hookTimeout: 30000,
     // 为什么单线程：Windows 上 vitest 多线程模式启动慢，
     // 单线程模式更稳定且本项目测试用例少，无需并行
     pool: 'forks',
