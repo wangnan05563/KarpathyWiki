@@ -27,6 +27,8 @@ export default defineConfig({
     },
     coverage: {
       provider: 'v8',
+      // 覆盖率报告统一落在 release/coverage/web（与源码目录分离，便于整体清理）
+      reportsDirectory: '../../release/coverage/web',
       reporter: ['text', 'json', 'html', 'lcov'],
       include: ['src/**/*.ts', 'src/**/*.vue'],
       

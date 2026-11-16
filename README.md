@@ -66,7 +66,7 @@ Karpathy Wiki 把「资料入库」做成一条四步闭环：投递资料 → A
 │   └── assets/             # 设计稿与 GitHub 社交预览图
 ├── wiki-harness/           # @wiki/harness —— 轻量 LLM Agent 运行时（独立 workspace）
 ├── tooling/                # 治理脚本与性能测试（sonar 复核、TOC 校验、压测）
-├── release/                # 统一发布产物目录（构建产物，已被 .gitignore 忽略）
+├── release/                # 统一发布产物目录（build/cache/coverage/harness/spa/app/installer，均不入库，可整目录删除后重建）
 └── logs/                   # 运行日志（同样不入库）
 ```
 
@@ -281,6 +281,8 @@ Karpathy Wiki 面向「自己能部署、自己能掌控」的场景设计：
 cd karpathy-wiki
 pnpm build                    # 各包 tsc / vite build
 ```
+
+> 构建、覆盖率、EXE 中间文件与 SPA 产物统一写入仓库根 `release/`；停止服务后可整体删除该目录回收空间，重新构建会自动恢复。`wiki-harness/dist` 只是指向 `release/harness` 的目录链接，不再保存独立副本。
 
 | 入口 | 作用 |
 | --- | --- |

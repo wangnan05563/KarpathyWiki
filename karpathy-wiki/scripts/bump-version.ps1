@@ -3,7 +3,7 @@
 # 设计目标：
 #   - 每次构建版本号唯一（同一天递增，跨日重置）
 #   - 主.次版本保留在 package.json 中（不依赖外部配置）
-#   - 计数持久化到 .build/patch-counter.json，跨构建可追踪
+#   - 计数持久化到 release/build/patch-counter.json（2026-11-16 起统一发布目录；旧 .build 仅作兼容默认）
 #   - 写回 package.json 时保留原文件格式（缩进、字段顺序），仅替换 version 行
 #
 # 版本号拼接规则（与用户确认的方案 A 一致）：
@@ -13,7 +13,7 @@
 #   - 例如：0.1.202607201、0.1.202607202 ... 0.1.2026072010
 #   - patch 是纯数字（虽然很大），仍符合 SemVer 三段式
 #
-# 计数文件格式（.build/patch-counter.json）：
+# 计数文件格式（release/build/patch-counter.json）：
 #   {
 #     "date": "20260720",
 #     "seq": 3,
@@ -27,9 +27,14 @@
 
 function Invoke-VersionBump {
     # 主函数：生成 patch 号并写回 package.json
-    # 参数 $RepoRoot：项目根目录（package.json 与 .build/ 所在目录）
+    # 参数 $RepoRoot：项目根目录（package.json 所在目录）
+    # 参数 $BuildDir：计数文件目录；默认兼容旧路径 <RepoRoot>/.build，
+    #   构建流水线应显式传 <repo>/release/build，保证所有可重建文件集中到 release/
     # 返回：新版本号字符串（如 "0.1.202607201"），失败返回 $null
-    param([Parameter(Mandatory)][string]$RepoRoot)
+    param(
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [string]$BuildDir
+    )
 
     $pkgPath = Join-Path $RepoRoot 'package.json'
     if (-not (Test-Path $pkgPath)) {
@@ -60,7 +65,7 @@ function Invoke-VersionBump {
     $today = (Get-Date).ToString('yyyyMMdd')
 
     # 3. 读取计数文件
-    $buildDir = Join-Path $RepoRoot '.build'
+    $buildDir = if ($BuildDir) { $BuildDir } else { Join-Path $RepoRoot '.build' }
     if (-not (Test-Path $buildDir)) {
         New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
     }
@@ -78,6 +83,17 @@ function Invoke-VersionBump {
             # 跨日：date 已重置为 $today，seq 保持 0（下面会 +1）
         } catch {
             Write-Host "[BumpVersion] [WARN] counter file corrupted, reset to 1: $counterPath" -ForegroundColor Yellow
+        }
+    }
+    # 计数文件被清理（例如用户删除 release/ 回收空间）时，从当前版本号恢复当天序号，
+    # 避免重新从 1 开始导致版本号回退/重复。当前 version 形如 0.1.202611162：
+    # patch = YYYYMMDD + 当天序号，取前 8 位为日期、其余为序号。
+    $currentPatch = if ($parts.Count -ge 3) { $parts[2] } else { '' }
+    if ($currentPatch -match '^(\d{8})(\d+)$') {
+        $versionDate = $Matches[1]
+        $versionSeq = [int]$Matches[2]
+        if ($versionDate -eq $today -and $versionSeq -gt $seq) {
+            $seq = $versionSeq
         }
     }
     $seq++

@@ -74,19 +74,20 @@ Invoke-WithNodePath -NodeExePath $NodeExe
 # 为什么放在最前：后续 esbuild / pkg / Inno Setup 均依赖 version，
 # 必须在任何引用 version 的步骤之前完成写回
 # 规则：主.次版本保留，patch = YYYYMMDD + 当天递增序号
-# 持久化：.build/patch-counter.json 记录当天已构建次数，跨日重置
+# 持久化：release/build/patch-counter.json 记录当天已构建次数，跨日重置
 # ============================================================
-. (Join-Path $PSScriptRoot 'bump-version.ps1')
-$BuildVersion = Invoke-VersionBump -RepoRoot $repoRoot
-if (-not $BuildVersion) {
-    throw "构建版本号生成失败，请检查 package.json 与 .build 目录可写权限"
-}
-
-# 缓存与产物目录（必须在引用 $cacheDir 前定义）
-$cacheDir = "$repoRoot\.cache"
-$buildDir = "$repoRoot\.build"
 $releaseDir = Join-Path $wsRoot "release"
-$buildReadyMarker = "$buildDir\.kw-build-ready"
+# 缓存与产物目录全部集中到 release/：用户只需删除 release/ 即可回收构建空间
+$cacheDir = Join-Path $releaseDir "cache"
+$buildDir = Join-Path $releaseDir "build"
+$buildReadyMarker = Join-Path $buildDir ".kw-build-ready"
+New-Item -ItemType Directory -Force $releaseDir | Out-Null
+
+. (Join-Path $PSScriptRoot 'bump-version.ps1')
+$BuildVersion = Invoke-VersionBump -RepoRoot $repoRoot -BuildDir $buildDir
+if (-not $BuildVersion) {
+    throw "构建版本号生成失败，请检查 package.json 与 release/build 目录可写权限"
+}
 
 # 自动检测 Git 的 patch.exe 并添加到 PATH（pkg-fetch 从源码构建 Node 二进制时需要）
 $git = Get-Command git -ErrorAction SilentlyContinue
@@ -144,10 +145,10 @@ function Remove-TreeSafe {
     }
 }
 
-# -Clean：清理所有缓存
+# -Clean：清理所有缓存（release/ 已包含 build/cache；旧 .build/.cache 一并清理，避免历史残留）
 if ($Clean) {
     Write-Host "[Clean] 清理所有缓存..." -ForegroundColor Yellow
-    foreach ($p in @(".build", $cacheDir, $releaseDir)) {
+    foreach ($p in @($releaseDir, (Join-Path $repoRoot '.build'), (Join-Path $repoRoot '.cache'))) {
         if (Test-Path $p) {
             Write-Host "  删除 $p"
             Remove-TreeSafe $p

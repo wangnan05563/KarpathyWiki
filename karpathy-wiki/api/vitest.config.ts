@@ -38,6 +38,8 @@ export default defineConfig({
     },
     coverage: {
       provider: 'v8',
+      // 覆盖率报告统一落在 release/coverage/api（与源码目录分离，便于整体清理）
+      reportsDirectory: '../../release/coverage/api',
       // lcov：供 SonarQube 读取覆盖率（sonar-project.properties 的 sonar.javascript.lcov.reportPaths）
       reporter: ['text', 'json', 'html', 'lcov'],
       // 全量口径：src 下所有源文件（含 workflows/utils/routes/engine 等此前未参与测量的模块）
