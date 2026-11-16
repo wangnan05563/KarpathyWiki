@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "seeded": {
+    "owner": "18424abb-164d-4ea5-b1cb-08232ec7bcb0",
+    "count": 100
+  },
+  "loaded": {
+    "assistant": 50,
+    "user": 50,
+    "total": 100
+  },
+  "perf": {
+    "container": "chat-body",
+    "scrollHeight": 17027,
+    "clientHeight": 793,
+    "frames": 203,
+    "durationMs": 3376,
+    "fps": 60.1,
+    "maxFrameGapMs": 18,
+    "longTaskCount": 4,
+    "longTaskMaxMs": 116,
+    "longTasks": [
+      76,
+      53,
+      116,
+      58
+    ]
+  }
+}
