@@ -87,14 +87,16 @@ Karpathy Wiki 是一个**本地优先**的智能知识库系统，灵感来自 A
 
 ### 手动安装
 
-`@wiki/harness` 是本地 `file:` 引用（`api/package.json` 写 `file:../../wiki-harness`），所以两个工程必须**同级摆放**，且 harness 要先产出 `dist/`：
+`@wiki/harness` 是本地 `file:` 引用（`api/package.json` 写 `file:../../wiki-harness`），所以两个工程必须**同级摆放**，且 harness 要先产出 `release/harness`（包内 `dist/` 会自动指向它）：
 
 ```bash
-cd wiki-harness && pnpm install && pnpm build   # 生成 dist/index.js + dist/*.d.ts
+cd wiki-harness && pnpm install && pnpm build   # tsc 输出 release/harness，并建立 dist -> release/harness 链接
 cd ../karpathy-wiki && pnpm install             # 之后 api 才能解析 @wiki/harness
 ```
 
-跳过 harness 的 `build` 会留下没有 `dist/` 的引擎包，API 启动时按 `package.json` 的 `main: dist/index.js` 解析即失败。
+跳过 harness 的 `build` 会留下没有 `dist/index.js` 的引擎包，API 启动时按 `package.json` 的 `main: dist/index.js` 解析即失败。
+
+构建、覆盖率与打包产物统一写入仓库根 `release/`；该目录不入库，停止服务后可整体删除后重建。
 
 ## 快速开始
 
