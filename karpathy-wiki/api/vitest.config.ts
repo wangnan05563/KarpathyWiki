@@ -31,8 +31,12 @@ export default defineConfig({
     // T04910 门禁事故防线（2026-11-16）：默认 5s 超时在 Windows + 杀软/磁盘扫描下会误杀
     // 真子进程 kill（coordination-prune 实测 3.5s，全量并发时 >5s）与全库源码扫描
     // （link-parser 全量时 5.4s）。放宽到 15s 只容忍机器慢，不改变任何断言。
-    testTimeout: 15000,
-    hookTimeout: 30000,
+    // T04910 二次事故（2026-11-17）：一键发布自动打包的全量门禁里，机器负载更重，
+    // misplaced-pages 的 T02844 两条用例分别跑到 15176ms / 15161ms 被 15s 超时误杀
+    // （单文件实跑 13/13 全绿，断言无任何问题）。放宽到 30s / 60s，仍是"只容忍机器慢"，
+    // 不改变任何断言；若单条真挂死，30s 仍会拦下。
+    testTimeout: 30000,
+    hookTimeout: 60000,
     // 为什么单线程：Windows 上 vitest 多线程模式启动慢，
     // 单线程模式更稳定且本项目测试用例少，无需并行
     pool: 'forks',

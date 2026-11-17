@@ -148,7 +148,7 @@ describe('守护规则本身（不空转、不误伤写侧）', () => {
 
 describe('全库口径锁', () => {
   // 逐文件串行 readFile（api/src 下 ~120 个 .ts）：与其他用例并发跑时默认 5 s 预算会卡住，按实测放宽
-  it('G4 api/src 下不再有直连 gray-matter 的解析调用（白名单只剩收敛层）', { timeout: 30_000 }, async () => {
+  it('G4 api/src 下不再有直连 gray-matter 的解析调用（白名单只剩收敛层）', { timeout: 60_000 }, async () => {
     const files = await collectSrcFiles();
     const offenders = files
       .filter((f) => f.rel !== CONVERGENCE_LAYER.replace(/\\/g, '/'))
@@ -157,7 +157,7 @@ describe('全库口径锁', () => {
     expect(offenders, '整页/整块解析一律走 utils/frontmatter 的 parsePage / tryParsePage').toEqual([]);
   });
 
-  it('G5 仍 import gray-matter 的源文件只允许写侧用法', { timeout: 30_000 }, async () => {
+  it('G5 仍 import gray-matter 的源文件只允许写侧用法', { timeout: 60_000 }, async () => {
     const files = await collectSrcFiles();
     const importers = files.filter((f) =>
       /from\s+['"]gray-matter['"]/.test(f.text),

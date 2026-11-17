@@ -544,7 +544,7 @@ describe('T02774 路由级：真实清理 / 编译并发', () => {
     expect(Number(last.cleanup_held_ms)).toBeGreaterThanOrEqual(0);
     expect(last.blocked_by_active_task ?? false).toBe(false);
     await expect(fs.readdir(stateDir)).resolves.toEqual([]);
-  }, 20000); // 屏障后单例实测 <1s；留 20s 只兜「沙箱磁盘极端慢」，不再靠它掩盖时序问题
+  }, 60000); // 屏障后单例实测 <1s；留 60s 只兜「沙箱磁盘极端慢」，不再靠它掩盖时序问题
 });
 
 describe('T02774 起跑点接线锁（漏接一处等于整套互斥失效）', () => {

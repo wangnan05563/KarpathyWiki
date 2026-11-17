@@ -122,8 +122,10 @@ describe('B · PowerShell 镜像与 CLI', () => {
 
 describe('C · 库内不得有第二份目录清单', () => {
   // 全库源码守护：递归收集 api/src + scripts 后逐文件串行读盘，本机实测 3.7 s，
-  //   与其他用例并发跑时会被默认 5 s 预算卡住——按实测值放宽，不设逻辑改动
-  it('api/src + scripts 里不存在带引号的相邻目录字面量（除单一来源与镜像）', { timeout: 20_000 }, async () => {
+  //   与其他用例并发跑时会被默认 5 s 预算卡住——按实测值放宽，不设逻辑改动。
+  // 2026-11-17 一键发布全量门禁：显式 20_000ms 在机器负载下误杀（单跑本文件全绿）。
+  // 与 config 的 testTimeout 解耦，按 FS 密集扫描的最坏预算放宽到 60s；断言一行未改。
+  it('api/src + scripts 里不存在带引号的相邻目录字面量（除单一来源与镜像）', { timeout: 60_000 }, async () => {
     const allowed = new Set([
       path.join(repoRoot, 'api', 'src', 'vault', 'page-scope.ts'),
       mirrorFile,

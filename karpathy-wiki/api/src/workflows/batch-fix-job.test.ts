@@ -245,8 +245,11 @@ describe('BatchFixJobManager', { timeout: FS_HEAVY_TIMEOUT_MS }, () => {
     }
     expect(partial).toBe(0);
     expect(parsed).toBeGreaterThan(0);
-    // 收口前等作业真正落终态：残留的 rename 会和 afterEach 的 rm 抢目录（ENOTEMPTY 假失败）
-    await waitFor(() => manager.getSnapshot(started.jobId), (s) => s.status !== 'running', 15_000);
+    // 收口前等作业真正落终态：残留的 rename 会和 afterEach 的 rm 抢目录（ENOTEMPTY 假失败）。
+    // 2026-11-17 一键发布全量门禁：此处显式传的 15_000ms 在机器负载下误杀（最后快照
+    // running/nextIndex=10；同文件其余 waitFor 走 30s 默认全部通过）。删掉显式预算，
+    // 与同文件 waitFor 默认 30s 口径一致——只放宽等待预算，不改任何断言。
+    await waitFor(() => manager.getSnapshot(started.jobId), (s) => s.status !== 'running');
     await manager.flush();
   });
 

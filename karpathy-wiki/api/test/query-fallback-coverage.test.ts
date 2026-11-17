@@ -370,13 +370,13 @@ describe('T04176-D 端到端降级链', () => {
     for (const line of failed) {
       expect(JSON.parse(line).category, '桩 LLM 返 500，应归为 service_down').toBe('service_down');
     }
-  }, 30_000);
+  }, 60_000);
 
   it('库里没有的内容 + LLM 不可达 → 未覆盖文案（并按 harness 故障补一句）', async () => {
     const chunks = await collectWorkflow('量子拓扑冰淇淋产量排行榜');
     const text = chunks.filter((c) => typeof c.text === 'string').map((c) => c.text as string).join('');
     expect(text).toContain('知识库未覆盖此问题');
-  }, 30_000);
+  }, 60_000);
 });
 
 // ===========================================================================
@@ -474,7 +474,7 @@ describe('T04479-E 上游限流', () => {
       category: 'rate_limit',
       reason: '账号级错误，降级检索复用同一 provider/密钥，重试必然同样失败',
     });
-  }, 30_000);
+  }, 60_000);
 
   it('端到端反向控制：500（服务端故障）仍要走完第 2 级——跳过判据不许扩面', async () => {
     const stage = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -489,7 +489,7 @@ describe('T04479-E 上游限流', () => {
     expect(text).toContain('两次尝试都没有完成');
     expect(text).not.toContain('已跳过');
     expect(text).not.toContain('429');
-  }, 30_000);
+  }, 60_000);
 });
 
 // [query-stage] 埋点里的 phase 序列（E 组用它判「哪一级真的跑了」）
@@ -597,7 +597,7 @@ describe('T04456-F 空答案判定', () => {
     expect(text).not.toContain('知识库未覆盖此问题。');
     expect(text).toContain('没有返回任何答案正文');
     expect(chunks.some((c) => c.done), '兜底后仍要收口 done').toBe(true);
-  }, 30_000);
+  }, 60_000);
 
   it('端到端：纯空白正文（改造前是一只空泡）不再发出空白 text chunk，且有归因文案', async () => {
     stubStatus = 200;
@@ -606,7 +606,7 @@ describe('T04456-F 空答案判定', () => {
     expect(joinedText(chunks)).not.toBe('  \n  ');
     expect(chunks.some((c) => typeof c.text === 'string' && c.text.trim() === ''), '不许再发只含空白的正文块').toBe(false);
     expect(joinedText(chunks)).toContain('没有返回任何答案正文');
-  }, 30_000);
+  }, 60_000);
 
   it('反向控制：模型正常给出正文时不触发空答案判据（判据不许扩到正常路径）', async () => {
     stubStatus = 200;
@@ -618,7 +618,7 @@ describe('T04456-F 空答案判定', () => {
     expect(phases).not.toContain('harness-empty-answer');
     expect(phases).not.toContain('fallback-start');
     expect(joinedText(chunks)).toContain('复利');
-  }, 30_000);
+  }, 60_000);
 
   it('关闭 answer 输出时零正文是预期内的：不降级、不兜底、不打空答案阶段', async () => {
     stubStatus = 200;
@@ -630,7 +630,7 @@ describe('T04456-F 空答案判定', () => {
     expect(phases).toContain('harness-done');
     expect(chunks.filter((c) => typeof c.text === 'string')).toHaveLength(0);
     expect(llmRequests, 'answer 关闭时不该再烧第 2 级').toBe(1);
-  }, 30_000);
+  }, 60_000);
 
   // 真流式分支：判据是在「实际发到 wire 上的正文块」上测量的，所以 delta 一帧都没回
   // 也应当被同一口径接住。取证事实（本组实测）：降级第 2 级没有流式变体，它总是走非流式
@@ -652,7 +652,7 @@ describe('T04456-F 空答案判定', () => {
     expect(text).toContain('降级检索给出的正文');
     expect(text).not.toContain('知识库未覆盖此问题。');
     expect(chunks.some((c) => c.done), '救回后仍要收口 done').toBe(true);
-  }, 30_000);
+  }, 60_000);
 
   it('端到端（真流式）：两级都没正文 → 兜底说「没拿到答案正文」，不冒充未覆盖', async () => {
     stubStatus = 200;
@@ -667,7 +667,7 @@ describe('T04456-F 空答案判定', () => {
     expect(text).not.toContain('知识库未覆盖此问题。');
     expect(text).toContain('没有返回任何答案正文');
     expect(chunks.some((c) => c.done), '兜底后仍要收口 done').toBe(true);
-  }, 30_000);
+  }, 60_000);
 
   it('端到端（真流式反向控制）：delta 正文必须算作答案，正常流式问答不许被误判为空答案', async () => {
     // 与上一条刻意相反：JSON 分支给空正文、SSE 分支给正文。
@@ -682,7 +682,7 @@ describe('T04456-F 空答案判定', () => {
     expect(phases).not.toContain('harness-empty-answer');
     expect(phases).not.toContain('fallback-start');
     expect(joinedText(chunks)).toContain('复利');
-  }, 30_000);
+  }, 60_000);
 });
 
 // ===========================================================================
@@ -717,7 +717,7 @@ describe('T04516-G 部分答案中途失败的混排收口', () => {
     expect(noticeIdx, '「未完成」标记必须排在部分答案之后').toBeGreaterThan(partialIdx);
     expect(fallbackIdx, '兜底原因必须排在「未完成」标记之后').toBeGreaterThan(noticeIdx);
     expect(chunks.some((c) => c.done), '兜底后仍要收口 done').toBe(true);
-  }, 30_000);
+  }, 60_000);
 
   it('G2 负控制：首跳即失败（无任何部分答案）→ 兜底原样追加，不加「未完成」标记', async () => {
     stubStatus = 500; // 非流式首跳即 500，没有部分正文流出
@@ -725,7 +725,7 @@ describe('T04516-G 部分答案中途失败的混排收口', () => {
     const text = joinedText(chunks);
     expect(text).toContain('问答服务暂不可用');
     expect(text, '没发出过部分答案就不该谎称「以上回答未完成」').not.toContain(INCOMPLETE_ANSWER_NOTICE);
-  }, 30_000);
+  }, 60_000);
 
   it('G3 负控制：正常完整流式答案 → 不触发兜底、不加「未完成」标记', async () => {
     stubStatus = 200;
@@ -735,7 +735,7 @@ describe('T04516-G 部分答案中途失败的混排收口', () => {
     expect(text).toContain('复利');
     expect(text).not.toContain(INCOMPLETE_ANSWER_NOTICE);
     expect(text).not.toContain('问答服务暂不可用');
-  }, 30_000);
+  }, 60_000);
 
   it('G4 标记措辞明确「未完成」语义（口径a 的核心分隔句）', () => {
     expect(INCOMPLETE_ANSWER_NOTICE).toContain('以上回答未完成');
